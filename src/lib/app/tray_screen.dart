@@ -42,21 +42,13 @@ const double _kSwipeThreshold = 0.25;
 /// the first. Once thrown, a box you are not looking at is not simulated at
 /// all, so nothing that happens to another group can bump its numbers.
 class TrayScreen extends StatefulWidget {
-  const TrayScreen({
-    super.key,
-    required this.groups,
-    this.initial = 0,
-    this.readout = true,
-  });
+  const TrayScreen({super.key, required this.groups, this.initial = 0});
 
   /// One box per group, in the order they were set up. Never empty.
   final List<List<DieSpec>> groups;
 
   /// Which box you arrive on, and the only one that arrives thrown.
   final int initial;
-
-  /// Whether settled dice turn themselves towards you to be read.
-  final bool readout;
 
   @override
   State<TrayScreen> createState() => _TrayScreenState();
@@ -226,7 +218,7 @@ class _TrayScreenState extends State<TrayScreen>
               dice: widget.groups[i],
               // A group nobody has thrown yet has no result to present, so the
               // readout stays off until it does. It comes on with the throw.
-              readout: i == _at && widget.readout,
+              readout: i == _at,
             ),
             thrown: i == _at,
           ),
@@ -241,8 +233,22 @@ class _TrayScreenState extends State<TrayScreen>
     final _Box box = _boxes[_at];
     box.tray.throwDice();
     if (box.thrown) return;
-    box.tray.readout.enabled = widget.readout;
+    box.tray.readout.enabled = true;
     setState(() => box.thrown = true);
+  }
+
+  /// A tap at [local] on [tray]: keep the die under it, or put the roll down.
+  void _tap(DiceTray tray, Offset local) {
+    if (tray.canHold) {
+      final int? die = dieAt(tray, _size, local);
+      if (die != null) {
+        // No setState: the glow is painted, and the painter is already being
+        // told to repaint every frame the tray ticks.
+        tray.toggleHold(die);
+        return;
+      }
+    }
+    tray.readout.down ? tray.readout.pickUp() : tray.readout.putDown();
   }
 
   Vector3 _toMetres(Offset local) => Vector3(
@@ -348,16 +354,19 @@ class _TrayScreenState extends State<TrayScreen>
                 onHorizontalDragStart: paged ? _dragStart : null,
                 onHorizontalDragUpdate: paged ? _dragUpdate : null,
                 onHorizontalDragEnd: paged ? _dragEnd : null,
-                // Somewhere to put the dice back down without shaking them:
-                // the formation is a fine place to leave a roll, but not if you
-                // wanted to look at where it actually landed. They travel back
-                // to the exact spot they were lifted from, and a second tap
-                // lifts them again — the roll is not disturbed either way.
-                onTap: () {
-                  final Readout readout = box.tray.readout;
-                  readout.down ? readout.pickUp() : readout.putDown();
-                },
-                onDoubleTap: _throwCurrent,
+                // A tap does one of two things, depending on what is under
+                // it. On a die, while the roll is being presented, it keeps
+                // that die for the next throw. Anywhere else it puts the dice
+                // back down where they landed — the formation is a fine place
+                // to leave a roll, but not if you wanted to look at where it
+                // actually fell — and a second tap lifts them again.
+                //
+                // No `onDoubleTap`: with one registered, every single tap waits
+                // three hundred milliseconds to find out whether a second is
+                // coming, and picking dice out of a formation is not a gesture
+                // that can afford to feel like that. Throw and a shake are both
+                // still there.
+                onTapUp: (TapUpDetails d) => _tap(box.tray, d.localPosition),
                 child: Stack(
                   fit: StackFit.expand,
                   children: <Widget>[

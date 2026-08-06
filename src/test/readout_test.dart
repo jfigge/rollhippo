@@ -425,27 +425,20 @@ void main() {
     });
   });
 
-  group('the switch', () {
-    testWidgets('is on, and turns off', (WidgetTester tester) async {
-      // A phone, not the 800x600 the harness defaults to: the switch is the
-      // last thing added to a column that was already full, and the size it
-      // has to fit in is the size it will actually be given.
+  group('the picker', () {
+    testWidgets('offers no choice about tidying up any more', (
+      WidgetTester tester,
+    ) async {
+      // A phone, not the 800x600 the harness defaults to: the column this is
+      // checking the bottom of is the one that has to fit a real screen.
       await tester.binding.setSurfaceSize(const Size(393, 852));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      expect(find.text('Tidy up to read'), findsOneWidget);
 
-      final Finder toggle = find.byType(Switch);
-      expect(tester.widget<Switch>(toggle).value, isTrue);
-
-      await tester.tap(toggle);
-      await tester.pump();
-      expect(
-        tester.widget<Switch>(toggle).value,
-        isFalse,
-        reason: 'the switch did not turn off',
-      );
+      // Every roll is presented now, so there is nothing left to ask about.
+      expect(find.text('Tidy up to read'), findsNothing);
+      expect(find.byType(Switch), findsNothing);
     });
   });
 

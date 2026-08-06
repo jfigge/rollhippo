@@ -125,6 +125,52 @@ class DiceTray {
 
   List<RigidBody> get dice => world.bodies;
 
+  /// The dice the player has pinned, by index, each mapped to the face index
+  /// it is holding.
+  ///
+  /// The index rather than the number, because putting a die back into the
+  /// pose that shows that number needs [readMarking], and that works from the
+  /// index. Keeping it at all is the same argument [Readout] makes for
+  /// capturing its numbers once: a held die cannot fall over to re-read
+  /// itself, so a live reading of one is a reading against a gravity that has
+  /// nothing to do with the face it is resting on.
+  final Map<int, int> held = <int, int>{};
+
+  /// Whether the dice can be picked out right now.
+  ///
+  /// Only while the roll is being presented. Before that there is no result to
+  /// keep, and the numbers a die would be held at do not exist yet.
+  bool get canHold => readout.reading != null;
+
+  /// Pins the die at [index], or lets it go again.
+  ///
+  /// Does nothing unless the roll is being presented — see [canHold].
+  void toggleHold(int index) {
+    if (index < 0 || index >= dice.length) return;
+    if (held.remove(index) != null) {
+      dice[index].held = false;
+      return;
+    }
+    final List<int>? reading = readout.reading;
+    if (reading == null) return;
+    held[index] = reading[index];
+    dice[index].held = true;
+  }
+
+  /// Lets every die go.
+  void releaseHolds() {
+    for (final int index in held.keys) {
+      dice[index].held = false;
+    }
+    held.clear();
+  }
+
+  /// The face index each die is read off — the held one for a die that has
+  /// been pinned, and a live reading for everything else.
+  List<int> get readings => <int>[
+    for (int i = 0; i < dice.length; i++) held[i] ?? readFace(dice[i], up),
+  ];
+
   /// Throws the dice in from the top of the tray.
   ///
   /// They start along the top edge on a grid spaced by their own width, so any
@@ -132,6 +178,13 @@ class DiceTray {
   /// with enough downward speed to reach the floor at about 1.9 m/s — hard
   /// enough to bounce back a visible fraction of the tray before they settle.
   void throwDice() {
+    // Put every die back on the spot it landed on before anything else. The
+    // ones about to be thrown are leaving that spot immediately and will never
+    // know; the held ones are not being thrown at all, and this is how they end
+    // up sitting where the roll left them rather than hanging in the middle of
+    // the tray where the formation had lifted them to.
+    readout.release();
+
     double reach = 0;
     for (final RigidBody die in dice) {
       reach = math.max(reach, die.circumradius);
@@ -154,11 +207,17 @@ class DiceTray {
 
     double jitter(double scale) => (_random.nextDouble() - 0.5) * scale;
 
+    // Held dice take up no room on the spawn grid: the slot counter only
+    // advances for a die that is actually being thrown, so keeping four of them
+    // does not leave four gaps and bunch the rest into a corner.
+    int slot = 0;
     for (int i = 0; i < dice.length; i++) {
+      if (held.containsKey(i)) continue;
       final RigidBody die = dice[i];
-      final int column = i % columns;
-      final int layer = (i ~/ columns) % layers;
-      final int row = i ~/ (columns * layers);
+      final int column = slot % columns;
+      final int layer = (slot ~/ columns) % layers;
+      final int row = slot ~/ (columns * layers);
+      slot++;
 
       final double x =
           columns == 1
@@ -188,9 +247,6 @@ class DiceTray {
       );
       die.syncDerived();
     }
-    // Forget, not release: every die has just been moved, and putting them
-    // back where the last roll finished would undo the throw.
-    readout.forget();
     world.wake();
   }
 
@@ -232,11 +288,7 @@ class DiceTray {
     // readout: the shake test just above, a throw, a key, a finger on the
     // glass. Catching it here rather than at each of those means there is one
     // place it can be got wrong instead of five.
-    readout.advance(
-      dt,
-      atRest: world.asleep,
-      reading: () => <int>[for (final RigidBody die in dice) readFace(die, up)],
-    );
+    readout.advance(dt, atRest: world.asleep, reading: () => readings);
 
     // Real time goes to the sensors — angular acceleration is a physical rate
     // and has no business being scaled. Only the simulation is slowed.
@@ -268,5 +320,9 @@ class DiceTray {
   /// not what the dice would read now. It has turned them since, and it turned
   /// them to show exactly these.
   List<int> get faces =>
-      readout.values ?? <int>[for (final RigidBody die in dice) faceUp(die)];
+      readout.values ??
+      <int>[
+        for (int i = 0; i < dice.length; i++)
+          dice[i].shape.faces[readings[i]].value,
+      ];
 }

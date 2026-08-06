@@ -53,6 +53,7 @@ class Readout {
 
   final List<_Move> _moves = <_Move>[];
   List<int>? _values;
+  List<int>? _reading;
 
   /// True once the dice have started moving into formation, and until they are
   /// back down.
@@ -76,6 +77,14 @@ class Readout {
   /// The numbers, captured when the formation was laid out. Null until then,
   /// which is [DiceTray]'s signal to read the dice live instead.
   List<int>? get values => _values;
+
+  /// The *face indices* those numbers were read off, in the same order.
+  ///
+  /// The number is what you read; the index is what you need to put a die back
+  /// into that pose later. A die being held has to keep the index, because
+  /// [readMarking] works from it and a die that has been frozen cannot fall
+  /// over to re-read itself when the phone is tilted somewhere new.
+  List<int>? get reading => _reading;
 
   /// How far into the presentation this is, 0 to 1 — what the painter dims the
   /// tray by, so the walls fade at exactly the rate the dice come forward.
@@ -139,6 +148,7 @@ class Readout {
           _phase = _Phase.down;
           _elapsed = 0;
           _values = null;
+          _reading = null;
           _moves.clear();
           return;
         }
@@ -184,17 +194,7 @@ class Readout {
     _phase = _Phase.idle;
     _elapsed = 0;
     _values = null;
-    _moves.clear();
-  }
-
-  /// Drops the formation without moving anything.
-  ///
-  /// For [DiceTray.throwDice], which has already put every die somewhere new:
-  /// restoring them to where the last roll finished would undo the throw.
-  void forget() {
-    _phase = _Phase.idle;
-    _elapsed = 0;
-    _values = null;
+    _reading = null;
     _moves.clear();
   }
 
@@ -211,6 +211,7 @@ class Readout {
   /// Works out where every die is going, and how it has to be turned to get
   /// its number to the glass.
   void _lay(List<int> reading) {
+    _reading = List<int>.unmodifiable(reading);
     _values = List<int>.unmodifiable(<int>[
       for (int i = 0; i < dice.length; i++)
         dice[i].shape.faces[reading[i]].value,

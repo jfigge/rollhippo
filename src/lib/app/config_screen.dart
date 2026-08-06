@@ -100,14 +100,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   final PageController _racks = PageController();
 
-  /// Whether settled dice tidy themselves into a formation you can read.
-  ///
-  /// On, because the phone is usually upright and upright is the posture where
-  /// the number a die landed on points at the ceiling rather than at you. Held
-  /// here rather than saved: writing it down would mean a preferences plugin
-  /// for one boolean, and the setting is one tap from wherever you are.
-  bool _readout = true;
-
   /// The group on screen. Everything below the rack is about this one.
   List<DieSpec> get _dice => _groups[_group];
 
@@ -175,7 +167,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 _groups,
                 _group,
               ).clamp(0, groups.length - 1),
-              readout: _readout,
             ),
       ),
     );
@@ -199,7 +190,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 // set. What is left over goes at the bottom, which is where a
                 // gap is worth having: it keeps Roll under your thumb.
                 _editor(),
-                _readoutSwitch(),
                 const Spacer(),
                 _buttons(),
               ],
@@ -212,7 +202,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   Widget _header() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: <Widget>[
@@ -345,48 +335,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
           ],
           onTap: _goTo,
         ),
-      ),
-    );
-  }
-
-  /// Whether the dice tidy themselves up once they have stopped.
-  ///
-  /// Worth a switch rather than being simply how the app behaves: held flat on
-  /// a table the tray needs none of it — there "up" is already out through the
-  /// glass — and someone who rolls that way would rather watch the dice lie
-  /// where they fell.
-  Widget _readoutSwitch() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
-      child: Row(
-        children: <Widget>[
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Tidy up to read',
-                  style: TextStyle(
-                    color: Color(0xFFE8EEF6),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Turn the dice to face you once they stop',
-                  style: TextStyle(color: Color(0x8ABFD0E4), fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: _readout,
-            onChanged: (bool on) => setState(() => _readout = on),
-            activeColor: const Color(0xFFF2F7FF),
-            activeTrackColor: const Color(0xFF3F6FA8),
-          ),
-        ],
       ),
     );
   }

@@ -121,3 +121,17 @@ test exists to make the change deliberate, not to make it hard.
   nobody has thrown yet, which is fed `MotionFrame.still` off-screen until it
   sleeps so its dice are lying on the floor by the time you reach them. Anything
   that assumes every tray advances every frame will be wrong.
+- **A held die is a static body, not a sleeping one.** `RigidBody.held` takes
+  `invMass` and the world-space inverse inertia to zero, and that is the whole
+  mechanism: the solver's effective mass along a contact axis goes to infinity,
+  so the impulse comes back zero and the entire bounce goes to whatever hit it.
+  `integrate` skips it and `_containStrays` leaves it alone. `sleeping` is a
+  different thing and a shake clears it; `held` survives every throw until the
+  player taps the die again.
+- **A held die keeps the face *index* it was read at**, in `DiceTray.held`.
+  Reading one live is reading it against a gravity that has nothing to do with
+  the face it is resting on — it cannot fall over to re-read itself when the
+  phone is tilted somewhere new. `DiceTray.readings` is the one place that
+  decides, and `throwDice` calls `readout.release()` *before* it scatters
+  anything so that a held die is put back on the spot it landed on rather than
+  left hanging where the formation had lifted it to.

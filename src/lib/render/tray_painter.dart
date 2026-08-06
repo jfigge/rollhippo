@@ -72,6 +72,9 @@ const double _ambient = 0.34;
 const Color _backdrop = Color(0xFF0B0E13);
 const double _readoutDim = 0.72;
 
+/// The blue a kept die glows. The selection colour the rack's ring is drawn in.
+const Color _holdGlow = Color(0xFF6E9AD0);
+
 Color _fade(Color colour, double amount) =>
     amount <= 0 ? colour : Color.lerp(colour, _backdrop, amount)!;
 
@@ -189,8 +192,70 @@ void paintTrayScene(Canvas canvas, Size size, DiceTray tray) {
           tray.dice[a].position.z.compareTo(tray.dice[b].position.z),
     );
   for (final int i in order) {
-    paintDie(canvas, camera, tray.dice[i], DieStyle.of(tray.specs[i].colour));
+    final RigidBody die = tray.dice[i];
+    // Behind the die, and inside the same back-to-front pass, so a die in
+    // front of a held one covers its halo exactly as it covers the die.
+    if (die.held) _paintHold(canvas, camera, die);
+    paintDie(canvas, camera, die, DieStyle.of(tray.specs[i].colour));
   }
+}
+
+/// The glow behind a die the player is keeping.
+///
+/// Two blurred discs rather than an outline of the solid: the die is a
+/// different silhouette every frame it turns, and a halo does not care. The
+/// tight one gives the edge something to sit against, the wide one is what
+/// carries across the tray — and the colour is the blue everything selected in
+/// this app is drawn in, so a kept die and a selected slot in the rack say the
+/// same thing the same way.
+void _paintHold(Canvas canvas, TrayCamera camera, RigidBody die) {
+  final Offset centre = camera.project(die.position);
+  final double pixels =
+      die.circumradius * camera.scaleAt(die.position.z) * camera.pixelsPerMetre;
+
+  void halo(double spread, double blur, double alpha) => canvas.drawCircle(
+    centre,
+    pixels * spread,
+    Paint()
+      ..color = _holdGlow.withValues(alpha: alpha)
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, pixels * blur),
+  );
+
+  halo(0.88, 0.20, 0.42);
+  halo(0.64, 0.09, 0.70);
+}
+
+/// Which die is under [local], or null for a tap that hit the tray.
+///
+/// Front to back, because that is the order they are drawn in and the one you
+/// are looking at is the one on top. A die is taken to be the disc its
+/// circumradius projects to, which is generous — but the formation stands them
+/// a little over their own width apart, so a generous disc still cannot reach
+/// its neighbour's centre.
+int? dieAt(DiceTray tray, Size size, Offset local) {
+  final TrayCamera camera = TrayCamera(
+    pixelsPerMetre: size.width / tray.width,
+    eyeDistance: Tuning.eyeDistance,
+    centre: Offset(size.width / 2, size.height / 2),
+  );
+
+  final List<int> order = List<int>.generate(tray.dice.length, (int i) => i)
+    ..sort(
+      (int a, int b) =>
+          tray.dice[b].position.z.compareTo(tray.dice[a].position.z),
+    );
+  for (final int i in order) {
+    final RigidBody die = tray.dice[i];
+    final double pixels =
+        die.circumradius *
+        camera.scaleAt(die.position.z) *
+        camera.pixelsPerMetre;
+    if ((camera.project(die.position) - local).distanceSquared <=
+        pixels * pixels) {
+      return i;
+    }
+  }
+  return null;
 }
 
 class TrayPainter extends CustomPainter {

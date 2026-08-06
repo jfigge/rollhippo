@@ -198,7 +198,6 @@ void main() {
             groups: <List<DieSpec>>[
               for (int i = 0; i < groups; i++) <DieSpec>[white, white],
             ],
-            readout: false,
           ),
         ),
       );

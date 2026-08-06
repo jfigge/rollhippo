@@ -34,7 +34,7 @@ class RigidBody {
        _worldEdges = <Vector3>[
          for (int i = 0; i < shape.edges.length; i++) Vector3.zero(),
        ] {
-    invMass = mass > 0 ? 1.0 / mass : 0.0;
+    _invMass = mass > 0 ? 1.0 / mass : 0.0;
     final Vector3 inertia = shape.inertiaPerMass * mass;
     invInertiaLocal = Vector3(
       1.0 / inertia.x,
@@ -56,8 +56,15 @@ class RigidBody {
   /// backstop use to bound a die however it happens to be turned.
   double get circumradius => shape.circumradius;
 
-  late final double invMass;
+  late final double _invMass;
   late final Vector3 invInertiaLocal;
+
+  /// Zero for a [held] die, which is the whole of what makes it immovable: the
+  /// solver's effective mass along a contact axis is the reciprocal of the sum
+  /// of the two bodies' inverse masses, so a zero here sends that to infinity
+  /// and the impulse comes back zero. The entire bounce goes to whatever hit
+  /// it, which is what hitting something pinned down does.
+  double get invMass => _held ? 0.0 : _invMass;
 
   Vector3 position;
   Quaternion orientation;
@@ -96,6 +103,27 @@ class RigidBody {
 
   bool sleeping = false;
 
+  bool _held = false;
+
+  /// Pinned. It still collides — dice bounce off it — but nothing moves it: not
+  /// gravity, not a shake, not another die.
+  ///
+  /// Not a stronger [sleeping]. A sleeping die is one the solver has stopped
+  /// bothering with, and the first shake wakes it; a held die has been picked
+  /// out deliberately and sits through every throw until it is let go.
+  bool get held => _held;
+
+  set held(bool value) {
+    if (_held == value) return;
+    _held = value;
+    velocity.setZero();
+    angularVelocity.setZero();
+    pseudoVelocity.setZero();
+    pseudoAngularVelocity.setZero();
+    // The inverse inertia is cached, and it has just changed.
+    syncDerived();
+  }
+
   /// Recomputes the rotation matrix, the world-space inverse inertia and the
   /// world-space core vertices.
   ///
@@ -118,7 +146,9 @@ class RigidBody {
       r.entry(1, 2) * d.z,
       r.entry(2, 2) * d.z,
     );
-    invInertiaWorld = rd * r.transposed() as Matrix3;
+    // Held, it resists every torque absolutely, which is an inverse inertia of
+    // nothing at all.
+    invInertiaWorld = _held ? Matrix3.zero() : rd * r.transposed() as Matrix3;
 
     final double r00 = r.entry(0, 0), r01 = r.entry(0, 1), r02 = r.entry(0, 2);
     final double r10 = r.entry(1, 0), r11 = r.entry(1, 1), r12 = r.entry(1, 2);
@@ -206,6 +236,7 @@ class RigidBody {
   /// Advances position and orientation. Velocities are integrated separately,
   /// before the solver runs.
   void integrate(double dt) {
+    if (_held) return;
     position.addScaled(velocity, dt);
     position.addScaled(pseudoVelocity, dt);
 

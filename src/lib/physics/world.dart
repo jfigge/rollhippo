@@ -217,6 +217,8 @@ class PhysicsWorld {
   /// back rather than letting it sail off screen.
   void _containStrays() {
     for (final RigidBody body in bodies) {
+      // A held die is where it was put, and being put back is still moving.
+      if (body.held) continue;
       bool moved = false;
       for (final Wall wall in walls) {
         final double distance = wall.normal.dot(body.position) - wall.offset;
