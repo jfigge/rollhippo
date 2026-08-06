@@ -54,6 +54,7 @@ void main() {
       reason: 'a beat where they landed before they tidy up',
     );
     expect(Tuning.readoutDuration, 0.55);
+    expect(Tuning.readoutReturn, 0.35, reason: 'and back down again, quicker');
     expect(
       Tuning.readoutTilt,
       0.26,
@@ -63,6 +64,18 @@ void main() {
       Tuning.readoutTopClearance,
       0.022,
       reason: 'clear of the Close and Throw buttons',
+    );
+
+    // Swiping from one group of dice to the next.
+    expect(
+      Tuning.traySlideDuration,
+      0.28,
+      reason: 'the same box pushed sideways, not a cut',
+    );
+    expect(
+      Tuning.trayPageGap,
+      0.008,
+      reason: '8 mm of dark, so there are plainly two boxes',
     );
   });
 

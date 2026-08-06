@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
@@ -157,6 +158,41 @@ double _screenArea(List<Offset> corners) {
   return sum.abs() / 2;
 }
 
+/// One box and everything in it, filling [size].
+///
+/// A free function rather than a method, because the tray is drawn twice over
+/// while a swipe is in flight and neither copy is the painter's own. The whole
+/// scene is anchored on the canvas' origin, so a caller that wants it somewhere
+/// else translates the canvas and calls this again.
+void paintTrayScene(Canvas canvas, Size size, DiceTray tray) {
+  final TrayCamera camera = TrayCamera(
+    pixelsPerMetre: size.width / tray.width,
+    eyeDistance: Tuning.eyeDistance,
+    centre: Offset(size.width / 2, size.height / 2),
+  );
+
+  // While the dice are being presented the box behind them steps back, so
+  // that what is lit is the thing you are being asked to read.
+  final double dim = tray.readout.progress * _readoutDim;
+
+  _paintBox(canvas, camera, tray, dim);
+  for (final RigidBody die in tray.dice) {
+    _paintShadow(canvas, camera, tray, die, dim);
+  }
+
+  // Whole dice back to front. Sorting by die rather than by face keeps the
+  // order stable when two dice touch — per-face sorting flickers exactly when
+  // the dice are most interesting.
+  final List<int> order = List<int>.generate(tray.dice.length, (int i) => i)
+    ..sort(
+      (int a, int b) =>
+          tray.dice[a].position.z.compareTo(tray.dice[b].position.z),
+    );
+  for (final int i in order) {
+    paintDie(canvas, camera, tray.dice[i], DieStyle.of(tray.specs[i].colour));
+  }
+}
+
 class TrayPainter extends CustomPainter {
   TrayPainter({required this.tray, required this.repaint})
     : super(repaint: repaint);
@@ -165,123 +201,146 @@ class TrayPainter extends CustomPainter {
   final Listenable repaint;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final TrayCamera camera = TrayCamera(
-      pixelsPerMetre: size.width / tray.width,
-      eyeDistance: Tuning.eyeDistance,
-      centre: Offset(size.width / 2, size.height / 2),
-    );
-
-    // While the dice are being presented the box behind them steps back, so
-    // that what is lit is the thing you are being asked to read.
-    final double dim = tray.readout.progress * _readoutDim;
-
-    _paintTray(canvas, camera, dim);
-    for (final RigidBody die in tray.dice) {
-      _paintShadow(canvas, camera, die, dim);
-    }
-
-    // Whole dice back to front. Sorting by die rather than by face keeps the
-    // order stable when two dice touch — per-face sorting flickers exactly when
-    // the dice are most interesting.
-    final List<int> order = List<int>.generate(tray.dice.length, (int i) => i)
-      ..sort(
-        (int a, int b) =>
-            tray.dice[a].position.z.compareTo(tray.dice[b].position.z),
-      );
-    for (final int i in order) {
-      paintDie(canvas, camera, tray.dice[i], DieStyle.of(tray.specs[i].colour));
-    }
-  }
-
-  void _paintTray(Canvas canvas, TrayCamera camera, double dim) {
-    final double w = tray.width / 2;
-    final double h = tray.height / 2;
-    final double d = tray.depth;
-
-    Offset front(int i) => camera.project(
-      Vector3((i == 0 || i == 3) ? -w : w, (i < 2) ? h : -h, 0),
-    );
-    Offset back(int i) => camera.project(
-      Vector3((i == 0 || i == 3) ? -w : w, (i < 2) ? h : -h, -d),
-    );
-
-    final Paint paint = Paint()..style = PaintingStyle.fill;
-
-    // Back wall.
-    paint.color = _fade(_shade(const Color(0xFF1D2530), Vector3(0, 0, 1)), dim);
-    canvas.drawPath(
-      Path()
-        ..moveTo(back(0).dx, back(0).dy)
-        ..lineTo(back(1).dx, back(1).dy)
-        ..lineTo(back(2).dx, back(2).dy)
-        ..lineTo(back(3).dx, back(3).dy)
-        ..close(),
-      paint,
-    );
-
-    // The four sides, each shaded by the direction it faces so the tray reads
-    // as a box rather than as a picture of one.
-    const List<List<int>> sides = <List<int>>[
-      <int>[0, 1], // top
-      <int>[1, 2], // right
-      <int>[2, 3], // bottom
-      <int>[3, 0], // left
-    ];
-    final List<Vector3> normals = <Vector3>[
-      Vector3(0, -1, 0),
-      Vector3(-1, 0, 0),
-      Vector3(0, 1, 0),
-      Vector3(1, 0, 0),
-    ];
-    for (int s = 0; s < 4; s++) {
-      final int i = sides[s][0];
-      final int j = sides[s][1];
-      paint.color = _fade(_shade(const Color(0xFF2A3442), normals[s]), dim);
-      canvas.drawPath(
-        Path()
-          ..moveTo(front(i).dx, front(i).dy)
-          ..lineTo(front(j).dx, front(j).dy)
-          ..lineTo(back(j).dx, back(j).dy)
-          ..lineTo(back(i).dx, back(i).dy)
-          ..close(),
-        paint,
-      );
-    }
-  }
-
-  /// A soft blob on the back wall, cast along the light. It is not a real
-  /// shadow, but it is the cheapest cue there is for how far off the back wall
-  /// a die is — and without it a tumbling die reads as a flat spinning sprite.
-  void _paintShadow(
-    Canvas canvas,
-    TrayCamera camera,
-    RigidBody die,
-    double dim,
-  ) {
-    final double travel = (die.position.z + tray.depth) / _light.z;
-    if (travel <= 0) return;
-    final Vector3 landing = die.position - _light * travel;
-
-    final double softness = 1.0 + travel / (tray.depth * 1.6);
-    final double radius = die.circumradius * softness;
-    final Offset centre = camera.project(
-      Vector3(landing.x, landing.y, -tray.depth),
-    );
-    final double pixels =
-        radius * camera.scaleAt(-tray.depth) * camera.pixelsPerMetre;
-
-    canvas.drawCircle(
-      centre,
-      pixels,
-      Paint()
-        ..color = Colors.black.withValues(alpha: (0.42 / softness) * (1 - dim))
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, pixels * 0.45),
-    );
-  }
+  void paint(Canvas canvas, Size size) => paintTrayScene(canvas, size, tray);
 
   @override
   bool shouldRepaint(TrayPainter oldDelegate) => true;
+}
+
+/// A row of boxes, [page] of them in from the left edge.
+///
+/// A box fills the screen exactly, so swiping from one group to the next is a
+/// matter of pushing the finished projection sideways. Sliding
+/// [TrayCamera.centre] instead would carry the vanishing point along with it,
+/// and the box would look like it was being walked around rather than pushed
+/// out of the way.
+class TrayPagesPainter extends CustomPainter {
+  TrayPagesPainter({
+    required this.trays,
+    required this.page,
+    required this.repaint,
+  }) : super(repaint: repaint);
+
+  /// One box per group, in the order they were configured.
+  final List<DiceTray> trays;
+
+  /// How far along the row we are, in pages. A whole number is a box squarely
+  /// on screen; anything between is a swipe in flight.
+  ///
+  /// A listenable rather than a number so that dragging repaints without
+  /// rebuilding the widget — the same bargain the frame notifier makes for the
+  /// simulation.
+  final ValueListenable<double> page;
+
+  final Listenable repaint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A screen, plus the dark between two boxes. The gap is why you can tell
+    // one box has left and another has arrived.
+    final double pitch =
+        size.width + Tuning.trayPageGap * Tuning.logicalPixelsPerMetre;
+    final double at = page.value;
+
+    canvas.clipRect(Offset.zero & size);
+    for (int i = 0; i < trays.length; i++) {
+      final double dx = (i - at) * pitch;
+      if (dx.abs() >= size.width) continue;
+      canvas.save();
+      canvas.translate(dx, 0);
+      paintTrayScene(canvas, size, trays[i]);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(TrayPagesPainter oldDelegate) => true;
+}
+
+void _paintBox(Canvas canvas, TrayCamera camera, DiceTray tray, double dim) {
+  final double w = tray.width / 2;
+  final double h = tray.height / 2;
+  final double d = tray.depth;
+
+  Offset front(int i) =>
+      camera.project(Vector3((i == 0 || i == 3) ? -w : w, (i < 2) ? h : -h, 0));
+  Offset back(int i) => camera.project(
+    Vector3((i == 0 || i == 3) ? -w : w, (i < 2) ? h : -h, -d),
+  );
+
+  final Paint paint = Paint()..style = PaintingStyle.fill;
+
+  // Back wall.
+  paint.color = _fade(_shade(const Color(0xFF1D2530), Vector3(0, 0, 1)), dim);
+  canvas.drawPath(
+    Path()
+      ..moveTo(back(0).dx, back(0).dy)
+      ..lineTo(back(1).dx, back(1).dy)
+      ..lineTo(back(2).dx, back(2).dy)
+      ..lineTo(back(3).dx, back(3).dy)
+      ..close(),
+    paint,
+  );
+
+  // The four sides, each shaded by the direction it faces so the tray reads
+  // as a box rather than as a picture of one.
+  const List<List<int>> sides = <List<int>>[
+    <int>[0, 1], // top
+    <int>[1, 2], // right
+    <int>[2, 3], // bottom
+    <int>[3, 0], // left
+  ];
+  final List<Vector3> normals = <Vector3>[
+    Vector3(0, -1, 0),
+    Vector3(-1, 0, 0),
+    Vector3(0, 1, 0),
+    Vector3(1, 0, 0),
+  ];
+  for (int s = 0; s < 4; s++) {
+    final int i = sides[s][0];
+    final int j = sides[s][1];
+    paint.color = _fade(_shade(const Color(0xFF2A3442), normals[s]), dim);
+    canvas.drawPath(
+      Path()
+        ..moveTo(front(i).dx, front(i).dy)
+        ..lineTo(front(j).dx, front(j).dy)
+        ..lineTo(back(j).dx, back(j).dy)
+        ..lineTo(back(i).dx, back(i).dy)
+        ..close(),
+      paint,
+    );
+  }
+}
+
+/// A soft blob on the back wall, cast along the light. It is not a real
+/// shadow, but it is the cheapest cue there is for how far off the back wall
+/// a die is — and without it a tumbling die reads as a flat spinning sprite.
+void _paintShadow(
+  Canvas canvas,
+  TrayCamera camera,
+  DiceTray tray,
+  RigidBody die,
+  double dim,
+) {
+  final double travel = (die.position.z + tray.depth) / _light.z;
+  if (travel <= 0) return;
+  final Vector3 landing = die.position - _light * travel;
+
+  final double softness = 1.0 + travel / (tray.depth * 1.6);
+  final double radius = die.circumradius * softness;
+  final Offset centre = camera.project(
+    Vector3(landing.x, landing.y, -tray.depth),
+  );
+  final double pixels =
+      radius * camera.scaleAt(-tray.depth) * camera.pixelsPerMetre;
+
+  canvas.drawCircle(
+    centre,
+    pixels,
+    Paint()
+      ..color = Colors.black.withValues(alpha: (0.42 / softness) * (1 - dim))
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, pixels * 0.45),
+  );
 }
 
 /// Paints one die: every face of it you can see, with its numbers on.

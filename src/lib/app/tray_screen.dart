@@ -9,6 +9,7 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../motion/motion.dart';
 import '../render/tray_painter.dart';
 import '../tray/tray.dart';
+import 'page_dots.dart';
 
 /// True when a real accelerometer is expected to be present.
 bool get onDevice =>
@@ -24,11 +25,35 @@ bool get onDevice =>
 /// against the device.
 const Size kHarnessScreen = Size(393, 852);
 
-/// The tray itself: the dice you chose, thrown in and left to settle.
-class TrayScreen extends StatefulWidget {
-  const TrayScreen({super.key, required this.dice, this.readout = true});
+/// How hard a flick has to be to carry the box to the next group on its own,
+/// in screens per second. Below this the box goes wherever it is nearest to.
+const double _kFlingPages = 0.9;
 
-  final List<DieSpec> dice;
+/// How far a box has to be pushed before letting go sends it the rest of the
+/// way rather than back where it came from.
+const double _kSwipeThreshold = 0.25;
+
+/// The tray itself: a box per group of dice, side by side.
+///
+/// The group you pressed Roll from arrives thrown. The others are sitting
+/// there, dice on the floor, waiting to be shaken — because a group is a
+/// separate roll rather than a separate view of the same one, and throwing all
+/// three the moment you arrive would spend two of them before you had looked at
+/// the first. Once thrown, a box you are not looking at is not simulated at
+/// all, so nothing that happens to another group can bump its numbers.
+class TrayScreen extends StatefulWidget {
+  const TrayScreen({
+    super.key,
+    required this.groups,
+    this.initial = 0,
+    this.readout = true,
+  });
+
+  /// One box per group, in the order they were set up. Never empty.
+  final List<List<DieSpec>> groups;
+
+  /// Which box you arrive on, and the only one that arrives thrown.
+  final int initial;
 
   /// Whether settled dice turn themselves towards you to be read.
   final bool readout;
@@ -46,8 +71,26 @@ class _TrayScreenState extends State<TrayScreen>
   /// the simulation is not paying for a widget rebuild sixty times a second.
   final _FrameNotifier _frames = _FrameNotifier();
 
-  DiceTray? _tray;
+  /// Where the row of boxes has got to, in pages. Dragging writes to this and
+  /// the painter reads it, which is the same bargain [_frames] makes: a finger
+  /// moving across the glass repaints without rebuilding anything.
+  final ValueNotifier<double> _page = ValueNotifier<double>(0);
+
+  late final Listenable _repaint = Listenable.merge(<Listenable>[
+    _frames,
+    _page,
+  ]);
+
+  final List<_Box> _boxes = <_Box>[];
   Size _size = Size.zero;
+
+  /// Which box is on screen and being simulated. Changes when a slide lands,
+  /// not when it starts — the box you are leaving is the box that still has
+  /// your finger on it.
+  int _at = 0;
+
+  bool _dragging = false;
+  _Slide? _slide;
 
   Duration _last = Duration.zero;
 
@@ -69,6 +112,7 @@ class _TrayScreenState extends State<TrayScreen>
     _ticker.dispose();
     _motion.dispose();
     _frames.dispose();
+    _page.dispose();
     super.dispose();
   }
 
@@ -77,9 +121,36 @@ class _TrayScreenState extends State<TrayScreen>
     return source is ManualMotionSource ? source : null;
   }
 
+  DiceTray? get _tray => _boxes.isEmpty ? null : _boxes[_at].tray;
+
+  /// True while a swipe is in flight, either under a finger or coasting.
+  ///
+  /// Nothing is simulated while it is: the box arriving and the box leaving
+  /// both hold exactly the numbers they had. Advancing them through a swipe
+  /// would let the accelerometer noise of the hand doing the swiping nudge a
+  /// die over — and the whole reason for keeping groups apart is that a result
+  /// you have already rolled stays rolled.
+  bool get _frozen => _dragging || _slide != null;
+
+  /// Whether the box will move at all right now.
+  ///
+  /// Only once everything has stopped. Freezing a die in mid-flight would
+  /// leave it hanging in the air, and letting go of a swipe halfway through a
+  /// roll would decide the roll.
+  bool get _canSwipe {
+    if (_boxes.length < 2) return false;
+    for (final _Box box in _boxes) {
+      if (!box.tray.world.asleep || box.tray.readout.moving) return false;
+    }
+    return true;
+  }
+
+  /// A screen plus the dark between two boxes: how far the row moves per page.
+  double get _pagePitch =>
+      _size.width + Tuning.trayPageGap * Tuning.logicalPixelsPerMetre;
+
   void _onTick(Duration elapsed) {
-    final DiceTray? tray = _tray;
-    if (tray == null) {
+    if (_boxes.isEmpty) {
       _last = elapsed;
       return;
     }
@@ -91,19 +162,87 @@ class _TrayScreenState extends State<TrayScreen>
     if (dt <= 0) return;
     dt = math.min(dt, 1 / 30);
 
-    tray.update(_motion.sample(dt), dt);
+    // Sampled even while frozen, and thrown away. The sensor averages over the
+    // interval since it was last asked and smooths gravity across it; skipping
+    // a second of that would hand the tray one enormous frame when the swipe
+    // ended, which the dice would feel as a jolt.
+    final MotionFrame motion = _motion.sample(dt);
+
+    if (_slide != null) _advanceSlide(dt);
+
+    if (!_frozen) {
+      final _Box box = _boxes[_at];
+      // A group that has not been thrown yet is waiting for exactly this.
+      if (!box.thrown && isShake(motion)) {
+        _throwCurrent();
+      }
+      box.tray.update(motion, dt);
+    }
+
+    // The groups you have not reached yet put their dice down off-screen, under
+    // a phone that is holding perfectly still whatever the real one is doing.
+    // That is what makes an unthrown box look like a tray of dice sitting there
+    // rather than a tray of dice frozen in mid-air, and it costs nothing: they
+    // are asleep within a second or so of arriving, and never stepped again.
+    if (!_frozen) {
+      for (int i = 0; i < _boxes.length; i++) {
+        final _Box box = _boxes[i];
+        if (i == _at || box.thrown || box.tray.world.asleep) continue;
+        box.tray.update(MotionFrame.still, dt);
+      }
+    }
+
     _frames.tick();
   }
 
-  void _ensureTray(Size size) {
-    if (_tray != null && size == _size) return;
+  void _advanceSlide(double dt) {
+    final _Slide slide = _slide!;
+    slide.elapsed += dt;
+    final double t = (slide.elapsed / Tuning.traySlideDuration).clamp(0.0, 1.0);
+    _page.value =
+        slide.from + (slide.to - slide.from) * Curves.easeOutCubic.transform(t);
+    if (t < 1) return;
+
+    _page.value = slide.to.toDouble();
+    _slide = null;
+    if (slide.to == _at) return;
+    // The dots and the prompt are widgets, and this is the one moment in a
+    // swipe when either of them has anything new to say.
+    setState(() => _at = slide.to);
+  }
+
+  void _ensureBoxes(Size size) {
+    if (_boxes.isNotEmpty && size == _size) return;
     _size = size;
-    _tray = DiceTray(
-      width: size.width / Tuning.logicalPixelsPerMetre,
-      height: size.height / Tuning.logicalPixelsPerMetre,
-      dice: widget.dice,
-      readout: widget.readout,
-    );
+    _at = widget.initial.clamp(0, widget.groups.length - 1);
+    _boxes
+      ..clear()
+      ..addAll(<_Box>[
+        for (int i = 0; i < widget.groups.length; i++)
+          _Box(
+            tray: DiceTray(
+              width: size.width / Tuning.logicalPixelsPerMetre,
+              height: size.height / Tuning.logicalPixelsPerMetre,
+              dice: widget.groups[i],
+              // A group nobody has thrown yet has no result to present, so the
+              // readout stays off until it does. It comes on with the throw.
+              readout: i == _at && widget.readout,
+            ),
+            thrown: i == _at,
+          ),
+      ]);
+    _page.value = _at.toDouble();
+    _slide = null;
+    _dragging = false;
+  }
+
+  /// Throws the group on screen, whether or not it has been thrown before.
+  void _throwCurrent() {
+    final _Box box = _boxes[_at];
+    box.tray.throwDice();
+    if (box.thrown) return;
+    box.tray.readout.enabled = widget.readout;
+    setState(() => box.thrown = true);
   }
 
   Vector3 _toMetres(Offset local) => Vector3(
@@ -119,7 +258,7 @@ class _TrayScreenState extends State<TrayScreen>
       case LogicalKeyboardKey.space:
         manual?.shake();
       case LogicalKeyboardKey.keyR:
-        _tray?.throwDice();
+        if (_boxes.isNotEmpty) _throwCurrent();
       case LogicalKeyboardKey.arrowLeft:
         _roll -= 0.12;
       case LogicalKeyboardKey.arrowRight:
@@ -129,10 +268,10 @@ class _TrayScreenState extends State<TrayScreen>
       case LogicalKeyboardKey.arrowDown:
         _pitch += 0.12;
       case LogicalKeyboardKey.keyG:
-        final DiceTray? tray = _tray;
-        if (tray != null) {
-          tray.world.rotationalEffects =
-              tray.world.rotationalEffects > 0 ? 0.0 : 1.0;
+        // Every box, so that swiping does not quietly undo the A/B.
+        for (final _Box box in _boxes) {
+          box.tray.world.rotationalEffects =
+              box.tray.world.rotationalEffects > 0 ? 0.0 : 1.0;
         }
       default:
         return;
@@ -141,6 +280,38 @@ class _TrayScreenState extends State<TrayScreen>
     _pitch = _pitch.clamp(-1.4, 1.4);
     manual?.tilt(roll: _roll, pitch: _pitch);
     _tray?.world.wake();
+  }
+
+  void _dragStart(DragStartDetails details) {
+    if (!_canSwipe) return;
+    _slide = null;
+    setState(() => _dragging = true);
+  }
+
+  void _dragUpdate(DragUpdateDetails details) {
+    if (!_dragging) return;
+    _page.value = (_page.value - details.delta.dx / _pagePitch).clamp(
+      0.0,
+      (_boxes.length - 1).toDouble(),
+    );
+  }
+
+  void _dragEnd(DragEndDetails details) {
+    if (!_dragging) return;
+    // A flick carries the box on its own; otherwise a quarter of the way over
+    // is far enough to mean it, and anything less springs back.
+    final double fling = -details.velocity.pixelsPerSecond.dx / _pagePitch;
+    final double moved = _page.value - _at;
+    int to = _at;
+    if (fling.abs() > _kFlingPages) {
+      to = _at + (fling > 0 ? 1 : -1);
+    } else if (moved.abs() > _kSwipeThreshold) {
+      to = _at + (moved > 0 ? 1 : -1);
+    }
+    setState(() {
+      _dragging = false;
+      _slide = _Slide(from: _page.value, to: to.clamp(0, _boxes.length - 1));
+    });
   }
 
   @override
@@ -155,34 +326,51 @@ class _TrayScreenState extends State<TrayScreen>
           LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final Size size = constraints.biggest;
-              _ensureTray(size);
-              final DiceTray tray = _tray!;
+              _ensureBoxes(size);
+              final _Box box = _boxes[_at];
+              final bool paged = _boxes.length > 1;
 
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (DragStartDetails d) {
                   _manual?.pointerTo(_toMetres(d.localPosition));
-                  tray.world.wake();
+                  box.tray.world.wake();
                 },
                 onPanUpdate: (DragUpdateDetails d) {
                   _manual?.pointerTo(_toMetres(d.localPosition));
                 },
                 onPanEnd: (_) => _manual?.pointerUp(),
-                // Somewhere to put the dice back down without shaking them: the
-                // formation is a fine place to leave a roll, but not if you
-                // wanted to look at where it actually landed.
+                // Only wired up when there is somewhere to go, so a single
+                // group behaves exactly as it did before there were groups.
+                // With both recognisers in the arena a sideways drag pages and
+                // anything else goes to the finger above, which is the split
+                // every scrolling app already makes.
+                onHorizontalDragStart: paged ? _dragStart : null,
+                onHorizontalDragUpdate: paged ? _dragUpdate : null,
+                onHorizontalDragEnd: paged ? _dragEnd : null,
+                // Somewhere to put the dice back down without shaking them:
+                // the formation is a fine place to leave a roll, but not if you
+                // wanted to look at where it actually landed. They travel back
+                // to the exact spot they were lifted from, and a second tap
+                // lifts them again — the roll is not disturbed either way.
                 onTap: () {
-                  if (!tray.readout.active) return;
-                  tray.readout.release();
-                  tray.world.wake();
+                  final Readout readout = box.tray.readout;
+                  readout.down ? readout.pickUp() : readout.putDown();
                 },
-                onDoubleTap: tray.throwDice,
+                onDoubleTap: _throwCurrent,
                 child: Stack(
                   fit: StackFit.expand,
                   children: <Widget>[
                     CustomPaint(
-                      painter: TrayPainter(tray: tray, repaint: _frames),
+                      painter: TrayPagesPainter(
+                        trays: <DiceTray>[
+                          for (final _Box box in _boxes) box.tray,
+                        ],
+                        page: _page,
+                        repaint: _repaint,
+                      ),
                     ),
+                    if (!box.thrown && !_frozen) const _ShakePrompt(),
                     // Along the top, deliberately: the dice settle along the
                     // bottom edge, which is exactly where a control bar would
                     // sit on top of the thing you are trying to look at.
@@ -202,9 +390,17 @@ class _TrayScreenState extends State<TrayScreen>
                                 label: 'Close',
                                 onTap: () => Navigator.of(context).pop(),
                               ),
+                              if (paged)
+                                PageDots(
+                                  current: _at,
+                                  filled: List<bool>.filled(
+                                    _boxes.length,
+                                    true,
+                                  ),
+                                ),
                               _TrayButton(
                                 label: 'Throw',
-                                onTap: tray.throwDice,
+                                onTap: _throwCurrent,
                                 emphasis: true,
                               ),
                             ],
@@ -234,6 +430,52 @@ class _TrayScreenState extends State<TrayScreen>
           width: kHarnessScreen.width,
           height: kHarnessScreen.height,
           child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// One group's box, and whether anyone has thrown it yet.
+class _Box {
+  _Box({required this.tray, required this.thrown});
+
+  final DiceTray tray;
+
+  /// False for a group you have swiped to and not yet shaken. Its dice have
+  /// been put down by the solver, but they are not a result.
+  bool thrown;
+}
+
+/// A swipe coasting to a stop.
+class _Slide {
+  _Slide({required this.from, required this.to});
+
+  final double from;
+  final int to;
+  double elapsed = 0;
+}
+
+/// What an unthrown group says for itself.
+///
+/// The dice are lying on the floor of the box, which on its own is ambiguous —
+/// it looks like a roll that came out badly. One line says it is not a roll at
+/// all yet, and goes away the instant it stops being true.
+class _ShakePrompt extends StatelessWidget {
+  const _ShakePrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    return const IgnorePointer(
+      child: Center(
+        child: Text(
+          'Shake to roll',
+          style: TextStyle(
+            color: Color(0x66BFD0E4),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+          ),
         ),
       ),
     );

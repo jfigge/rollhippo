@@ -50,6 +50,17 @@ List<Wall> trayWalls({
   ];
 }
 
+/// True when a motion frame is a deliberate shake rather than a hand doing its
+/// best to hold the phone still.
+///
+/// Either test on its own misses half of what people actually do: a shake down
+/// the length of the phone shows up in the accelerometer, and a flick of the
+/// wrist barely moves the phone's centre at all but spins it hard. A tray of
+/// dice should wake for both.
+bool isShake(MotionFrame motion) =>
+    motion.properAcceleration.length > Tuning.wakeAcceleration ||
+    motion.angularVelocity.length > 3.0;
+
 /// A tray of dice: the world, the dice in it, and the wiring from a
 /// [MotionSource] to the forces inside.
 class DiceTray {
@@ -177,7 +188,9 @@ class DiceTray {
       );
       die.syncDerived();
     }
-    readout.release();
+    // Forget, not release: every die has just been moved, and putting them
+    // back where the last roll finished would undo the throw.
+    readout.forget();
     world.wake();
   }
 
@@ -213,15 +226,12 @@ class DiceTray {
     world.trayAngularVelocity.setFrom(motion.angularVelocity);
     world.trayAngularAcceleration.setFrom(motion.angularAcceleration);
 
-    if (motion.properAcceleration.length > Tuning.wakeAcceleration ||
-        motion.angularVelocity.length > 3.0) {
-      world.wake();
-    }
+    if (isShake(motion)) world.wake();
 
     // Anything at all that wakes the world takes the dice back off the
-    // readout: the shake and gyroscope thresholds just above, a throw, a key,
-    // a finger on the glass. Catching it here rather than at each of those
-    // means there is one place it can be got wrong instead of five.
+    // readout: the shake test just above, a throw, a key, a finger on the
+    // glass. Catching it here rather than at each of those means there is one
+    // place it can be got wrong instead of five.
     readout.advance(
       dt,
       atRest: world.asleep,

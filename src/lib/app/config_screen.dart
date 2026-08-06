@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../render/die_preview.dart';
 import '../tray/tray.dart';
+import 'page_dots.dart';
 import 'tray_screen.dart';
 
 /// The most dice the tray will take.
@@ -11,6 +12,13 @@ import 'tray_screen.dart';
 /// being possible in a tray this size. The rack below is two rows of five for
 /// the same reason — ten is the shape of the thing, not a limit imposed on it.
 const int kMaxDice = 10;
+
+/// How many separate sets of dice you can set up.
+///
+/// Three because a roll that needs more than three readings kept apart is a
+/// roll you are going to write down anyway, and because three dots under the
+/// rack are countable at a glance where five are a row you have to read.
+const int kMaxGroups = 3;
 
 /// How wide the rack is. Five slots a row, filled left to right: 1–5 along the
 /// top, 6–10 along the bottom.
@@ -29,12 +37,43 @@ const List<DieSpec> kDefaultDice = <DieSpec>[
   DieSpec(kind: DieKind.d6, colour: kDiceWhite),
 ];
 
+/// The groups worth throwing, deep-copied, in the order they were set up.
+///
+/// An empty group is not a set you forgot to fill in, it is one you never
+/// started — so it is not a box on the tray either, and swiping past it there
+/// would be swiping past nothing. The first group can never be emptied, so
+/// this never comes back with nothing in it.
+List<List<DieSpec>> rollableGroups(List<List<DieSpec>> groups) =>
+    <List<DieSpec>>[
+      for (final List<DieSpec> group in groups)
+        if (group.isNotEmpty) List<DieSpec>.of(group),
+    ];
+
+/// Where [group] ends up once the empty groups have been dropped.
+///
+/// A group that is itself empty has no answer, and comes back as the count of
+/// what came before it — which the caller clamps onto the last real group, so
+/// pressing Roll from an empty page lands you on the nearest one that has dice
+/// in it rather than back at the beginning.
+int rollableIndex(List<List<DieSpec>> groups, int group) {
+  int index = 0;
+  for (int i = 0; i < group && i < groups.length; i++) {
+    if (groups[i].isNotEmpty) index++;
+  }
+  return index;
+}
+
 /// Choose what is in the tray, then throw it.
 ///
 /// The whole set is on screen at once, drawn as the dice it actually is, and
 /// exactly one of them is selected: the colours and the shapes underneath are
 /// that die's, and change it. Picking another die drops the first — which is
 /// the same bargain a paint palette makes, and needs no explaining.
+///
+/// Sideways are two more sets, empty until you put something in them. They are
+/// pages rather than a list because they are alternatives rather than parts of
+/// a whole: you are never choosing between all thirty dice at once, you are
+/// choosing what is in *this* box.
 class ConfigScreen extends StatefulWidget {
   const ConfigScreen({super.key});
 
@@ -43,11 +82,23 @@ class ConfigScreen extends StatefulWidget {
 }
 
 class _ConfigScreenState extends State<ConfigScreen> {
-  final List<DieSpec> _dice = List<DieSpec>.of(kDefaultDice);
+  /// The three sets. The first is the one the app starts with and always has at
+  /// least one die in it; the other two begin with none, and are allowed to go
+  /// back to none, because an empty group is how you say you only wanted one.
+  final List<List<DieSpec>> _groups = <List<DieSpec>>[
+    List<DieSpec>.of(kDefaultDice),
+    <DieSpec>[],
+    <DieSpec>[],
+  ];
 
-  /// Which die the editor below the rack is pointed at. Always a real index:
-  /// the last die cannot be removed, so the set is never empty.
-  int _selected = 0;
+  /// Which die the editor is pointed at, per group — so swiping away and back
+  /// puts you on the die you were working on rather than the first one.
+  final List<int> _selectedIn = List<int>.filled(kMaxGroups, 0);
+
+  /// Which group is on screen.
+  int _group = 0;
+
+  final PageController _racks = PageController();
 
   /// Whether settled dice tidy themselves into a formation you can read.
   ///
@@ -57,36 +108,75 @@ class _ConfigScreenState extends State<ConfigScreen> {
   /// for one boolean, and the setting is one tap from wherever you are.
   bool _readout = true;
 
+  /// The group on screen. Everything below the rack is about this one.
+  List<DieSpec> get _dice => _groups[_group];
+
+  int get _selected => _selectedIn[_group];
+
+  /// The first group is the set, and cannot be taken away entirely. The others
+  /// can: emptying group two is the only way to say you have finished with it.
+  int get _floor => _group == 0 ? 1 : 0;
+
+  @override
+  void dispose() {
+    _racks.dispose();
+    super.dispose();
+  }
+
   void _add() {
     if (_dice.length >= kMaxDice) return;
     setState(() {
       // A new die matches the one before it, because the common thing to want
       // is another of what you already have — and it arrives selected, since
-      // the other common thing is to want it different.
-      _dice.add(_dice.last);
-      _selected = _dice.length - 1;
+      // the other common thing is to want it different. The first die of an
+      // empty group has nothing to match, so it is what the app starts with.
+      _dice.add(_dice.isEmpty ? kDefaultDice.first : _dice.last);
+      _selectedIn[_group] = _dice.length - 1;
     });
   }
 
   void _removeSelected() {
-    if (_dice.length <= 1) return;
+    if (_dice.length <= _floor) return;
     setState(() {
       _dice.removeAt(_selected);
-      _selected = _selected.clamp(0, _dice.length - 1);
+      // Emptied, there is no die to be pointed at and no range to clamp into.
+      // The zero it goes back to is where the first die you add will land.
+      _selectedIn[_group] =
+          _dice.isEmpty ? 0 : _selected.clamp(0, _dice.length - 1);
     });
   }
 
-  void _select(int index) => setState(() => _selected = index);
+  void _select(int index) => setState(() => _selectedIn[_group] = index);
 
-  void _set(DieSpec spec) => setState(() => _dice[_selected] = spec);
+  /// The guard is for an empty group, where there is no die for the editor to
+  /// be talking about. Nothing can reach this — the controls are behind an
+  /// [IgnorePointer] — but the editor is built against a stand-in spec there,
+  /// and a stand-in that could be written back would be a trap.
+  void _set(DieSpec spec) {
+    if (_dice.isEmpty) return;
+    setState(() => _dice[_selected] = spec);
+  }
+
+  void _goTo(int group) => _racks.animateToPage(
+    group,
+    duration: const Duration(milliseconds: 260),
+    curve: Curves.easeOutCubic,
+  );
 
   void _roll() {
-    if (_dice.isEmpty) return;
+    final List<List<DieSpec>> groups = rollableGroups(_groups);
+    if (groups.isEmpty) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder:
-            (BuildContext context) =>
-                TrayScreen(dice: List<DieSpec>.of(_dice), readout: _readout),
+            (BuildContext context) => TrayScreen(
+              groups: groups,
+              initial: rollableIndex(
+                _groups,
+                _group,
+              ).clamp(0, groups.length - 1),
+              readout: _readout,
+            ),
       ),
     );
   }
@@ -102,8 +192,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
             child: Column(
               children: <Widget>[
                 _header(),
-                _rack(),
-                const SizedBox(height: 16),
+                _racksView(),
+                _dots(),
                 // Directly under the rack, so the colours and the shapes read
                 // as belonging to the die you just tapped rather than to the
                 // set. What is left over goes at the bottom, which is where a
@@ -122,7 +212,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   Widget _header() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: <Widget>[
@@ -141,7 +231,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  'Tap a die to change it, then throw them.',
+                  'Tap a die to change it. Swipe for another set.',
                   style: TextStyle(color: Color(0x99BFD0E4), fontSize: 13),
                 ),
               ],
@@ -160,13 +250,51 @@ class _ConfigScreenState extends State<ConfigScreen> {
     );
   }
 
-  /// The set itself, two rows of five.
+  /// The three racks, one swipe apart.
+  ///
+  /// A [PageView] has to be told how tall it is, and the rack's height is not a
+  /// number anyone chose — it falls out of five square slots across whatever
+  /// width there is. So it is worked out here rather than pinned, and the two
+  /// stay in step by construction: change the padding in [_rack] and change it
+  /// in [_rackHeight].
+  Widget _racksView() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return SizedBox(
+          height: _rackHeight(constraints.maxWidth),
+          child: PageView(
+            controller: _racks,
+            onPageChanged: (int page) => setState(() => _group = page),
+            children: <Widget>[
+              for (int group = 0; group < kMaxGroups; group++) _rack(group),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Two rows of square slots, each inset by 4, inside a 12 margin — so a slot
+  /// is a fifth of what is left, and the rack is two of those plus the 6 that
+  /// separates the rows.
+  double _rackHeight(double width) =>
+      (2 * ((width - 24) / kRackColumns - 8 + 6)).clamp(0.0, double.infinity);
+
+  /// One set, two rows of five.
   ///
   /// The empty slots stay in the layout rather than collapsing to the dice you
   /// have: they say how many more the tray will take, and — more usefully —
-  /// they stop a die moving under your finger when you add another one.
-  Widget _rack() {
+  /// they stop a die moving under your finger when you add another one. On an
+  /// untouched group they are all there is, which is what an empty group ought
+  /// to look like: room for ten, and nothing in it.
+  Widget _rack(int group) {
+    final List<DieSpec> dice = _groups[group];
+    final int selected = _selectedIn[group];
     return Padding(
+      // The one key in the app. A page view is entitled to know which of its
+      // children is which, and so is anything looking for a particular group's
+      // dice rather than for whichever ones happen to be built.
+      key: ValueKey<int>(group),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         children: <Widget>[
@@ -186,9 +314,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
                         child: AspectRatio(
                           aspectRatio: 1,
                           child: _RackSlot(
-                            spec: i < _dice.length ? _dice[i] : null,
-                            selected: i == _selected,
-                            onTap: i < _dice.length ? () => _select(i) : null,
+                            spec: i < dice.length ? dice[i] : null,
+                            selected: i == selected,
+                            onTap: i < dice.length ? () => _select(i) : null,
                           ),
                         ),
                       ),
@@ -201,6 +329,26 @@ class _ConfigScreenState extends State<ConfigScreen> {
     );
   }
 
+  /// Where you are among the three sets, and which of them have dice in them.
+  ///
+  /// Between the rack and the editor because that is the seam: everything above
+  /// it belongs to the group you are on and swipes with it, everything below is
+  /// about one die and stays put.
+  Widget _dots() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Center(
+        child: PageDots(
+          current: _group,
+          filled: <bool>[
+            for (final List<DieSpec> group in _groups) group.isNotEmpty,
+          ],
+          onTap: _goTo,
+        ),
+      ),
+    );
+  }
+
   /// Whether the dice tidy themselves up once they have stopped.
   ///
   /// Worth a switch rather than being simply how the app behaves: held flat on
@@ -209,7 +357,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
   /// where they fell.
   Widget _readoutSwitch() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+      padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
       child: Row(
         children: <Widget>[
           const Expanded(
@@ -244,8 +392,17 @@ class _ConfigScreenState extends State<ConfigScreen> {
   }
 
   /// What the selected die is: its colour, and how many sides it has.
+  ///
+  /// An empty group has no selected die, and the card goes quiet rather than
+  /// away: it keeps its exact size, and the swatches and the shapes stay in
+  /// the places you last saw them. A card that vanished would take the dots,
+  /// the switch and the buttons a hundred points up the screen with it, and it
+  /// would do that under a finger that is in the middle of a swipe.
   Widget _editor() {
-    final DieSpec spec = _dice[_selected];
+    final bool empty = _dice.isEmpty;
+    // Something to draw the disabled card against. Nothing is selected, so
+    // nothing it says is true — which is what the fading is for.
+    final DieSpec spec = empty ? kDefaultDice.first : _dice[_selected];
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
@@ -261,16 +418,27 @@ class _ConfigScreenState extends State<ConfigScreen> {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  'Die ${_selected + 1} — ${spec.kind.label}',
-                  style: const TextStyle(
-                    color: Color(0xFFE8EEF6),
+                  empty
+                      ? 'No dice yet'
+                      : 'Die ${_selected + 1} — ${spec.kind.label}',
+                  // Short, and held to one line come what may: this title is
+                  // the one thing in the card whose length changes, and a
+                  // second line of it would push everything below the card
+                  // down the screen under a finger mid-swipe.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color:
+                        empty
+                            ? const Color(0x66BFD0E4)
+                            : const Color(0xFFE8EEF6),
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
               TextButton.icon(
-                onPressed: _dice.length > 1 ? _removeSelected : null,
+                onPressed: _dice.length > _floor ? _removeSelected : null,
                 icon: const Icon(Icons.close, size: 16),
                 label: const Text('Remove'),
                 style: TextButton.styleFrom(
@@ -284,30 +452,44 @@ class _ConfigScreenState extends State<ConfigScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 5,
-            runSpacing: 6,
-            children: <Widget>[
-              for (final int colour in kDicePalette)
-                _Swatch(
-                  colour: colour,
-                  selected: colour == spec.colour,
-                  onTap: () => _set(spec.copyWith(colour: colour)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              for (final DieKind kind in DieKind.values)
-                Expanded(
-                  child: _KindChip(
-                    kind: kind,
-                    selected: kind == spec.kind,
-                    onTap: () => _set(spec.copyWith(kind: kind)),
+          // The controls themselves fade together and stop taking taps, rather
+          // than each being told separately that it is disabled — there is one
+          // reason they are all off, and it is not about any of them.
+          IgnorePointer(
+            ignoring: empty,
+            child: Opacity(
+              opacity: empty ? 0.38 : 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 6,
+                    children: <Widget>[
+                      for (final int colour in kDicePalette)
+                        _Swatch(
+                          colour: colour,
+                          selected: !empty && colour == spec.colour,
+                          onTap: () => _set(spec.copyWith(colour: colour)),
+                        ),
+                    ],
                   ),
-                ),
-            ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: <Widget>[
+                      for (final DieKind kind in DieKind.values)
+                        Expanded(
+                          child: _KindChip(
+                            kind: kind,
+                            selected: !empty && kind == spec.kind,
+                            onTap: () => _set(spec.copyWith(kind: kind)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -316,6 +498,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   Widget _buttons() {
     final bool room = _dice.length < kMaxDice;
+    final bool anything = _groups.any((List<DieSpec> g) => g.isNotEmpty);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Row(
@@ -346,7 +529,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
           Expanded(
             flex: 5,
             child: FilledButton(
-              onPressed: _dice.isEmpty ? null : _roll,
+              onPressed: anything ? _roll : null,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF3F6FA8),
                 foregroundColor: const Color(0xFFF2F7FF),

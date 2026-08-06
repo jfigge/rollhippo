@@ -101,6 +101,13 @@ class Tuning {
   /// part of it that was ever in doubt.
   static const double readoutDelay = 0.25;
 
+  /// How long it takes to put the dice back down where they landed.
+  ///
+  /// Quicker than the move out. Going out is the reveal and is worth watching;
+  /// coming home is tidying away, and a tidy-away that dawdles reads as the app
+  /// being slow rather than as the app being careful.
+  static const double readoutReturn = 0.35;
+
   /// How long the move into the reading formation takes.
   static const double readoutDuration = 0.55;
 
@@ -124,4 +131,20 @@ class Tuning {
   /// three percent smaller. Fewer than that and the formation is already
   /// life-sized, and this just sits it lower on the screen.
   static const double readoutTopClearance = 0.022;
+
+  /// How long the box takes to slide aside and bring the next group in.
+  ///
+  /// Half the readout's move, and near enough the third of a second a system
+  /// page transition takes: long enough to read as the same box being pushed
+  /// sideways rather than a cut, short enough that flicking through three
+  /// groups to find the one you want is not a wait.
+  static const double traySlideDuration = 0.28;
+
+  /// The dark left between one box and the next as they slide, metres.
+  ///
+  /// About 49 logical points at [logicalPixelsPerMetre]. Without it the two
+  /// linings meet edge to edge and the swipe reads as one long room being
+  /// panned across; with it there are plainly two boxes, and the one arriving
+  /// is a different tray rather than more of the same one.
+  static const double trayPageGap = 0.008;
 }

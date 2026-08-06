@@ -40,8 +40,8 @@ Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
 src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue)
 src/lib/motion/    MotionSource — the sensors, and a synthetic phone for the harness
-src/lib/render/    TrayCamera · TrayPainter · DiePreview (one die, held still)
-src/lib/app/       ConfigScreen (the rack) · TrayScreen (throw them)
+src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · DiePreview (one die, held still)
+src/lib/app/       ConfigScreen (the rack) · TrayScreen (throw them) · PageDots
 src/test/          headless
 src/tool/          filmstrip · roll_gif · one_die · picker — run via `flutter test`, they write image files
 ```
@@ -114,3 +114,10 @@ test exists to make the change deliberate, not to make it hard.
   reasons about an orientation by hand, `previewOrientation` included, has to
   turn its vectors with the matrix or it will silently work out the mirror
   image. Composition follows the matrix: in `a * b`, `b` acts first.
+- **A box you are not looking at is not simulated.** `TrayScreen` holds one
+  `DiceTray` per group and ticks exactly one of them — none at all while a swipe
+  is in flight. That is the feature, not an optimisation: a group's numbers stay
+  the numbers it rolled, and a swipe cannot shake them. The exception is a group
+  nobody has thrown yet, which is fed `MotionFrame.still` off-screen until it
+  sleeps so its dice are lying on the floor by the time you reach them. Anything
+  that assumes every tray advances every frame will be wrong.

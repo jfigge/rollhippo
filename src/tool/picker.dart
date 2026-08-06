@@ -57,6 +57,15 @@ void main() {
     await tester.pumpAndSettle();
 
     await _write(tester, '$dir/picker.png');
+
+    // And the group next door, which nobody has put anything in yet: an empty
+    // rack, the second dot lit and hollow, and an editor gone quiet in exactly
+    // the place it was. It is the one layout that only exists after a swipe,
+    // which makes it the one worth having a picture of.
+    await tester.drag(find.byType(PageView), const Offset(-300, 0));
+    await tester.pumpAndSettle();
+
+    await _write(tester, '$dir/picker-empty.png');
   });
 
   testWidgets('the six kinds at rack size', (WidgetTester tester) async {
