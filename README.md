@@ -101,12 +101,12 @@ rollhippo/
 ├── Makefile
 └── src/
     ├── lib/physics/   body · shape · contact · collision · solver · world   (no Flutter)
-    ├── lib/tray/      tray geometry · dice · tuning constants
+    ├── lib/tray/      tray geometry · dice · tuning constants · the share code
     ├── lib/motion/    sensor source, and a synthetic one for the harness
     ├── lib/render/    perspective camera and painter
-    ├── lib/app/       the two screens: choose the dice, then throw them
-    ├── test/          38 tests, all headless
-    └── tool/          filmstrip · roll_gif · one_die  (render to image files)
+    ├── lib/app/       the two screens, the app menu, and the haptics
+    ├── test/          119 tests, all headless
+    └── tool/          filmstrip · roll_gif · one_die · picker  (render to image files)
 ```
 
 `lib/physics/` imports nothing from Flutter, so the simulation is testable
@@ -117,7 +117,7 @@ know Flutter exists.
 ## Running it
 
 ```
-make test        # 38 headless tests: geometry, integration, resting, containment, fairness
+make test        # 119 headless tests: geometry, integration, resting, containment, fairness
 make desktop     # macOS harness — phone-sized tray, simulated shake
 make ios         # build and install on the iPhone
 make gif         # render a scripted roll to an animated GIF
@@ -126,6 +126,15 @@ make gif         # render a scripted roll to an animated GIF
 The app opens on the dice you are about to throw: add up to ten, give each one a
 colour and a number of sides, then **Roll**. In the tray, **Throw** puts them
 back in from the top and **Close** returns to the set.
+
+The three lines in the top left are the app menu. **Settings** is one control —
+how hard the phone taps back when a die hits the side of the box, which is
+keyed on the impulse the wall actually delivered, so a heavy die landing hard
+feels different from a light one nudging a wall. Drag the slider and it plays
+each notch back at you, because a multiplier is not a sensation and nobody can
+set one by reading it. **Share** turns the three sets into a QR code — every
+die, its kind and its colour, in fifty-odd characters — and **Scan** reads one
+back off another phone. **Exit** quits.
 
 The desktop harness letterboxes to 393 × 852 points whatever size its window is,
 so the tray it simulates is the same 64 × 140 mm tray as the phone's. Drag to
@@ -154,6 +163,9 @@ has to be a decision rather than a drift. To move one, change it in
 | `glassRestitution` / `glassFriction` | 0.4 / 0.08 | the pane you look through |
 | `throwSpeed` / `throwSpin` | 2.0 m/s / 8 rad/s | reaches the floor at 2.3 m/s and comes back up about 25 mm |
 | `eyeDistance` | 32 cm | real reading distance |
+| `hapticFloor` / `hapticCeiling` | 1 / 18 mN·s | a 4.8 g D6 at 0.16 m/s and at 2.8 m/s; the bottom and top of the haptic scale |
+| `hapticGap` | 45 ms | at most 22 taps a second, which is all a hand can tell apart |
+| `hapticGain` / `hapticMaxGain` | 1.0 / 3.0 | where the calibration slider starts, and where it stops |
 
 Still tuned for 1 g at full speed, and not yet re-judged against the above:
 damping, and the sleep thresholds that decide when a roll is over.

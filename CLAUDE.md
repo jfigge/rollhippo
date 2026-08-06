@@ -38,16 +38,19 @@ Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 
 ```
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
-src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue)
+src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue) · share_code (the QR payload)
 src/lib/motion/    MotionSource — the sensors, and a synthetic phone for the harness
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · DiePreview (one die, held still)
 src/lib/app/       ConfigScreen (the rack) · TrayScreen (throw them) · PageDots
+                   menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
+                   haptics (HapticEngine + HapticDriver) · settings (the one stored preference)
 src/test/          headless
 src/tool/          filmstrip · roll_gif · one_die · picker — run via `flutter test`, they write image files
 ```
 
-`tray.dart` re-exports `dice.dart` and `tuning.dart`, so one
-`import 'tray/tray.dart'` still brings `Tuning`, `DieSpec` and `DieKind` with it.
+`tray.dart` re-exports `dice.dart`, `tuning.dart` and `share_code.dart`, so one
+`import 'tray/tray.dart'` still brings `Tuning`, `DieSpec`, `DieKind` and
+`encodeGroups`/`decodeGroups` with it.
 
 **`lib/physics/` does not import Flutter**, only `dart:math` and `vector_math`.
 That is what makes the simulation testable without a device or a frame, and it
@@ -128,6 +131,18 @@ test exists to make the change deliberate, not to make it hard.
   `integrate` skips it and `_containStrays` leaves it alone. `sleeping` is a
   different thing and a shake clears it; `held` survives every throw until the
   player taps the die again.
+- **The haptic is an impulse, not a speed.** `PhysicsWorld.lastWallImpulse` is
+  the peak normal impulse a *wall* handed a die last frame, in newton-seconds,
+  read off `ContactPoint.maxNormalImpulse` after the solve. Newton-seconds are
+  a change of momentum, so the number already carries the die's mass and a D20
+  registers harder than a D4 arriving at the same speed — which a hand expects
+  and `lastImpactSpeed` cannot express. Two filters are load-bearing: `b == null`
+  is the wall test, and the approach-speed gate is what stops a die *resting* on
+  the floor from buzzing forever, because holding itself up against gravity puts
+  a real impulse through its contacts on every substep. `TrayScreen` reads it for
+  the box on screen only, and feeds `HapticEngine.impact` **every** frame,
+  including silent and frozen ones — the engine's rate limit keeps time off that
+  `dt`, and a gap that only advanced on frames with an impact would never close.
 - **A held die keeps the face *index* it was read at**, in `DiceTray.held`.
   Reading one live is reading it against a gravity that has nothing to do with
   the face it is resting on — it cannot fall over to re-read itself when the

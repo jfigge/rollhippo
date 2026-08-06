@@ -1,0 +1,389 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/menu.dart';
+import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/settings.dart';
+import 'package:rollhippo/app/tray_screen.dart';
+import 'package:rollhippo/render/die_preview.dart';
+import 'package:rollhippo/tray/tray.dart';
+
+/// The dice one group's rack is showing.
+///
+/// Scoped to the group's key rather than counted across the tree, because a
+/// page view keeps its neighbours built.
+List<DieSpec> rackOf(WidgetTester tester, int group) => <DieSpec>[
+  for (final DiePreview preview in tester.widgetList<DiePreview>(
+    find.descendant(
+      of: find.byKey(ValueKey<int>(group)),
+      matching: find.byType(DiePreview),
+    ),
+  ))
+    preview.spec,
+];
+
+/// Swipes the rack one set to the left, and lets the page view land.
+///
+/// A [PageView] only builds the page it is showing, so this is the only way to
+/// look at what is in the second set.
+Future<void> swipeLeft(WidgetTester tester) async {
+  await tester.drag(find.byType(PageView), const Offset(-300, 0));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
+PageDots dotsOf(WidgetTester tester) =>
+    tester.widget<PageDots>(find.byType(PageDots));
+
+Future<void> openMenu(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.menu));
+  await tester.pumpAndSettle();
+}
+
+/// The picker, with the settings put back afterwards.
+///
+/// [settings] is one object for the whole app, so a test that drags the slider
+/// leaves it dragged for whatever runs next.
+Future<void> pumpPicker(WidgetTester tester) async {
+  final double was = settings.hapticGain;
+  addTearDown(() => settings.hapticGain = was);
+  // Phone-shaped, because the picker is: at the default 800 × 600 the rack is
+  // centred inside its [kPickerWidth] cap with 180 points of nothing either
+  // side, and every measurement below would be against the window instead of
+  // against the screen.
+  await tester.binding.setSurfaceSize(kHarnessScreen);
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+}
+
+void main() {
+  group('the app menu', () {
+    testWidgets('is three lines in the top left, and opens', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      final Offset menu = tester.getCenter(find.byIcon(Icons.menu));
+      expect(
+        menu.dy,
+        lessThan(tester.getSize(find.byType(ConfigScreen)).height / 2),
+      );
+
+      await openMenu(tester);
+      for (final String label in <String>[
+        'Settings',
+        'Scan',
+        'Share',
+        'Exit',
+      ]) {
+        expect(find.text(label), findsOneWidget, reason: '$label is missing');
+      }
+    });
+
+    testWidgets('sits on the title line, over the rack edge', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      final Rect button = tester.getRect(find.byType(AppMenuButton));
+      final Rect title = tester.getRect(find.text('Roll Hippo'));
+      final Rect subtitle = tester.getRect(
+        find.text('Tap a die to change it. Swipe for another set.'),
+      );
+      // The slot itself, not the die drawn inside it — the die is inset from
+      // the ring so a selected one does not touch it.
+      final Rect slot = tester.getRect(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey<int>(0)),
+              matching: find.byType(AspectRatio),
+            )
+            .first,
+      );
+
+      // On the title's own line and centred against it, rather than hung off
+      // the bottom of a two-line block. The icon is centred in its tap target
+      // both ways, so the button's centre is where the strokes are.
+      expect(
+        button.center.dy,
+        closeTo(title.center.dy, 0.01),
+        reason: 'the three lines are meant to be level with the R',
+      );
+      expect(
+        button.right,
+        lessThanOrEqualTo(title.left),
+        reason: 'inline with the title, not on top of it',
+      );
+
+      // And one left edge down the whole screen: the strokes, the sentence
+      // about the rack, and the rack. Asserted against each other rather than
+      // against [kRackEdge], because agreeing is the requirement — the number
+      // they agree on is the layout's business.
+      expect(slot.left, closeTo(kRackEdge, 0.01));
+      expect(
+        subtitle.left,
+        closeTo(slot.left, 0.01),
+        reason: 'the subtitle no longer starts where the rack does',
+      );
+      expect(
+        button.left + kAppMenuInset,
+        closeTo(slot.left, 0.01),
+        reason: 'the three lines no longer start where the rack does',
+      );
+    });
+
+    testWidgets('Exit is asked before anything is done about it', (
+      WidgetTester tester,
+    ) async {
+      // The one entry that cannot be exercised for real: [quitApp] ends the
+      // process and would take the test runner with it. What is checked here
+      // is that the menu asks, and asks once.
+      int asked = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AppMenuButton(
+              groups: const <List<DieSpec>>[<DieSpec>[]],
+              onScanned: (_) {},
+              onExit: () async => asked++,
+            ),
+          ),
+        ),
+      );
+
+      await openMenu(tester);
+      await tester.tap(find.text('Exit'));
+      await tester.pumpAndSettle();
+      expect(asked, 1);
+    });
+  });
+
+  group('the settings panel', () {
+    testWidgets('the slider is the haptic calibration, and moves it', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      settings.hapticGain = Tuning.hapticGain;
+
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Impact strength'), findsOneWidget);
+      expect(
+        find.text('100%'),
+        findsOneWidget,
+        reason: 'starts at the default',
+      );
+
+      // All the way to the left is off, which is the setting that has to work
+      // whatever else does: it is how someone who dislikes the whole feature
+      // turns it off.
+      await tester.drag(find.byType(Slider), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(settings.hapticGain, 0.0);
+      expect(find.text('Off'), findsOneWidget);
+      expect(find.text('0%'), findsNothing, reason: 'off is a word, not a sum');
+
+      // And all the way to the right is the top of the scale rather than
+      // wherever the drag happened to land.
+      await tester.drag(find.byType(Slider), const Offset(500, 0));
+      await tester.pumpAndSettle();
+      expect(settings.hapticGain, Tuning.hapticMaxGain);
+      expect(find.text('300%'), findsOneWidget);
+    });
+  });
+
+  group('what is remembered', () {
+    testWidgets('the calibration survives a relaunch', (
+      WidgetTester tester,
+    ) async {
+      // The whole reason there is a store at all: the number was arrived at by
+      // shaking the phone with the sheet open, and asking for it again every
+      // launch would waste that.
+      final double was = settings.hapticGain;
+      addTearDown(() => settings.hapticGain = was);
+
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      settings.hapticGain = 2.25;
+      await tester.pumpAndSettle();
+
+      // A fresh Settings is what the next launch gets.
+      final Settings relaunched = Settings();
+      expect(relaunched.hapticGain, Tuning.hapticGain, reason: 'starts fresh');
+      await relaunched.load();
+      expect(relaunched.hapticGain, 2.25);
+    });
+
+    testWidgets('a store that is not there is one at its defaults', (
+      WidgetTester tester,
+    ) async {
+      // No mock values registered, so the platform channel behind
+      // [SharedPreferences] answers nothing at all. That is a dial that
+      // forgets where it was, not a crash on the way to the first frame.
+      final Settings offline = Settings();
+      await offline.load();
+      expect(offline.hapticGain, Tuning.hapticGain);
+      offline.hapticGain = 1.5;
+      await tester.pumpAndSettle();
+      expect(offline.hapticGain, 1.5, reason: 'still works, just forgets');
+    });
+
+    testWidgets('a stored value from another build is clamped, not trusted', (
+      WidgetTester tester,
+    ) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'haptic.gain': 99.0,
+      });
+      final Settings loaded = Settings();
+      await loaded.load();
+      expect(loaded.hapticGain, Tuning.hapticMaxGain);
+    });
+  });
+
+  group('the share sheet', () {
+    testWidgets('shows a code for the dice that are actually in the picker', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      await openMenu(tester);
+      await tester.tap(find.text('Share'));
+      await tester.pumpAndSettle();
+
+      final ShareCodeView qr = tester.widget<ShareCodeView>(
+        find.byType(ShareCodeView),
+      );
+      // What the picker starts with: one set of two white D6s.
+      expectSame(decodeGroups(qr.code)!, <List<DieSpec>>[
+        List<DieSpec>.of(kDefaultDice),
+        <DieSpec>[],
+        <DieSpec>[],
+      ]);
+      expect(find.text('1 set · 2 dice'), findsOneWidget);
+    });
+
+    testWidgets('follows the picker rather than the defaults', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      await tester.tap(find.text('Add a die'));
+      await tester.pump();
+      await tester.tap(find.text('D20'));
+      await tester.pump();
+
+      await openMenu(tester);
+      await tester.tap(find.text('Share'));
+      await tester.pumpAndSettle();
+
+      final ShareCodeView qr = tester.widget<ShareCodeView>(
+        find.byType(ShareCodeView),
+      );
+      final List<List<DieSpec>> coded = decodeGroups(qr.code)!;
+      expect(coded[0].length, 3);
+      expect(coded[0].last.kind, DieKind.d20);
+      expect(find.text('1 set · 3 dice'), findsOneWidget);
+    });
+  });
+
+  group('a scanned code', () {
+    testWidgets('replaces every set, and puts you on the first', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      // The scanner itself needs a camera, so what is driven here is the seam
+      // it pops back through — which is the part with the picker's own limits
+      // in it, and the part that can be got wrong.
+      final AppMenuButton menu = tester.widget<AppMenuButton>(
+        find.byType(AppMenuButton),
+      );
+      menu.onScanned(<List<DieSpec>>[
+        <DieSpec>[DieSpec(kind: DieKind.d20, colour: kDicePalette[6])],
+        <DieSpec>[
+          DieSpec(kind: DieKind.d4, colour: kDiceWhite),
+          DieSpec(kind: DieKind.d8, colour: kDicePalette[2]),
+        ],
+        <DieSpec>[],
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(rackOf(tester, 0).length, 1);
+      expect(rackOf(tester, 0).single.kind, DieKind.d20);
+      expect(
+        find.text('Dice set up from a shared code.'),
+        findsOneWidget,
+        reason: 'a scan that changes everything has to say that it did',
+      );
+
+      // Landing back on the first set is the point of the second half of
+      // [_applyScanned]: a code read while looking at the third set would
+      // otherwise leave you on a page whose contents just changed under you.
+      expect(dotsOf(tester).current, 0);
+      expect(dotsOf(tester).filled, <bool>[true, true, false]);
+
+      await swipeLeft(tester);
+      expect(rackOf(tester, 1).length, 2);
+      expect(rackOf(tester, 1).first.kind, DieKind.d4);
+      expect(rackOf(tester, 1).last.kind, DieKind.d8);
+    });
+
+    testWidgets('is cut down to what the picker has room for', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      final AppMenuButton menu = tester.widget<AppMenuButton>(
+        find.byType(AppMenuButton),
+      );
+      // A code from some later build: four sets, and twelve dice in the first.
+      menu.onScanned(<List<DieSpec>>[
+        <DieSpec>[
+          for (int i = 0; i < 12; i++)
+            DieSpec(kind: DieKind.d6, colour: kDiceWhite),
+        ],
+        <DieSpec>[],
+        <DieSpec>[],
+        <DieSpec>[DieSpec(kind: DieKind.d12, colour: kDiceWhite)],
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(
+        rackOf(tester, 0).length,
+        kMaxDice,
+        reason: 'the tray takes ten, so the code loses two',
+      );
+      expect(find.text('$kMaxDice / $kMaxDice'), findsOneWidget);
+    });
+
+    testWidgets('cannot leave the first set empty', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      final AppMenuButton menu = tester.widget<AppMenuButton>(
+        find.byType(AppMenuButton),
+      );
+      menu.onScanned(<List<DieSpec>>[<DieSpec>[], <DieSpec>[], <DieSpec>[]]);
+      await tester.pumpAndSettle();
+
+      expect(
+        rackOf(tester, 0),
+        isNotEmpty,
+        reason: 'the picker has nothing to show you with no first set',
+      );
+    });
+  });
+}
+
+/// [DieSpec] has no equality of its own; compare it the way the picker does.
+void expectSame(List<List<DieSpec>> got, List<List<DieSpec>> want) {
+  expect(got.length, want.length);
+  for (int g = 0; g < want.length; g++) {
+    expect(got[g].length, want[g].length, reason: 'set $g is the wrong size');
+    for (int d = 0; d < want[g].length; d++) {
+      expect(got[g][d].kind, want[g][d].kind);
+      expect(got[g][d].colour, want[g][d].colour);
+    }
+  }
+}

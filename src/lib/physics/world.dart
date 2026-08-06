@@ -68,8 +68,20 @@ class PhysicsWorld {
       bodies.isNotEmpty && bodies.every((RigidBody b) => b.sleeping);
 
   /// Peak contact speed seen during the last [advance], m/s — the hook a
-  /// dice-clack sound or a haptic tick will want.
+  /// dice-clack sound will want.
   double lastImpactSpeed = 0.0;
+
+  /// Peak normal impulse a *wall* put into a die during the last [advance], in
+  /// newton-seconds. Zero on a frame where nothing arrived at a wall.
+  ///
+  /// This is the haptic signal, and it is deliberately not [lastImpactSpeed].
+  /// An impulse is a change of momentum, so it already carries the die's mass:
+  /// a D20 hitting the side at two metres a second registers about two thirds
+  /// again as hard as a D6 doing the same, which is the difference a hand
+  /// expects to feel and a speed cannot express. It is also the quantity the
+  /// wall genuinely delivered — the wall is a static plane and takes none of
+  /// it back, so all of it went into the die and, through the phone, into you.
+  double lastWallImpulse = 0.0;
 
   void wake() {
     _restTimer = 0.0;
@@ -83,6 +95,7 @@ class PhysicsWorld {
   void advance(double dt) {
     if (dt <= 0) return;
     lastImpactSpeed = 0.0;
+    lastWallImpulse = 0.0;
     if (asleep) return;
 
     // How fast is anything about to move? Corners of a spinning die outrun its
@@ -117,6 +130,9 @@ class PhysicsWorld {
     final List<Manifold> manifolds = _collide();
     if (manifolds.isNotEmpty) {
       solver.solve(manifolds, h, _cache);
+      // After the solve, not before: the impulse is what the solver decided,
+      // and it does not exist until it has decided it.
+      _noteWallImpulses(manifolds);
     }
 
     for (final RigidBody body in bodies) {
@@ -209,6 +225,31 @@ class PhysicsWorld {
       if (b != null) v = v - b.velocityAt(c.point - b.position);
       final double approach = -v.dot(m.normal);
       if (approach > lastImpactSpeed) lastImpactSpeed = approach;
+    }
+  }
+
+  /// Keeps the largest impulse any wall just handed a die.
+  ///
+  /// Two filters, both load-bearing. A manifold with a `b` is one die against
+  /// another, which happens out in the middle of the tray and is not the box
+  /// knocking against your hand — so `b == null` is the whole wall test.
+  ///
+  /// The second is the one that is not obvious: a die *resting* on the floor
+  /// puts a real impulse through its contacts on every substep forever, because
+  /// that is what holding it up against gravity costs. Keyed on impulse alone
+  /// the tray would buzz continuously with nothing moving. The gate is the same
+  /// approach speed, and the same threshold, that [Solver] uses to decide a
+  /// contact is resting rather than bouncing — below it there is no bounce, so
+  /// there is nothing to feel either.
+  void _noteWallImpulses(List<Manifold> manifolds) {
+    for (final Manifold m in manifolds) {
+      if (m.b != null) continue;
+      for (final ContactPoint c in m.points) {
+        if (c.approachSpeed > -solver.restitutionThreshold) continue;
+        if (c.maxNormalImpulse > lastWallImpulse) {
+          lastWallImpulse = c.maxNormalImpulse;
+        }
+      }
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../render/die_preview.dart';
 import '../tray/tray.dart';
+import 'menu.dart';
 import 'page_dots.dart';
 import 'tray_screen.dart';
 
@@ -24,12 +25,36 @@ const int kMaxGroups = 3;
 /// top, 6–10 along the bottom.
 const int kRackColumns = 5;
 
+/// The rack's margin, the gutter that separates one slot from the next, and
+/// the gap between its two rows.
+///
+/// Named rather than written out because four things have to agree about them:
+/// [_rack] lays the slots out with them, [_rackHeight] works out how tall that
+/// comes to, and the header lines the subtitle up against [kRackEdge]. They
+/// were three literals in two places and a comment asking the next person to
+/// keep them in step, which is the sort of request nobody remembers.
+const double kRackMargin = 12;
+const double kRackGutter = 4;
+const double kRackRowGap = 6;
+
+/// Where the leftmost slot of the rack begins, and so where everything that is
+/// *about* the rack begins.
+const double kRackEdge = kRackMargin + kRackGutter;
+
 /// How wide the picker is allowed to get.
 ///
 /// A phone is narrower than this and simply fills it. A desktop window is not,
 /// and without the cap the rack would grow with it until the dice were the size
 /// of coasters — the same reason [kHarnessScreen] pins the tray.
 const double kPickerWidth = 440;
+
+/// Where the menu button's box starts, so that its three strokes land on
+/// [kRackEdge] along with the subtitle and the rack below them.
+///
+/// Not [kRackEdge] itself. Most of that button is tap target with nothing
+/// drawn in it — see [kAppMenuInset], which is how much. `menu_test.dart`
+/// measures the two against the rack and holds them there.
+const double _kMenuEdge = kRackEdge - kAppMenuInset;
 
 /// What you get before you have chosen anything.
 const List<DieSpec> kDefaultDice = <DieSpec>[
@@ -149,6 +174,42 @@ class _ConfigScreenState extends State<ConfigScreen> {
     setState(() => _dice[_selected] = spec);
   }
 
+  /// Replaces every set with the ones a scanned code described.
+  ///
+  /// All three at once, and not a merge. A share code is somebody's whole
+  /// setup — the sets are alternatives to each other, so taking two of theirs
+  /// and keeping one of yours would produce a arrangement neither of you has
+  /// ever seen. Swapping the lot is the only reading of "scan this" that gives
+  /// you what you were looking at when you scanned it.
+  ///
+  /// The picker's own limits are applied here rather than in [decodeGroups],
+  /// which knows the wire format and not how much room this screen has. A code
+  /// from some later build with four sets or twelve dice in one loses the
+  /// excess and works; it does not fail.
+  void _applyScanned(List<List<DieSpec>> scanned) {
+    setState(() {
+      for (int group = 0; group < kMaxGroups; group++) {
+        final List<DieSpec> from =
+            group < scanned.length ? scanned[group] : const <DieSpec>[];
+        _groups[group] = <DieSpec>[...from.take(kMaxDice)];
+        _selectedIn[group] = 0;
+      }
+      // The same floor [_floor] holds everywhere else: the first set is *the*
+      // set and the picker has nothing to show you if it is empty. A code that
+      // says otherwise was not made by this screen.
+      if (_groups[0].isEmpty) _groups[0] = List<DieSpec>.of(kDefaultDice);
+    });
+    _goTo(0);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Dice set up from a shared code.'),
+        backgroundColor: Color(0xFF1B2430),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _goTo(int group) => _racks.animateToPage(
     group,
     duration: const Duration(milliseconds: 260),
@@ -200,39 +261,57 @@ class _ConfigScreenState extends State<ConfigScreen> {
     );
   }
 
+  /// The name, the menu, and how full the rack is.
+  ///
+  /// Two lines rather than one. The menu button sits on the title's own line
+  /// and centred against it, because three horizontal lines beside a capital R
+  /// read as one object where a button hung off the bottom of a two-line block
+  /// reads as a third thing loose in the corner.
+  ///
+  /// Everything on the second line starts at [kRackEdge], which is where the
+  /// leftmost slot of the rack starts: the subtitle is a sentence about the
+  /// rack, so it begins where the rack begins. Only the title and the button
+  /// it belongs to are allowed further out than that.
   Widget _header() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      padding: const EdgeInsets.fromLTRB(0, 12, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            children: <Widget>[
+              const SizedBox(width: _kMenuEdge),
+              AppMenuButton(groups: _groups, onScanned: _applyScanned),
+              const Text(
+                'Roll Hippo',
+                style: TextStyle(
+                  color: Color(0xFFE8EEF6),
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: kRackEdge),
+            child: Row(
               children: <Widget>[
-                Text(
-                  'Roll Hippo',
-                  style: TextStyle(
-                    color: Color(0xFFE8EEF6),
-                    fontSize: 26,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.4,
+                const Expanded(
+                  child: Text(
+                    'Tap a die to change it. Swipe for another set.',
+                    style: TextStyle(color: Color(0x99BFD0E4), fontSize: 13),
                   ),
                 ),
-                SizedBox(height: 2),
                 Text(
-                  'Tap a die to change it. Swipe for another set.',
-                  style: TextStyle(color: Color(0x99BFD0E4), fontSize: 13),
+                  '${_dice.length} / $kMaxDice',
+                  style: const TextStyle(
+                    color: Color(0x99BFD0E4),
+                    fontSize: 13,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                  ),
                 ),
               ],
-            ),
-          ),
-          Text(
-            '${_dice.length} / $kMaxDice',
-            style: const TextStyle(
-              color: Color(0x99BFD0E4),
-              fontSize: 13,
-              fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -264,11 +343,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
     );
   }
 
-  /// Two rows of square slots, each inset by 4, inside a 12 margin — so a slot
-  /// is a fifth of what is left, and the rack is two of those plus the 6 that
-  /// separates the rows.
-  double _rackHeight(double width) =>
-      (2 * ((width - 24) / kRackColumns - 8 + 6)).clamp(0.0, double.infinity);
+  /// Two rows of square slots, each inset by [kRackGutter], inside a
+  /// [kRackMargin] margin — so a slot is a fifth of what is left, and the rack
+  /// is two of those plus the [kRackRowGap] that separates the rows.
+  double _rackHeight(double width) => (2 *
+          ((width - 2 * kRackMargin) / kRackColumns -
+              2 * kRackGutter +
+              kRackRowGap))
+      .clamp(0.0, double.infinity);
 
   /// One set, two rows of five.
   ///
@@ -285,12 +367,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
       // children is which, and so is anything looking for a particular group's
       // dice rather than for whichever ones happen to be built.
       key: ValueKey<int>(group),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: kRackMargin),
       child: Column(
         children: <Widget>[
           for (int row = 0; row * kRackColumns < kMaxDice; row++)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: kRackRowGap),
               child: Row(
                 children: <Widget>[
                   for (
@@ -300,7 +382,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   )
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: kRackGutter,
+                        ),
                         child: AspectRatio(
                           aspectRatio: 1,
                           child: _RackSlot(

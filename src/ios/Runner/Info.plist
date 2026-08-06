@@ -4,6 +4,8 @@
 <dict>
 	<key>NSMotionUsageDescription</key>
 	<string>Roll Hippo reads the phone's motion so shaking it rolls the dice.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Roll Hippo uses the camera only to read a shared dice code, and only while the scanner is open.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

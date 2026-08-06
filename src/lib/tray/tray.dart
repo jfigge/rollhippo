@@ -14,6 +14,7 @@ import 'tuning.dart';
 export 'dice.dart';
 export 'reading.dart';
 export 'readout.dart';
+export 'share_code.dart';
 export 'tuning.dart';
 
 /// The six inward-facing planes of a tray `width` × `height` × `depth`.

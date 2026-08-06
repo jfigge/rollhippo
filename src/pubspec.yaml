@@ -44,6 +44,21 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Draws the Share sheet's QR code. Pure Dart on top of `qr` — no platform
+  # code, so the harness renders the same square the phone does.
+  qr_flutter: ^4.1.0
+
+  # Reads one back. This is the dependency with teeth: it is the camera, so it
+  # is the reason `ios/Runner/Info.plist` carries NSCameraUsageDescription and
+  # the reason both Xcode projects had their deployment targets raised (iOS 15,
+  # macOS 10.15). See lib/app/scan_screen.dart.
+  mobile_scanner: ^7.4.0
+
+  # Remembers the haptic calibration between launches. The number was arrived
+  # at by shaking the phone with the slider open; asking for it again every
+  # launch would waste that.
+  shared_preferences: ^2.5.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

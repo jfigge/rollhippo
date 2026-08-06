@@ -9,7 +9,9 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../motion/motion.dart';
 import '../render/tray_painter.dart';
 import '../tray/tray.dart';
+import 'haptics.dart';
 import 'page_dots.dart';
+import 'settings.dart';
 
 /// True when a real accelerometer is expected to be present.
 bool get onDevice =>
@@ -91,15 +93,27 @@ class _TrayScreenState extends State<TrayScreen>
 
   final FocusNode _focus = FocusNode();
 
+  /// Turns the wall impacts of the box on screen into taps you can feel.
+  late final HapticEngine _haptics;
+
   @override
   void initState() {
     super.initState();
     _motion = onDevice ? SensorMotionSource() : ManualMotionSource();
+    _haptics = HapticEngine(
+      driver: hapticsFor(device: onDevice),
+      gain: settings.hapticGain,
+    );
+    // The calibration slider lives a screen away, under the picker this was
+    // pushed from, so it cannot change while the tray is up. Listening anyway
+    // costs nothing and means it does not matter if that stops being true.
+    settings.addListener(_onSettingsChanged);
     _ticker = createTicker(_onTick)..start();
   }
 
   @override
   void dispose() {
+    settings.removeListener(_onSettingsChanged);
     _focus.dispose();
     _ticker.dispose();
     _motion.dispose();
@@ -107,6 +121,8 @@ class _TrayScreenState extends State<TrayScreen>
     _page.dispose();
     super.dispose();
   }
+
+  void _onSettingsChanged() => _haptics.gain = settings.hapticGain;
 
   ManualMotionSource? get _manual {
     final MotionSource source = _motion;
@@ -162,6 +178,12 @@ class _TrayScreenState extends State<TrayScreen>
 
     if (_slide != null) _advanceSlide(dt);
 
+    // The hardest knock the box on screen took this frame, in newton-seconds.
+    // Only that box: the unthrown ones below are putting their dice down on a
+    // floor nobody is looking at, and a phone that buzzed for those would be
+    // buzzing about a tray that is not there.
+    double impulse = 0;
+
     if (!_frozen) {
       final _Box box = _boxes[_at];
       // A group that has not been thrown yet is waiting for exactly this.
@@ -169,6 +191,7 @@ class _TrayScreenState extends State<TrayScreen>
         _throwCurrent();
       }
       box.tray.update(motion, dt);
+      impulse = box.tray.world.lastWallImpulse;
     }
 
     // The groups you have not reached yet put their dice down off-screen, under
@@ -183,6 +206,11 @@ class _TrayScreenState extends State<TrayScreen>
         box.tray.update(MotionFrame.still, dt);
       }
     }
+
+    // Every frame, including the frozen ones and the silent ones: the engine
+    // keeps its own clock off this [dt], and a gap that only advanced on
+    // frames that had an impact in them would never close.
+    _haptics.impact(impulse, dt);
 
     _frames.tick();
   }

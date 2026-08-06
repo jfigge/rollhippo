@@ -147,4 +147,61 @@ class Tuning {
   /// panned across; with it there are plainly two boxes, and the one arriving
   /// is a different tray rather than more of the same one.
   static const double trayPageGap = 0.008;
+
+  /// The quietest wall impact worth feeling, in newton-seconds.
+  ///
+  /// A safety net rather than the real filter. `PhysicsWorld` has already
+  /// thrown away every contact the solver calls resting — anything arriving
+  /// slower than 0.12 m/s — and that is the physically correct place to draw
+  /// the line, because it is the same line below which there is no bounce.
+  /// This one only catches what gets past it, and sets the bottom of the scale.
+  ///
+  /// The signal is a change of momentum, so the number can be read off a real
+  /// die. A 16 mm D6 weighs 4.83 g and die-on-lining restitution comes out at
+  /// √(0.38 × 0.28) = 0.33, so a wall takes `m · v · 1.33` off it: 1 mN·s is
+  /// that die arriving at 0.16 m/s. Deliberately low enough that every die the
+  /// tray actually throws is felt landing — the softest of those, a 1.6 g D4,
+  /// still turns up at half as much again.
+  static const double hapticFloor = 0.001;
+
+  /// Where the scale tops out, newton-seconds.
+  ///
+  /// 18 mN·s is the same D6 at 2.8 m/s, and it is set against what the tray
+  /// really produces rather than against what it could: a thrown die peaks
+  /// somewhere between 2 and 20 mN·s depending on its kind and what it lands
+  /// on, and a hard shake of ten tops out around 22. Putting the ceiling at
+  /// the hardest *imaginable* hit instead would spend the whole useful range
+  /// on the bottom third of the scale and every ordinary throw would feel
+  /// identical.
+  ///
+  /// Heavier dice cross it sooner, and that is the point: every die is the
+  /// same width across, so a D12 is five times the mass of a D4 and lands
+  /// like it.
+  static const double hapticCeiling = 0.018;
+
+  /// Shortest time between two taps, seconds.
+  ///
+  /// A hand cannot resolve 22 taps a second into separate events and the
+  /// actuator cannot produce them — asking anyway turns ten dice landing at
+  /// once into one continuous smear. So the loudest impact in each 45 ms wins
+  /// and the rest are dropped, which is roughly what a real tray would have
+  /// handed you anyway.
+  static const double hapticGap = 0.045;
+
+  /// What the calibration slider starts at, and what 1.0 means.
+  ///
+  /// A multiplier on the impulse before it is weighed against [hapticFloor]
+  /// and [hapticCeiling], which is why turning it up does not merely make taps
+  /// harder — it lets quieter impacts through the floor at all. Phones differ
+  /// enormously here (a Taptic Engine inside a case is a different instrument
+  /// from one against a bare palm), and this is not a number anybody else can
+  /// pick for you. It is the one piece of tuning the app hands to the player.
+  static const double hapticGain = 1.0;
+
+  /// The top of the slider.
+  ///
+  /// Zero is silent. At three the effective floor is a third of a millinewton-
+  /// second, which is below the solver's own resting threshold — so everything
+  /// the physics is willing to call an impact at all is felt.
+  static const double hapticMaxGain = 3.0;
 }

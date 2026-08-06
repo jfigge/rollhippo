@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/tray/tray.dart';
 
@@ -76,6 +78,48 @@ void main() {
       Tuning.trayPageGap,
       0.008,
       reason: '8 mm of dark, so there are plainly two boxes',
+    );
+
+    // The haptics, in newton-seconds of wall impact. Settled the same way as
+    // the rest — with a phone in one hand — but bracketed by what the tray
+    // actually produces, which the test below checks has not moved out from
+    // under them.
+    expect(
+      Tuning.hapticFloor,
+      0.001,
+      reason: 'a 4.8 g D6 at 0.16 m/s; below every die the tray throws',
+    );
+    expect(
+      Tuning.hapticCeiling,
+      0.018,
+      reason: 'the same die at 2.8 m/s; a hard landing, not an impossible one',
+    );
+    expect(Tuning.hapticGap, 0.045, reason: 'at most 22 taps a second');
+    expect(Tuning.hapticGain, 1.0);
+    expect(Tuning.hapticMaxGain, 3.0);
+  });
+
+  test('the haptic scale still brackets what the tray can produce', () {
+    // Independent of the numbers above, and the reason they are what they are.
+    // A thrown 16 mm D6 arrives at the floor at around 2.3 m/s and keeps a
+    // third of it, so the wall takes `m · v · (1 + e)` off it. If the die, the
+    // lining or the throw is ever retuned, this is what notices that the
+    // haptic scale no longer covers the range it is supposed to describe.
+    final double mass =
+        Tuning.dieSize * Tuning.dieSize * Tuning.dieSize * Tuning.dieDensity;
+    final double bounce =
+        1 + math.sqrt(Tuning.dieRestitution * Tuning.wallRestitution);
+    final double landing = mass * 2.3 * bounce;
+
+    expect(
+      landing,
+      greaterThan(Tuning.hapticFloor),
+      reason: 'a thrown die must be felt landing',
+    );
+    expect(
+      landing,
+      lessThan(Tuning.hapticCeiling),
+      reason: 'an ordinary throw must leave headroom above it',
     );
   });
 

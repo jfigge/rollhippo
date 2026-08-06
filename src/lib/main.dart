@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app/config_screen.dart';
+import 'app/settings.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   // Belt and braces with the Info.plist: the tray's walls are fixed to the
@@ -13,6 +14,11 @@ void main() {
   SystemChrome.setPreferredOrientations(<DeviceOrientation>[
     DeviceOrientation.portraitUp,
   ]);
+  // Before the first frame, not after it. The haptic calibration is read on
+  // the way into the tray, and a tray that ran its first throw at the default
+  // and then jumped to the stored value would be wrong exactly once — on the
+  // throw the player was paying attention to.
+  await settings.load();
   runApp(const RollHippoApp());
 }
 
