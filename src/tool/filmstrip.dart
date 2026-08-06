@@ -5,9 +5,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/motion/motion.dart';
-import 'package:rollhippo2/render/tray_painter.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/motion/motion.dart';
+import 'package:rollhippo/render/tray_painter.dart';
+import 'package:rollhippo/tray/tray.dart';
 
 /// Renders a scripted roll to a contact sheet, so the motion can be looked at
 /// without a device in the loop. Run with:

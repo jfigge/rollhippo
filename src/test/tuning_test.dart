@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/tray/tray.dart';
 
 /// The agreed feel, pinned.
 ///
@@ -14,7 +14,7 @@ import 'package:rollhippo2/tray/tray.dart';
 void main() {
   test('the tuning is the agreed tuning', () {
     // The tray.
-    expect(Tuning.trayDepth, 0.10, reason: '10 cm deep');
+    expect(Tuning.trayDepth, 0.20, reason: '20 cm deep');
     expect(Tuning.logicalPixelsPerMetre, 6100.0);
     expect(Tuning.eyeDistance, 0.32, reason: 'real reading distance');
 
@@ -32,6 +32,14 @@ void main() {
     expect(Tuning.dieDensity, 1180.0);
     expect(Tuning.dieRestitution, 0.38);
     expect(Tuning.dieFriction, 0.42);
+
+    // The throw: hard enough off the top of the tray to bounce off the floor.
+    expect(
+      Tuning.throwSpeed,
+      2.0,
+      reason: 'reaches the floor at about 2.3 m/s',
+    );
+    expect(Tuning.throwSpin, 8.0, reason: 'tumbles on the way down');
 
     // The tray lining, and the glass you look through.
     expect(Tuning.wallRestitution, 0.28);

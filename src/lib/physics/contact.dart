@@ -33,6 +33,19 @@ class ContactPoint {
   double tangent1Mass = 0.0;
   double tangent2Mass = 0.0;
   double velocityTarget = 0.0;
+
+  /// Approach speed along the normal as the step began, before any impulse.
+  ///
+  /// This is what restitution is computed from, and it has to be recorded
+  /// rather than read back later: a die caught by a speculative contact has
+  /// most of its approach taken off it by the non-penetration constraint before
+  /// it ever touches, and bouncing off what is left is not bouncing at all.
+  double approachSpeed = 0.0;
+
+  /// The largest normal impulse this point carried during the step. Zero means
+  /// the contact was speculative and never actually pushed, so there is nothing
+  /// for restitution to act on.
+  double maxNormalImpulse = 0.0;
 }
 
 /// A set of contact points sharing one normal.
@@ -57,10 +70,10 @@ class Manifold {
   }
 
   /// The dynamic body. Pushing it along `+normal` separates the pair.
-  final RigidBox a;
+  final RigidBody a;
 
   /// The other body, or null when A is resting on a static wall.
-  final RigidBox? b;
+  final RigidBody? b;
 
   final Vector3 normal;
   final List<ContactPoint> points;

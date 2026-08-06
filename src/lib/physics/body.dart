@@ -1,60 +1,61 @@
-import 'dart:math' as math;
-
 import 'package:vector_math/vector_math_64.dart';
 
-/// A dynamic rigid box — in this app, one die.
+import 'shape.dart';
+
+/// A dynamic rigid body — in this app, one die.
 ///
-/// Dice are modelled as *rounded* boxes. [halfExtents] is the true outer half
-/// size and [radius] is the corner bevel; collision runs against the shrunken
-/// [core] box and then adds [radius] back as a contact margin, which is exactly
-/// the Minkowski sum of a box and a sphere.
+/// The geometry lives in [shape]: a convex polyhedron, rounded by a bevel, with
+/// its own inertia and its own numbering. Everything here is the part that
+/// moves — position, orientation, and the impulses the solver applies.
 ///
-/// That one detail is most of why these dice tumble instead of clunking. A
-/// sharp-cornered cube landing on an edge pivots about a mathematical line and
-/// stalls there; a bevelled one rolls continuously over the round of the edge
-/// and carries on to the next face. Real dice are bevelled for the same reason.
-class RigidBox {
-  RigidBox({
-    required this.halfExtents,
+/// Collision runs against the shape's *core*, the polyhedron shrunk so that its
+/// faces sit [radius] inside the real ones, and then adds [radius] back as a
+/// contact margin. That is exactly the Minkowski sum of the polyhedron and a
+/// sphere, and it is most of why these dice tumble instead of clunking: a
+/// sharp-cornered solid landing on an edge pivots about a mathematical line and
+/// stalls there, while a bevelled one rolls over the round of the edge onto the
+/// next face. Real dice are bevelled for the same reason.
+class RigidBody {
+  RigidBody({
+    required this.shape,
     required this.mass,
-    this.radius = 0.0,
     this.restitution = 0.2,
     this.friction = 0.5,
     Vector3? position,
     Quaternion? orientation,
   }) : position = position ?? Vector3.zero(),
-       orientation = (orientation ?? Quaternion.identity())..normalize() {
-    core = Vector3(
-      math.max(halfExtents.x - radius, 1e-9),
-      math.max(halfExtents.y - radius, 1e-9),
-      math.max(halfExtents.z - radius, 1e-9),
-    );
+       orientation = (orientation ?? Quaternion.identity())..normalize(),
+       _worldCore = <Vector3>[
+         for (int i = 0; i < shape.coreVertices.length; i++) Vector3.zero(),
+       ],
+       _worldNormals = <Vector3>[
+         for (int i = 0; i < shape.faces.length; i++) Vector3.zero(),
+       ],
+       _worldEdges = <Vector3>[
+         for (int i = 0; i < shape.edges.length; i++) Vector3.zero(),
+       ] {
     invMass = mass > 0 ? 1.0 / mass : 0.0;
-
-    // Solid cuboid about its centre. The bevel is ignored here: at a 1.5 mm
-    // radius on a 16 mm die it shifts the inertia by under 2%, and a die you
-    // can feel that difference in is a loaded die.
-    final double m12 = mass / 12.0;
-    final double w = 2 * halfExtents.x;
-    final double h = 2 * halfExtents.y;
-    final double d = 2 * halfExtents.z;
+    final Vector3 inertia = shape.inertiaPerMass * mass;
     invInertiaLocal = Vector3(
-      1.0 / (m12 * (h * h + d * d)),
-      1.0 / (m12 * (w * w + d * d)),
-      1.0 / (m12 * (w * w + h * h)),
+      1.0 / inertia.x,
+      1.0 / inertia.y,
+      1.0 / inertia.z,
     );
     syncDerived();
   }
 
-  /// True outer half size, bevel included.
-  final Vector3 halfExtents;
+  final ConvexShape shape;
   final double mass;
-  final double radius;
   final double restitution;
   final double friction;
 
-  /// `halfExtents - radius` — the box collision actually runs against.
-  late final Vector3 core;
+  /// The bevel — the contact margin collision adds back onto the core shape.
+  double get radius => shape.bevel;
+
+  /// Centre to furthest drawn vertex. What the broad phase and the containment
+  /// backstop use to bound a die however it happens to be turned.
+  double get circumradius => shape.circumradius;
+
   late final double invMass;
   late final Vector3 invInertiaLocal;
 
@@ -73,9 +74,30 @@ class RigidBox {
   Matrix3 rotation = Matrix3.identity();
   Matrix3 invInertiaWorld = Matrix3.identity();
 
+  /// The core vertices, face normals and edge directions in world space, all
+  /// refreshed by [syncDerived].
+  ///
+  /// Collision walks these many times per step. Two D12s alone put two hundred
+  /// and twenty-five candidate axes through the vertex lists, so rotating a
+  /// vector inside those loops rather than once at the top of the step is the
+  /// difference between a tray of ten dice costing one millisecond a frame and
+  /// costing six.
+  final List<Vector3> _worldCore;
+  final List<Vector3> _worldNormals;
+  final List<Vector3> _worldEdges;
+
+  List<Vector3> get coreVertices => _worldCore;
+
+  /// Outward face normals in world space, indexed as [ConvexShape.faces].
+  List<Vector3> get faceNormals => _worldNormals;
+
+  /// Edge-group directions in world space, indexed as [ConvexShape.edges].
+  List<Vector3> get edgeDirections => _worldEdges;
+
   bool sleeping = false;
 
-  /// Recomputes the rotation matrix and the world-space inverse inertia.
+  /// Recomputes the rotation matrix, the world-space inverse inertia and the
+  /// world-space core vertices.
   ///
   /// `I⁻¹_world = R · I⁻¹_local · Rᵀ`, which for a diagonal local inertia is
   /// cheap enough to just write out.
@@ -97,6 +119,65 @@ class RigidBox {
       r.entry(2, 2) * d.z,
     );
     invInertiaWorld = rd * r.transposed() as Matrix3;
+
+    final double r00 = r.entry(0, 0), r01 = r.entry(0, 1), r02 = r.entry(0, 2);
+    final double r10 = r.entry(1, 0), r11 = r.entry(1, 1), r12 = r.entry(1, 2);
+    final double r20 = r.entry(2, 0), r21 = r.entry(2, 1), r22 = r.entry(2, 2);
+
+    void rotate(Vector3 v, Vector3 out) => out.setValues(
+      r00 * v.x + r01 * v.y + r02 * v.z,
+      r10 * v.x + r11 * v.y + r12 * v.z,
+      r20 * v.x + r21 * v.y + r22 * v.z,
+    );
+
+    final List<Vector3> local = shape.coreVertices;
+    for (int i = 0; i < local.length; i++) {
+      rotate(local[i], _worldCore[i]);
+      _worldCore[i].add(position);
+    }
+    for (int i = 0; i < shape.faces.length; i++) {
+      rotate(shape.faces[i].normal, _worldNormals[i]);
+    }
+    for (int i = 0; i < shape.edges.length; i++) {
+      rotate(shape.edges[i].direction, _worldEdges[i]);
+    }
+  }
+
+  /// One core vertex in world space.
+  Vector3 coreVertex(int i) => _worldCore[i];
+
+  /// One vertex of the *drawn* hull in world space — the outer shape, bevel
+  /// included, which is what the painter wants and collision does not.
+  Vector3 outerVertex(int i) =>
+      position + rotation.transformed(shape.vertices[i]);
+
+  /// Outward normal of face [i] in world space.
+  Vector3 faceNormal(int i) => _worldNormals[i];
+
+  /// Centroid of face [i] in world space.
+  Vector3 faceCentre(int i) =>
+      position + rotation.transformed(shape.faces[i].centre);
+
+  /// Furthest the core reaches along [n], and the least. Together they are the
+  /// interval a separating-axis test projects the body onto.
+  double supportMax(Vector3 n) {
+    double best = double.negativeInfinity;
+    for (int i = 0; i < _worldCore.length; i++) {
+      final Vector3 v = _worldCore[i];
+      final double d = n.x * v.x + n.y * v.y + n.z * v.z;
+      if (d > best) best = d;
+    }
+    return best;
+  }
+
+  double supportMin(Vector3 n) {
+    double best = double.infinity;
+    for (int i = 0; i < _worldCore.length; i++) {
+      final Vector3 v = _worldCore[i];
+      final double d = n.x * v.x + n.y * v.y + n.z * v.z;
+      if (d < best) best = d;
+    }
+    return best;
   }
 
   /// World-space velocity of the material point at offset [r] from the centre.
@@ -114,23 +195,6 @@ class RigidBox {
     pseudoVelocity.addScaled(impulse, invMass);
     pseudoAngularVelocity.add(invInertiaWorld.transformed(r.cross(impulse)));
   }
-
-  /// The eight corners of the [core] box in world space.
-  ///
-  /// Corner `i` takes its sign on each axis from bit `i` — bit 0 is x, bit 1 is
-  /// y, bit 2 is z. Collision code leans on that being stable frame to frame,
-  /// because the index doubles as the contact's feature id for warm starting.
-  List<Vector3> coreVertices() => List<Vector3>.generate(8, coreVertex);
-
-  Vector3 coreVertex(int i) =>
-      position +
-      rotation.transformed(
-        Vector3(
-          (i & 1) == 0 ? -core.x : core.x,
-          (i & 2) == 0 ? -core.y : core.y,
-          (i & 4) == 0 ? -core.z : core.z,
-        ),
-      );
 
   /// Column [axis] of the rotation matrix — the world direction of a local axis.
   Vector3 axis(int axis) => Vector3(

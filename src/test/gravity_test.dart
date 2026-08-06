@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/motion/motion.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/motion/motion.dart';
+import 'package:rollhippo/tray/tray.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 const double kWidth = 393 / Tuning.logicalPixelsPerMetre;

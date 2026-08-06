@@ -1,10 +1,10 @@
-# Roll Hippo 2 — dice tray prototype.
+# Roll Hippo — dice tray.
 #
 # The app lives in src/, matching Roll Hippo 1's layout.
 
 SRC      := src
 DEVICE   ?= 00008110-000414C63A51401E   # Jason's iPhone
-SCRATCH  ?= /tmp/rollhippo2
+SCRATCH  ?= /tmp/rollhippo
 
 .DEFAULT_GOAL := help
 .PHONY: help all format analyze test desktop ios gif filmstrip clean

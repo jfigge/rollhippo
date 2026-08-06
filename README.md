@@ -1,11 +1,9 @@
-# Roll Hippo 2 — dice tray prototype
+# Roll Hippo — dice tray
 
-A 3D dice tray: a box the size of the phone screen and 10 cm deep, with two
-16 mm D6 in it that fall under gravity, bounce off the walls and off each other, and
-tumble when the phone is shaken.
-
-This is the movement only. No dice sets, no persistence, no controls beyond what
-is needed to shake the thing and look at it.
+Pick a set of dice — up to ten of them, any mixture of D4 through D20, each its
+own colour — throw them into a box the size of the phone screen and 20 cm deep,
+and read what they landed on. They fall under gravity, bounce off the walls and
+off each other, and tumble when the phone is shaken.
 
 ## The one idea
 
@@ -44,14 +42,23 @@ That is not the same knob: gravity changes the *shape* of the arcs, time scale
 replays the identical arcs more slowly. Real time still goes to the sensors,
 since angular acceleration is a physical rate and has no business being scaled.
 
-Two details do more for how it reads than their size suggests:
+Three details do more for how it reads than their size suggests:
 
-- **Dice are bevelled**, and collision treats them as a box inflated by that
-  bevel. A sharp cube landing on an edge pivots about a line and stalls; a
+- **Dice are bevelled**, and collision treats them as the polyhedron inflated by
+  that bevel. A sharp solid landing on an edge pivots about a line and stalls; a
   rounded one rolls over the edge onto the next face, which is why real dice are
-  made that way.
+  made that way. The bevel is a fixed *fraction* of each shape's inradius, so a
+  D4 — whose faces sit a third as far from its centre as a cube's — is not
+  rounded nearly to a ball.
 - **The face you see is the face it landed on** — read off the orientation, not
-  chosen and animated towards.
+  chosen and animated towards. A D4 is read off the face it is *sitting* on,
+  because a tetrahedron at rest has a vertex pointing at the sky and no face at
+  all, and its numbers are printed along its edges accordingly.
+- **Restitution is taken against the speed a die arrives with**, not the speed
+  it has left once the non-penetration constraint has had its way. A die falling
+  at two metres a second is caught by a speculative contact a millimetre out and
+  held to just reaching the floor by the end of the substep; bounce off *that*
+  and it lands dead. This is the difference between a throw and a drop.
 
 The screen is locked to portrait, in both `Info.plist` and `SystemChrome`. That
 is not a cosmetic choice: the walls are fixed to the screen and gravity comes
@@ -59,31 +66,66 @@ from the accelerometer, so a screen that re-oriented as you tipped the phone
 would swing the tray out from under the dice while down carried on pointing the
 same way.
 
+## The dice
+
+Six shapes, all of them isohedral — every face the same distance from the
+centre — which is both what makes a die fair and what lets one uniform shrink
+serve as the bevel for all of them.
+
+| | | |
+|---|---|---|
+| D4 | tetrahedron | read off the face it lands on |
+| D6 | cube | pips, not numerals |
+| D8 | octahedron | |
+| D10 | pentagonal trapezohedron | the only one that is not Platonic |
+| D12 | dodecahedron | |
+| D20 | icosahedron | |
+
+None of their faces are transcribed by hand. Each shape is defined by its
+vertices alone, and `ConvexShape.fromVertices` *finds* the faces — every plane
+through three vertices with all the others behind it — then orders each
+polygon, links its edges to their neighbours, numbers opposite faces to sum to
+n+1, and computes volume and inertia by decomposing the solid into tetrahedra.
+A pentagonal trapezohedron's inertia tensor is in no table, and a die whose
+inertia is wrong is a loaded die.
+
+Every die is built to the same circumradius as a 16 mm D6, so they all measure
+the same across their widest point and one spawn grid packs any mixture of them
+without two starting inside each other. Mass follows from each shape's own
+volume at acrylic's density, so a D20 really is heavier than a D4.
+
 ## Layout
 
 ```
-rollhippo2/
+rollhippo/
 ├── Makefile
 └── src/
-    ├── lib/physics/   body · contact · collision · solver · world   (no Flutter)
-    ├── lib/tray/      tray geometry, dice, tuning constants
+    ├── lib/physics/   body · shape · contact · collision · solver · world   (no Flutter)
+    ├── lib/tray/      tray geometry · dice · tuning constants
     ├── lib/motion/    sensor source, and a synthetic one for the harness
     ├── lib/render/    perspective camera and painter
-    ├── test/          15 tests, all headless
+    ├── lib/app/       the two screens: choose the dice, then throw them
+    ├── test/          38 tests, all headless
     └── tool/          filmstrip · roll_gif · one_die  (render to image files)
 ```
 
 `lib/physics/` imports nothing from Flutter, so the simulation is testable
-without a device or a frame.
+without a device or a frame. `lib/tray/` holds the same line: a die's colour is
+a packed ARGB `int` rather than a `Color`, so nothing below the widgets has to
+know Flutter exists.
 
 ## Running it
 
 ```
-make test        # 15 headless tests: integration, resting, containment, fairness
+make test        # 38 headless tests: geometry, integration, resting, containment, fairness
 make desktop     # macOS harness — phone-sized tray, simulated shake
 make ios         # build and install on the iPhone
 make gif         # render a scripted roll to an animated GIF
 ```
+
+The app opens on the dice you are about to throw: add up to ten, give each one a
+colour and a number of sides, then **Roll**. In the tray, **Throw** puts them
+back in from the top and **Close** returns to the set.
 
 The desktop harness letterboxes to 393 × 852 points whatever size its window is,
 so the tray it simulates is the same 64 × 140 mm tray as the phone's. Drag to
@@ -99,17 +141,18 @@ then confirm on the phone.
 
 Settled by hand on a phone, and pinned by `test/tuning_test.dart` so a change
 has to be a decision rather than a drift. To move one, change it in
-`lib/tray/tray.dart` and in that test in the same edit.
+`lib/tray/tuning.dart` and in that test in the same edit.
 
 | | | |
 |---|---|---|
-| `trayDepth` | 10 cm | deep enough that the dice use the depth |
+| `trayDepth` | 20 cm | deep enough that the dice use the depth |
 | `gravityScale` | 0.6 | dice fall at 0.6 g; shakes land at full force |
 | `timeScale` | 0.85 | the same arcs, replayed slower |
-| `dieSize` / `dieBevel` | 16 mm / 1.3 mm | a real acrylic D6, 4.8 g |
+| `dieSize` / `dieBevel` | 16 mm / 1.3 mm | a real acrylic D6, 4.8 g, and the yardstick for every other shape |
 | `dieRestitution` / `dieFriction` | 0.38 / 0.42 | |
 | `wallRestitution` / `wallFriction` | 0.28 / 0.5 | the tray lining |
 | `glassRestitution` / `glassFriction` | 0.4 / 0.08 | the pane you look through |
+| `throwSpeed` / `throwSpin` | 2.0 m/s / 8 rad/s | reaches the floor at 2.3 m/s and comes back up about 25 mm |
 | `eyeDistance` | 32 cm | real reading distance |
 
 Still tuned for 1 g at full speed, and not yet re-judged against the above:
@@ -117,25 +160,34 @@ damping, and the sleep thresholds that decide when a roll is over.
 
 ## What is checked
 
-`make test` covers free-fall acceleration, the direction of angular
-integration, the gravity/shake split, a die settling flat on the floor and sleeping, a settled die not
-drifting, bounces losing height, dice staying inside the tray through eight
-seconds of an 8 g shake, two dice not passing through each other, the pip
-mapping, and a fairness smoke test (220 rolls, 440 dice, χ² = 1.9 on 5 df).
+`make test` covers the geometry of all six solids — face count, convexity, the
+shared inradius, the numbering, inertia against the published tensors for the
+three that have one, and that each solid's own frame really is a principal frame
+— then free-fall acceleration, the direction of angular integration, the
+gravity/shake split, a die settling flat on the floor and sleeping, a settled die
+not drifting, bounces losing height, every kind of die landing flat on a face and
+reading it, a thrown die reaching the floor and coming back up off it, ten
+assorted dice starting apart and staying inside the tray through a hard shake,
+two dice not passing through each other, the pip mapping, and fairness smoke
+tests for the D6 and the D20.
 
-Cost on an iPhone: **under 0.01 ms of CPU per frame** for two dice, against a
-8.3 ms budget at 120 Hz.
+Cost per frame, ten dice, measured in the test VM: **0.3–0.6 ms** for a throw
+settling, and **3–4 ms** under eight seconds of continuous 8 g shaking, which is
+the worst the simulation is ever asked to do. The shaken figure is all
+separating-axis work — two D12s alone put 225 candidate axes through both vertex
+lists — and Gauss-map pruning of the edge pairs is where the next order of
+magnitude is if it is ever needed.
 
 ## What is not settled
 
-Everything about feel. The constants in `lib/tray/tray.dart` — restitution,
+Everything about feel. The constants in `lib/tray/tuning.dart` — restitution,
 friction, damping, bevel, sleep thresholds — are set to real-world values for
 acrylic dice on a lined tray, which is a starting point and not an answer.
 `gravityScale` is the one that has been moved off its real value on purpose.
 
 Open questions worth deciding early: whether 0.6 gravity wants the damping and
-sleep thresholds moved with it (dice now take longer to give up); whether 10 cm
-of depth is too much (deep enough that the dice can get lost behind each other); whether
-the dice should settle faster than physics says, so a roll reads sooner; and
-whether the rotational pseudo-forces are worth their complexity — press **G** on
-the harness and see.
+sleep thresholds moved with it (dice now take longer to give up); whether 20 cm
+of depth is too much now that a die at the back is drawn at 62% of one at the
+glass; whether the dice should settle faster than physics says, so a roll reads
+sooner; and whether the rotational pseudo-forces are worth their complexity —
+press **G** on the harness and see.

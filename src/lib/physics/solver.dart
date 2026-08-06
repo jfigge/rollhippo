@@ -42,6 +42,7 @@ class Solver {
   Solver({
     this.velocityIterations = 12,
     this.positionIterations = 6,
+    this.restitutionIterations = 3,
     this.restitutionThreshold = 0.12,
     this.penetrationSlop = 2e-4,
     this.correctionRate = 0.4,
@@ -50,6 +51,12 @@ class Solver {
 
   final int velocityIterations;
   final int positionIterations;
+
+  /// Passes of the restitution solve. Separate from the main velocity solve
+  /// because restitution is applied against the speed the step *started* with,
+  /// and mixing that into the non-penetration iterations makes each one bounce
+  /// off the last one's answer.
+  final int restitutionIterations;
 
   /// Below this approach speed a contact is treated as resting, not bouncing.
   /// Without it a die at rest micro-bounces on its own restitution forever.
@@ -71,6 +78,11 @@ class Solver {
         _solveVelocity(m);
       }
     }
+    for (int i = 0; i < restitutionIterations; i++) {
+      for (final Manifold m in manifolds) {
+        _applyRestitution(m);
+      }
+    }
     for (int i = 0; i < positionIterations; i++) {
       for (final Manifold m in manifolds) {
         _solvePosition(m, dt);
@@ -85,8 +97,8 @@ class Solver {
   }
 
   double _effectiveMass(Manifold m, ContactPoint c, Vector3 direction) {
-    final RigidBox a = m.a;
-    final RigidBox? b = m.b;
+    final RigidBody a = m.a;
+    final RigidBody? b = m.b;
     double k = a.invMass + (b?.invMass ?? 0.0);
     final Vector3 ran = c.ra.cross(direction);
     k += a.invInertiaWorld.transformed(ran).cross(c.ra).dot(direction);
@@ -99,7 +111,7 @@ class Solver {
 
   Vector3 _relativeVelocity(Manifold m, ContactPoint c) {
     final Vector3 v = m.a.velocityAt(c.ra);
-    final RigidBox? b = m.b;
+    final RigidBody? b = m.b;
     return b == null ? v : v - b.velocityAt(c.rb);
   }
 
@@ -117,24 +129,18 @@ class Solver {
       c.tangent1Mass = _effectiveMass(m, c, m.tangent1);
       c.tangent2Mass = _effectiveMass(m, c, m.tangent2);
 
-      final double vn = _relativeVelocity(m, c).dot(m.normal);
+      c.approachSpeed = _relativeVelocity(m, c).dot(m.normal);
+      c.maxNormalImpulse = 0.0;
 
-      if (c.separation > 0) {
-        // Not touching yet. The surfaces may close — but no faster than exactly
-        // meeting by the end of the step, which is what stops a fast die from
-        // stepping through a wall between two frames.
-        //
-        // This has to be the target outright rather than a floor under the
-        // resting target of zero: a merely *nearby* die held to "no approach"
-        // is a die hovering a contact margin above the floor.
-        c.velocityTarget = -c.separation / dt;
-      } else {
-        // Touching. Bounce, but only from a real impact — below the threshold a
-        // contact is resting, and restitution there is a die that jitters on
-        // the spot forever.
-        c.velocityTarget =
-            vn < -restitutionThreshold ? -m.restitution * vn : 0.0;
-      }
+      // Not touching yet? The surfaces may close — but no faster than exactly
+      // meeting by the end of the step, which is what stops a fast die from
+      // stepping through a wall between two frames.
+      //
+      // This has to be the target outright rather than a floor under the
+      // resting target of zero: a merely *nearby* die held to "no approach" is
+      // a die hovering a contact margin above the floor. What it must not also
+      // do is *swallow* the approach, which is what [_applyRestitution] is for.
+      c.velocityTarget = c.separation > 0 ? -c.separation / dt : 0.0;
 
       final Vector3? remembered = cache.recall(m, c);
       if (remembered != null) {
@@ -188,6 +194,35 @@ class Solver {
       final double total = math.max(c.normalImpulse + lambda, 0.0);
       _apply(m, c, m.normal * (total - c.normalImpulse));
       c.normalImpulse = total;
+      c.maxNormalImpulse = math.max(c.maxNormalImpulse, total);
+    }
+  }
+
+  /// Bounces the contacts that were a real impact, off the speed they arrived
+  /// with rather than off whatever is left after non-penetration has had its
+  /// way.
+  ///
+  /// A die falling at two metres a second is caught by a speculative contact a
+  /// millimetre out and held to exactly reaching the floor by the end of the
+  /// substep. Read its velocity at that moment and it is a hundredth of what it
+  /// was, so restitution returns nothing and the die lands dead. Restitution
+  /// belongs against [ContactPoint.approachSpeed], which is what it was doing
+  /// before anything touched it.
+  void _applyRestitution(Manifold m) {
+    if (m.restitution <= 0) return;
+    for (final ContactPoint c in m.points) {
+      // Below the threshold a contact is resting, not bouncing, and restitution
+      // there is a die that jitters on the spot forever. A contact that never
+      // pushed is one the die is merely near.
+      if (c.approachSpeed > -restitutionThreshold) continue;
+      if (c.maxNormalImpulse <= 0) continue;
+
+      final double vn = _relativeVelocity(m, c).dot(m.normal);
+      final double lambda =
+          -(vn + m.restitution * c.approachSpeed) * c.normalMass;
+      final double total = math.max(c.normalImpulse + lambda, 0.0);
+      _apply(m, c, m.normal * (total - c.normalImpulse));
+      c.normalImpulse = total;
     }
   }
 
@@ -204,7 +239,7 @@ class Solver {
         maxCorrectionSpeed,
       );
 
-      final RigidBox? b = m.b;
+      final RigidBody? b = m.b;
       Vector3 v = m.a.pseudoVelocityAt(c.ra);
       if (b != null) v = v - b.pseudoVelocityAt(c.rb);
 

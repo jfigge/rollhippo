@@ -4,6 +4,7 @@ import 'package:vector_math/vector_math_64.dart';
 
 import 'body.dart';
 import 'contact.dart';
+import 'shape.dart';
 
 /// A static, inward-facing plane — one of the six sides of the tray.
 ///
@@ -42,15 +43,23 @@ double _mix(double x, double y) => math.sqrt(x * y);
 /// that in a substep, so it cannot cross this margin unseen.
 const double contactMargin = 3e-3;
 
-/// Box against one tray wall.
+/// The most contact points one manifold is allowed to carry.
 ///
-/// Only vertices can be the deepest point of a box against a plane, so walking
-/// the eight corners *is* the full manifold — four of them for a face landing,
-/// two for an edge, one for a corner, and no special cases to write.
-Manifold? collideBoxWall(RigidBox body, Wall wall, int wallIndex) {
+/// A face landing on a wall touches at most five points — a D12's pentagon —
+/// and solving all of them is both cheaper and steadier than picking four of
+/// the five, which is a choice that flickers when all five are the same depth.
+const int _maxContactPoints = 8;
+
+/// A die against one tray wall.
+///
+/// Only vertices can be the deepest point of a convex body against a plane, so
+/// walking the vertices *is* the full manifold — a polygon's worth for a face
+/// landing, two for an edge, one for a corner, and no special cases to write.
+Manifold? collideBodyWall(RigidBody body, Wall wall, int wallIndex) {
   final List<ContactPoint> points = <ContactPoint>[];
-  for (int i = 0; i < 8; i++) {
-    final Vector3 v = body.coreVertex(i);
+  final List<Vector3> vertices = body.coreVertices;
+  for (int i = 0; i < vertices.length; i++) {
+    final Vector3 v = vertices[i];
     final double separation = wall.normal.dot(v) - wall.offset - body.radius;
     if (separation < contactMargin) {
       points.add(
@@ -63,15 +72,7 @@ Manifold? collideBoxWall(RigidBox body, Wall wall, int wallIndex) {
     }
   }
   if (points.isEmpty) return null;
-
-  // A box cannot rest on more than four corners; anything beyond that is a deep
-  // overlap, and the four deepest points are the ones worth solving.
-  if (points.length > 4) {
-    points.sort(
-      (ContactPoint x, ContactPoint y) => x.separation.compareTo(y.separation),
-    );
-    points.length = 4;
-  }
+  _keepDeepest(points);
 
   return Manifold(
     a: body,
@@ -82,6 +83,20 @@ Manifold? collideBoxWall(RigidBox body, Wall wall, int wallIndex) {
     friction: _mix(body.friction, wall.friction),
     key: wallIndex,
   );
+}
+
+/// Trims a manifold to [_maxContactPoints], deepest first.
+///
+/// The feature id breaks ties, because a die resting flat presents several
+/// contacts at identical depth and a sort that reorders them frame to frame
+/// costs exactly the warm-start stability the ids exist to buy.
+void _keepDeepest(List<ContactPoint> points) {
+  if (points.length <= _maxContactPoints) return;
+  points.sort((ContactPoint x, ContactPoint y) {
+    final int byDepth = x.separation.compareTo(y.separation);
+    return byDepth != 0 ? byDepth : x.featureId.compareTo(y.featureId);
+  });
+  points.length = _maxContactPoints;
 }
 
 /// One candidate separating axis and what it told us.
@@ -98,75 +113,125 @@ class _Axis {
   final int j;
 }
 
-/// Half-width of [box]'s core projected onto a world-space unit [axis].
-double _project(RigidBox box, Vector3 axis) =>
-    box.core.x * axis.dot(box.axis(0)).abs() +
-    box.core.y * axis.dot(box.axis(1)).abs() +
-    box.core.z * axis.dot(box.axis(2)).abs();
-
-_Axis? _test(RigidBox a, RigidBox b, Vector3 axis, int kind, int i, int j) {
-  final double length = axis.length;
-  // Near-parallel edge pairs produce a degenerate cross product. Their axis is
-  // already covered by one of the six face axes, so dropping them loses nothing.
-  if (length < 1e-8) return null;
-  final Vector3 n = axis / length;
-  final double centres = n.dot(b.position - a.position);
-  final double separation = centres.abs() - (_project(a, n) + _project(b, n));
-  return _Axis(centres < 0 ? -n : n, separation, kind, i, j);
-}
-
 /// Die against die.
 ///
-/// Separating-axis test over the usual fifteen candidates, then a manifold from
-/// whichever axis is least separated: face cases get reference/incident face
-/// clipping, edge cases get the closest points of the two edges.
-Manifold? collideBoxes(RigidBox a, RigidBox b, int key) {
+/// A separating-axis test over the face normals of both bodies and the cross
+/// products of their edge directions — the faces of the Minkowski difference,
+/// which is the complete candidate set for two convex polyhedra. Then a
+/// manifold from whichever axis is least separated: face cases get
+/// reference/incident face clipping, edge cases the closest points of the two
+/// edges.
+///
+/// Face axes are deliberately one-sided. A face normal can only separate on the
+/// side it points at; the other side belongs to some other face, and the cases
+/// no face covers are exactly the ones the edge products are there for.
+Manifold? collideBodies(RigidBody a, RigidBody b, int key) {
+  final double skin = a.radius + b.radius;
+
   _Axis? best;
   _Axis? bestFace;
 
-  void consider(_Axis? axis) {
-    if (axis == null) return;
-    if (best == null || axis.separation > best!.separation) best = axis;
-    if (axis.kind != 2 &&
-        (bestFace == null || axis.separation > bestFace!.separation)) {
-      bestFace = axis;
+  for (int f = 0; f < a.faceNormals.length; f++) {
+    final Vector3 n = a.faceNormals[f];
+    final double separation =
+        b.supportMin(n) - (n.dot(a.position) + a.shape.coreInradius) - skin;
+    if (separation > contactMargin) return null;
+    if (best == null || separation > best.separation) {
+      best = _Axis(n, separation, 0, f, -1);
+      bestFace = best;
     }
   }
 
-  for (int i = 0; i < 3; i++) {
-    consider(_test(a, b, a.axis(i), 0, i, -1));
+  for (int f = 0; f < b.faceNormals.length; f++) {
+    final Vector3 n = b.faceNormals[f];
+    final double separation =
+        a.supportMin(n) - (n.dot(b.position) + b.shape.coreInradius) - skin;
+    if (separation > contactMargin) return null;
+    if (best == null || separation > best.separation) {
+      // [n] points out of B, so it points from B towards A.
+      best = _Axis(-n, separation, 1, -1, f);
+      bestFace = best;
+    }
   }
-  for (int j = 0; j < 3; j++) {
-    consider(_test(a, b, b.axis(j), 1, -1, j));
-  }
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
-      consider(_test(a, b, a.axis(i).cross(b.axis(j)), 2, i, j));
+
+  // The edge phase is where the time goes — a D12 against a D20 is fifteen
+  // directions against fifteen — so it is written against raw doubles and the
+  // bodies' cached world-space vectors. No cross product, no normalisation and
+  // no support point allocates.
+  final List<Vector3> edgesA = a.edgeDirections;
+  final List<Vector3> edgesB = b.edgeDirections;
+  final List<Vector3> coreA = a.coreVertices;
+  final List<Vector3> coreB = b.coreVertices;
+  for (int i = 0; i < edgesA.length; i++) {
+    final Vector3 da = edgesA[i];
+    for (int j = 0; j < edgesB.length; j++) {
+      final Vector3 db = edgesB[j];
+      double nx = da.y * db.z - da.z * db.y;
+      double ny = da.z * db.x - da.x * db.z;
+      double nz = da.x * db.y - da.y * db.x;
+      final double length2 = nx * nx + ny * ny + nz * nz;
+      // Near-parallel edge pairs give a degenerate axis. Whatever they would
+      // have separated on is already covered by one of the face normals, so
+      // dropping them loses nothing.
+      if (length2 < 1e-16) continue;
+      final double inverse = 1.0 / math.sqrt(length2);
+      nx *= inverse;
+      ny *= inverse;
+      nz *= inverse;
+
+      double aMin = double.infinity;
+      double aMax = double.negativeInfinity;
+      for (int k = 0; k < coreA.length; k++) {
+        final Vector3 v = coreA[k];
+        final double d = nx * v.x + ny * v.y + nz * v.z;
+        if (d < aMin) aMin = d;
+        if (d > aMax) aMax = d;
+      }
+      double bMin = double.infinity;
+      double bMax = double.negativeInfinity;
+      for (int k = 0; k < coreB.length; k++) {
+        final Vector3 v = coreB[k];
+        final double d = nx * v.x + ny * v.y + nz * v.z;
+        if (d < bMin) bMin = d;
+        if (d > bMax) bMax = d;
+      }
+
+      final double ahead = bMin - aMax;
+      final double behind = aMin - bMax;
+      final double separation = math.max(ahead, behind) - skin;
+      if (separation > contactMargin) return null;
+      if (best == null || separation > best.separation) {
+        final double sign = ahead >= behind ? 1.0 : -1.0;
+        best = _Axis(
+          Vector3(nx * sign, ny * sign, nz * sign),
+          separation,
+          2,
+          i,
+          j,
+        );
+      }
     }
   }
 
   final _Axis? winner = best;
   if (winner == null) return null;
 
-  final double skin = a.radius + b.radius;
-  if (winner.separation > skin + contactMargin) return null;
-
-  // Face and edge axes are often within a hair of each other when two dice
-  // meet squarely. Left alone the winner flips between them frame to frame and
-  // the manifold changes shape underneath the warm-start cache, which reads as
-  // a buzz. Faces win ties by 0.1 mm.
+  // Face and edge axes are often within a hair of each other when two dice meet
+  // squarely. Left alone the winner flips between them frame to frame and the
+  // manifold changes shape underneath the warm-start cache, which reads as a
+  // buzz. Faces win ties by 0.1 mm.
   _Axis axis = winner;
   if (axis.kind == 2 &&
       bestFace != null &&
-      axis.separation < bestFace!.separation + 1e-4) {
-    axis = bestFace!;
+      axis.separation < bestFace.separation + 1e-4) {
+    axis = bestFace;
   }
 
   final double restitution = _mix(a.restitution, b.restitution);
   final double friction = _mix(a.friction, b.friction);
 
   if (axis.kind == 2) {
-    final ContactPoint? point = _edgeContact(a, b, axis, skin);
+    final ContactPoint? point = _edgeContact(a, b, axis);
     if (point == null) return null;
     return Manifold(
       a: a,
@@ -181,18 +246,17 @@ Manifold? collideBoxes(RigidBox a, RigidBox b, int key) {
   }
 
   final bool referenceIsA = axis.kind == 0;
-  final RigidBox reference = referenceIsA ? a : b;
-  final RigidBox incident = referenceIsA ? b : a;
-  // Outward normal of the reference face, pointing at the incident box.
-  final Vector3 referenceNormal =
-      referenceIsA ? axis.direction : -axis.direction;
-  final int referenceAxis = referenceIsA ? axis.i : axis.j;
+  final RigidBody reference = referenceIsA ? a : b;
+  final RigidBody incident = referenceIsA ? b : a;
+  final int referenceFace = referenceIsA ? axis.i : axis.j;
+  // Outward normal of the reference face, pointing at the incident body.
+  final Vector3 referenceNormal = reference.faceNormal(referenceFace);
 
   final List<ContactPoint> points = _clipFaces(
     reference,
     incident,
     referenceNormal,
-    referenceAxis,
+    referenceFace,
   );
   if (points.isEmpty) return null;
 
@@ -214,64 +278,54 @@ class _Clip {
   final int id;
 }
 
+/// Ids at or above this belong to points the clipper made up; below it they are
+/// vertices of the incident face and mean the same thing every step.
+const int _clippedId = 32;
+
 List<ContactPoint> _clipFaces(
-  RigidBox reference,
-  RigidBox incident,
+  RigidBody reference,
+  RigidBody incident,
   Vector3 referenceNormal,
-  int referenceAxis,
+  int referenceFace,
 ) {
   // The incident face is the one facing most squarely back at the reference.
-  int incidentAxis = 0;
-  double incidentSign = 1.0;
+  int incidentFace = 0;
   double most = double.infinity;
-  for (int k = 0; k < 3; k++) {
-    final double d = incident.axis(k).dot(referenceNormal);
+  for (int f = 0; f < incident.faceNormals.length; f++) {
+    final double d = incident.faceNormals[f].dot(referenceNormal);
     if (d < most) {
       most = d;
-      incidentAxis = k;
-      incidentSign = 1.0;
-    }
-    if (-d < most) {
-      most = -d;
-      incidentAxis = k;
-      incidentSign = -1.0;
+      incidentFace = f;
     }
   }
 
-  final int u = (incidentAxis + 1) % 3;
-  final int v = (incidentAxis + 2) % 3;
-  final Vector3 faceCentre =
-      incident.position +
-      incident.axis(incidentAxis) *
-          (incidentSign * incident.core[incidentAxis]);
-  final Vector3 uEdge = incident.axis(u) * incident.core[u];
-  final Vector3 vEdge = incident.axis(v) * incident.core[v];
-
+  final List<int> incidentLoop = incident.shape.faces[incidentFace].vertices;
   List<_Clip> polygon = <_Clip>[
-    _Clip(faceCentre + uEdge + vEdge, 0),
-    _Clip(faceCentre - uEdge + vEdge, 1),
-    _Clip(faceCentre - uEdge - vEdge, 2),
-    _Clip(faceCentre + uEdge - vEdge, 3),
+    for (int i = 0; i < incidentLoop.length; i++)
+      _Clip(incident.coreVertex(incidentLoop[i]), incidentLoop[i]),
   ];
 
-  // Trim to the reference face's footprint, one side plane at a time.
-  for (int k = 0; k < 3; k++) {
-    if (k == referenceAxis) continue;
-    for (final double sign in <double>[1.0, -1.0]) {
-      final Vector3 planeNormal = reference.axis(k) * sign;
-      final double limit = reference.core[k];
-      polygon = _clipToPlane(polygon, reference.position, planeNormal, limit);
-      if (polygon.isEmpty) return const <ContactPoint>[];
-    }
+  // Trim to the reference face's footprint, one side plane at a time. Each
+  // plane is raised on an edge of the reference polygon and faces outwards.
+  final List<int> referenceLoop = reference.shape.faces[referenceFace].vertices;
+  for (int e = 0; e < referenceLoop.length; e++) {
+    final Vector3 p = reference.coreVertex(referenceLoop[e]);
+    final Vector3 q = reference.coreVertex(
+      referenceLoop[(e + 1) % referenceLoop.length],
+    );
+    final Vector3 outward = (q - p).cross(referenceNormal)..normalize();
+    polygon = _clipToPlane(polygon, p, outward, e);
+    if (polygon.isEmpty) return const <ContactPoint>[];
   }
 
   final Vector3 planePoint =
-      reference.position + referenceNormal * reference.core[referenceAxis];
+      reference.position + referenceNormal * reference.shape.coreInradius;
+  final double skin = reference.radius + incident.radius;
 
   final List<ContactPoint> points = <ContactPoint>[];
   for (final _Clip clip in polygon) {
-    final double gap = (clip.point - planePoint).dot(referenceNormal);
-    final double separation = gap - reference.radius - incident.radius;
+    final double separation =
+        (clip.point - planePoint).dot(referenceNormal) - skin;
     if (separation >= contactMargin) continue;
     points.add(
       ContactPoint(
@@ -283,36 +337,35 @@ List<ContactPoint> _clipFaces(
     );
   }
 
-  if (points.length > 4) {
-    points.sort(
-      (ContactPoint x, ContactPoint y) => x.separation.compareTo(y.separation),
-    );
-    points.length = 4;
-  }
+  _keepDeepest(points);
   return points;
 }
 
-/// Sutherland–Hodgman against `dot(p - origin, normal) <= limit`.
+/// Sutherland–Hodgman against `dot(p - origin, normal) <= 0`.
 List<_Clip> _clipToPlane(
   List<_Clip> polygon,
   Vector3 origin,
   Vector3 normal,
-  double limit,
+  int planeIndex,
 ) {
   final List<_Clip> out = <_Clip>[];
   for (int i = 0; i < polygon.length; i++) {
     final _Clip current = polygon[i];
     final _Clip next = polygon[(i + 1) % polygon.length];
-    final double dc = (current.point - origin).dot(normal) - limit;
-    final double dn = (next.point - origin).dot(normal) - limit;
+    final double dc = (current.point - origin).dot(normal);
+    final double dn = (next.point - origin).dot(normal);
 
     if (dc <= 0) out.add(current);
     if ((dc > 0) != (dn > 0)) {
       final double t = dc / (dc - dn);
-      // A point born on an edge inherits the id of the vertex it runs towards,
-      // offset so it can never be confused with an original corner.
+      // A point the clipper invented is identified by the edge that made it and
+      // which way the boundary was crossed, both of which hold still while the
+      // dice are in contact — which is all warm starting asks of an id.
       out.add(
-        _Clip(current.point + (next.point - current.point) * t, 4 + next.id),
+        _Clip(
+          current.point + (next.point - current.point) * t,
+          _clippedId + planeIndex * 2 + (dc > 0 ? 0 : 1),
+        ),
       );
     }
   }
@@ -320,51 +373,60 @@ List<_Clip> _clipToPlane(
 }
 
 /// Closest points of the two support edges named by an edge-edge axis.
-ContactPoint? _edgeContact(RigidBox a, RigidBox b, _Axis axis, double skin) {
+ContactPoint? _edgeContact(RigidBody a, RigidBody b, _Axis axis) {
   final Vector3 n = axis.direction;
 
-  // Walk out from each centre along the axes the edge does *not* run along,
-  // taking whichever sign faces the other box.
-  Vector3 support(RigidBox box, int along, double towards) {
-    Vector3 p = box.position.clone();
-    for (int k = 0; k < 3; k++) {
-      if (k == along) continue;
-      final Vector3 ax = box.axis(k);
-      final double side = ax.dot(n) * towards;
-      p += ax * (side >= 0 ? box.core[k] : -box.core[k]);
+  // The winning axis names a *direction*, and a die has several edges running
+  // that way. The one in contact is the one furthest along the axis.
+  (Vector3, Vector3)? pick(RigidBody body, EdgeGroup group, double towards) {
+    double best = double.negativeInfinity;
+    Vector3? from;
+    Vector3? to;
+    for (int e = 0; e < group.length; e++) {
+      final Vector3 p = body.coreVertex(group.ends[e * 2]);
+      final Vector3 q = body.coreVertex(group.ends[e * 2 + 1]);
+      final double reach = (n.dot(p) + n.dot(q)) * 0.5 * towards;
+      if (reach > best) {
+        best = reach;
+        from = p;
+        to = q;
+      }
     }
-    return p;
+    if (from == null || to == null) return null;
+    return (from, to);
   }
 
-  final Vector3 pa = support(a, axis.i, 1.0);
-  final Vector3 pb = support(b, axis.j, -1.0);
-  final Vector3 da = a.axis(axis.i);
-  final Vector3 db = b.axis(axis.j);
-  final double ha = a.core[axis.i];
-  final double hb = b.core[axis.j];
+  final (Vector3, Vector3)? edgeA = pick(a, a.shape.edges[axis.i], 1.0);
+  final (Vector3, Vector3)? edgeB = pick(b, b.shape.edges[axis.j], -1.0);
+  if (edgeA == null || edgeB == null) return null;
 
-  // Standard closest-point-between-two-segments, clamped to each half length.
+  final Vector3 pa = edgeA.$1;
+  final Vector3 pb = edgeB.$1;
+  final Vector3 da = edgeA.$2 - pa;
+  final Vector3 db = edgeB.$2 - pb;
+
+  // Standard closest point between two segments, both parametrised 0…1.
   final Vector3 r = pa - pb;
-  final double f = db.dot(r);
-  final double c = da.dot(r);
-  final double bDot = da.dot(db);
-  final double denominator = 1.0 - bDot * bDot;
-  double ta;
-  if (denominator.abs() < 1e-8) {
-    ta = 0.0;
-  } else {
-    ta = (bDot * f - c) / denominator;
-  }
-  ta = ta.clamp(-ha, ha);
-  double tb = (bDot * ta + f).clamp(-hb, hb);
-  ta = (bDot * tb - c).clamp(-ha, ha);
+  final double aa = da.dot(da);
+  final double bb = db.dot(db);
+  final double ab = da.dot(db);
+  final double ar = da.dot(r);
+  final double br = db.dot(r);
+  final double denominator = aa * bb - ab * ab;
+
+  double ta =
+      denominator.abs() < 1e-18
+          ? 0.0
+          : ((ab * br - ar * bb) / denominator).clamp(0.0, 1.0);
+  double tb = bb < 1e-18 ? 0.0 : ((ab * ta + br) / bb).clamp(0.0, 1.0);
+  ta = aa < 1e-18 ? 0.0 : ((ab * tb - ar) / aa).clamp(0.0, 1.0);
 
   final Vector3 closestA = pa + da * ta;
   final Vector3 closestB = pb + db * tb;
 
   return ContactPoint(
     point: (closestA + closestB) * 0.5,
-    separation: axis.separation - skin,
-    featureId: 32 + axis.i * 3 + axis.j,
+    separation: axis.separation,
+    featureId: 128 + axis.i * 32 + axis.j,
   );
 }

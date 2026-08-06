@@ -1,26 +1,28 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/motion/motion.dart';
-import 'package:rollhippo2/physics/body.dart';
-import 'package:rollhippo2/physics/collision.dart';
-import 'package:rollhippo2/physics/world.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/motion/motion.dart';
+import 'package:rollhippo/physics/body.dart';
+import 'package:rollhippo/physics/collision.dart';
+import 'package:rollhippo/physics/world.dart';
+import 'package:rollhippo/tray/tray.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 /// An iPhone-sized tray, in metres.
 const double kWidth = 393 / Tuning.logicalPixelsPerMetre;
 const double kHeight = 852 / Tuning.logicalPixelsPerMetre;
 
-RigidBox die({Vector3? at, Quaternion? facing}) => RigidBox(
-  halfExtents: Vector3.all(Tuning.dieSize / 2),
-  mass: math.pow(Tuning.dieSize, 3).toDouble() * Tuning.dieDensity,
-  radius: Tuning.dieBevel,
-  restitution: Tuning.dieRestitution,
-  friction: Tuning.dieFriction,
-  position: at,
-  orientation: facing,
-);
+const DieSpec kD6 = DieSpec(kind: DieKind.d6, colour: kDiceWhite);
+
+RigidBody die({Vector3? at, Quaternion? facing, DieSpec spec = kD6}) =>
+    RigidBody(
+      shape: spec.shape,
+      mass: spec.mass,
+      restitution: Tuning.dieRestitution,
+      friction: Tuning.dieFriction,
+      position: at,
+      orientation: facing,
+    );
 
 /// Runs [seconds] of simulation at 60 fps.
 void run(PhysicsWorld world, double seconds) {
@@ -38,7 +40,7 @@ void main() {
         walls: trayWalls(width: 100, height: 100, depth: 100),
       );
       world.linearDamping = 0;
-      final RigidBox d = die(at: Vector3.zero());
+      final RigidBody d = die(at: Vector3.zero());
       world.bodies.add(d);
 
       run(world, 0.5);
@@ -48,7 +50,7 @@ void main() {
     });
 
     test('angular velocity turns the body the right way', () {
-      final RigidBox d = die();
+      final RigidBody d = die();
       d.angularVelocity.setValues(0, 0, math.pi / 2); // +90°/s about +z
       for (int i = 0; i < 240; i++) {
         d.integrate(1 / 240);
@@ -69,7 +71,7 @@ void main() {
           depth: Tuning.trayDepth,
         ),
       );
-      final RigidBox d = die(
+      final RigidBody d = die(
         at: Vector3(0, 0.02, -Tuning.trayDepth / 2),
         facing: Quaternion.identity(),
       );
@@ -94,7 +96,7 @@ void main() {
           depth: Tuning.trayDepth,
         ),
       );
-      final RigidBox d = die(
+      final RigidBody d = die(
         at: Vector3(0.005, 0.0, -Tuning.trayDepth / 2),
         facing: Quaternion.identity(),
       );
@@ -120,7 +122,7 @@ void main() {
           depth: Tuning.trayDepth,
         ),
       );
-      final RigidBox d = die(
+      final RigidBody d = die(
         at: Vector3(0, 0.04, -Tuning.trayDepth / 2),
         facing: Quaternion.identity(),
       );
@@ -171,9 +173,8 @@ void main() {
         }
         tray.update(motion.sample(dt), dt);
 
-        for (final RigidBox d in tray.dice) {
-          for (int v = 0; v < 8; v++) {
-            final Vector3 corner = d.coreVertex(v);
+        for (final RigidBody d in tray.dice) {
+          for (final Vector3 corner in d.coreVertices) {
             for (final Wall wall in tray.world.walls) {
               final double inside =
                   wall.normal.dot(corner) - wall.offset - d.radius;
@@ -238,7 +239,7 @@ void main() {
         diceCount: 1,
         random: math.Random(1),
       );
-      final RigidBox d = tray.dice.first;
+      final RigidBody d = tray.dice.first;
       d.orientation = Quaternion.identity();
       d.syncDerived();
       tray.world.gravity.setValues(0, -9.81, 0);

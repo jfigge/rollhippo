@@ -27,7 +27,7 @@ class PhysicsWorld {
     : solver = solver ?? Solver();
 
   final List<Wall> walls;
-  final List<RigidBox> bodies = <RigidBox>[];
+  final List<RigidBody> bodies = <RigidBody>[];
   final Solver solver;
   final ImpulseCache _cache = ImpulseCache();
 
@@ -65,7 +65,7 @@ class PhysicsWorld {
   double _restTimer = 0.0;
 
   bool get asleep =>
-      bodies.isNotEmpty && bodies.every((RigidBox b) => b.sleeping);
+      bodies.isNotEmpty && bodies.every((RigidBody b) => b.sleeping);
 
   /// Peak contact speed seen during the last [advance], m/s — the hook a
   /// dice-clack sound or a haptic tick will want.
@@ -73,7 +73,7 @@ class PhysicsWorld {
 
   void wake() {
     _restTimer = 0.0;
-    for (final RigidBox body in bodies) {
+    for (final RigidBody body in bodies) {
       body.wake();
     }
   }
@@ -90,11 +90,10 @@ class PhysicsWorld {
     // — so both go into the estimate. Sizing substeps off the current centre
     // velocity alone is how a die ends up a wall-thickness inside a wall.
     double fastest = 0.0;
-    for (final RigidBox body in bodies) {
-      final double corner = body.halfExtents.length;
+    for (final RigidBody body in bodies) {
       fastest = math.max(
         fastest,
-        body.velocity.length + body.angularVelocity.length * corner,
+        body.velocity.length + body.angularVelocity.length * body.circumradius,
       );
     }
     fastest += gravity.length * dt;
@@ -120,7 +119,7 @@ class PhysicsWorld {
       solver.solve(manifolds, h, _cache);
     }
 
-    for (final RigidBox body in bodies) {
+    for (final RigidBody body in bodies) {
       body.integrate(h);
     }
 
@@ -129,7 +128,7 @@ class PhysicsWorld {
   }
 
   void _integrateVelocities(double h) {
-    for (final RigidBox body in bodies) {
+    for (final RigidBody body in bodies) {
       if (body.invMass == 0) continue;
 
       // Effective field at this die: gravity-plus-shake, then the terms that
@@ -172,22 +171,26 @@ class PhysicsWorld {
   List<Manifold> _collide() {
     final List<Manifold> manifolds = <Manifold>[];
     for (int i = 0; i < bodies.length; i++) {
-      final RigidBox body = bodies[i];
+      final RigidBody body = bodies[i];
       for (int w = 0; w < walls.length; w++) {
-        final Manifold? m = collideBoxWall(body, walls[w], i * 8 + w);
+        final Manifold? m = collideBodyWall(body, walls[w], i * 8 + w);
         if (m != null) {
           manifolds.add(m);
           _noteImpact(m);
         }
       }
     }
+    // Bounding spheres first. Ten dice are forty-five pairs, nearly all of them
+    // nowhere near each other, and a rejected pair costs one subtraction here
+    // against a few hundred dot products in the separating-axis test.
     for (int i = 0; i < bodies.length; i++) {
+      final RigidBody a = bodies[i];
       for (int j = i + 1; j < bodies.length; j++) {
-        final Manifold? m = collideBoxes(
-          bodies[i],
-          bodies[j],
-          1000 + i * 16 + j,
-        );
+        final RigidBody b = bodies[j];
+        final double reach = a.circumradius + b.circumradius + contactMargin;
+        if ((a.position - b.position).length2 > reach * reach) continue;
+
+        final Manifold? m = collideBodies(a, b, 1000 + i * 16 + j);
         if (m != null) {
           manifolds.add(m);
           _noteImpact(m);
@@ -202,7 +205,7 @@ class PhysicsWorld {
       if (c.separation > 0) continue;
       final Vector3 ra = c.point - m.a.position;
       Vector3 v = m.a.velocityAt(ra);
-      final RigidBox? b = m.b;
+      final RigidBody? b = m.b;
       if (b != null) v = v - b.velocityAt(c.point - b.position);
       final double approach = -v.dot(m.normal);
       if (approach > lastImpactSpeed) lastImpactSpeed = approach;
@@ -213,11 +216,11 @@ class PhysicsWorld {
   /// in principle conspire to put a die outside; if that ever happens, put it
   /// back rather than letting it sail off screen.
   void _containStrays() {
-    for (final RigidBox body in bodies) {
+    for (final RigidBody body in bodies) {
       bool moved = false;
       for (final Wall wall in walls) {
         final double distance = wall.normal.dot(body.position) - wall.offset;
-        final double minimum = body.halfExtents.length;
+        final double minimum = body.circumradius;
         if (distance < -minimum) {
           body.position.addScaled(wall.normal, -distance);
           moved = true;
@@ -232,7 +235,7 @@ class PhysicsWorld {
 
   void _updateSleep(double h) {
     bool settled = true;
-    for (final RigidBox body in bodies) {
+    for (final RigidBody body in bodies) {
       if (body.velocity.length > sleepLinearSpeed ||
           body.angularVelocity.length > sleepAngularSpeed) {
         settled = false;
@@ -248,7 +251,7 @@ class PhysicsWorld {
     }
     _restTimer += h;
     if (_restTimer >= sleepDelay) {
-      for (final RigidBox body in bodies) {
+      for (final RigidBody body in bodies) {
         body.sleep();
       }
     }

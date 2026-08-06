@@ -5,9 +5,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/physics/body.dart';
-import 'package:rollhippo2/render/tray_painter.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/physics/body.dart';
+import 'package:rollhippo/render/tray_painter.dart';
+import 'package:rollhippo/tray/tray.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 /// Renders one die at a known orientation, big, so the pip mapping can be
@@ -22,10 +22,10 @@ void main() {
     final DiceTray tray = DiceTray(
       width: screen.width / Tuning.logicalPixelsPerMetre,
       height: screen.height / Tuning.logicalPixelsPerMetre,
-      diceCount: 1,
+      dice: const <DieSpec>[DieSpec(kind: DieKind.d6, colour: kDiceWhite)],
       random: math.Random(0),
     );
-    final RigidBox die = tray.dice.first;
+    final RigidBody die = tray.dice.first;
     die.position = Vector3(0, 0, -Tuning.trayDepth * 0.35);
     // Identity: local +x points right, +y up, +z at the viewer. So the die
     // should show 1 on the right, 2 on top and 3 facing us — tipped slightly so

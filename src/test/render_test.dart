@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/render/tray_painter.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/render/tray_painter.dart';
+import 'package:rollhippo/tray/tray.dart';
 
 void main() {
   test('every face has as many pips as it claims', () {

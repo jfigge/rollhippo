@@ -1,16 +1,16 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo2/motion/motion.dart';
-import 'package:rollhippo2/physics/body.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/motion/motion.dart';
+import 'package:rollhippo/physics/body.dart';
+import 'package:rollhippo/tray/tray.dart';
 
 const double kWidth = 393 / Tuning.logicalPixelsPerMetre;
 const double kHeight = 852 / Tuning.logicalPixelsPerMetre;
 
 /// Shakes the tray once and runs until the dice stop, returning the faces.
 List<int> roll(DiceTray tray, ManualMotionSource motion, math.Random rng) {
-  tray.scatter();
+  tray.throwDice();
   motion.shake(
     seconds: 0.6 + rng.nextDouble() * 0.6,
     frequency: 3.5 + rng.nextDouble() * 2.5,
@@ -25,7 +25,7 @@ List<int> roll(DiceTray tray, ManualMotionSource motion, math.Random rng) {
     t += dt;
     if (t > 1.5 && tray.world.asleep) break;
   }
-  return tray.dice.map((RigidBox d) => tray.faceUp(d)).toList();
+  return tray.dice.map((RigidBody d) => tray.faceUp(d)).toList();
 }
 
 void main() {
@@ -58,7 +58,7 @@ void main() {
       random: math.Random(9),
     );
     final ManualMotionSource motion = ManualMotionSource();
-    final RigidBox die = tray.dice.first;
+    final RigidBody die = tray.dice.first;
 
     motion.shake(seconds: 1.2, frequency: 4.5, amplitude: 0.05, twist: 9);
 

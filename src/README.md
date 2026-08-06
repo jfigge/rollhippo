@@ -1,4 +1,4 @@
-# rollhippo2
+# rollhippo
 
 A new Flutter project.
 

@@ -6,79 +6,11 @@ import '../motion/motion.dart';
 import '../physics/body.dart';
 import '../physics/collision.dart';
 import '../physics/world.dart';
+import 'dice.dart';
+import 'tuning.dart';
 
-/// Everything with a number in it, in one place, in SI units.
-///
-/// The simulation is metric and life-sized on purpose. A 16 mm die weighing
-/// 4.8 g falling under 9.81 m/s² inside a 5 cm box behaves like a 16 mm die
-/// because it *is* one, and every constant below can be checked against a real
-/// object rather than tuned until it looks about right.
-class Tuning {
-  /// Logical Flutter pixels per metre of real screen.
-  ///
-  /// Every modern iPhone lays out at very close to 155 logical points per inch
-  /// — a 15 Pro is 393 pt across 64.4 mm, a 15 Pro Max 430 pt across 70.6 mm —
-  /// so one constant sizes the tray correctly on all of them without asking the
-  /// platform for a physical measurement it does not expose.
-  static const double logicalPixelsPerMetre = 6100.0;
-
-  /// Tray depth. Deep enough that the dice have somewhere to go in z, which is
-  /// what stops a shake reading as a flat scramble.
-  static const double trayDepth = 0.10;
-
-  /// A standard 16 mm casino-size D6.
-  static const double dieSize = 0.016;
-
-  /// Corner bevel. Real dice are rounded; see [RigidBox] for why this matters
-  /// more than its size suggests.
-  static const double dieBevel = 0.0013;
-
-  /// Cast acrylic, ~1180 kg/m³, so a 16 mm die comes out at 4.8 g — which is
-  /// what a 16 mm die weighs.
-  static const double dieDensity = 1180.0;
-
-  static const double dieRestitution = 0.38;
-  static const double dieFriction = 0.42;
-
-  /// The tray lining. Deader than the dice, so a die dropped on it does not
-  /// pogo, but not so dead that a shake feels like stirring porridge.
-  static const double wallRestitution = 0.28;
-  static const double wallFriction = 0.5;
-
-  /// The pane you are looking through. Slightly livelier than the lining and
-  /// nearly frictionless, so a die that gets thrown forward skates off it
-  /// rather than sticking to the glass.
-  static const double glassRestitution = 0.4;
-  static const double glassFriction = 0.08;
-
-  /// How far the eye sits from the glass. Real reading distance, which makes
-  /// the perspective inside the tray the perspective you would actually see.
-  static const double eyeDistance = 0.32;
-
-  /// Fraction of real gravity the dice fall under.
-  ///
-  /// Below 1 the dice hang longer, tumble further per bounce and settle more
-  /// slowly — a bigger tray than the phone really is. It scales *only* the
-  /// steady pull: a shake still hits with the full force your hand put into it,
-  /// exactly as it would on a smaller planet. Turning this down is not the same
-  /// as turning the whole field down, which would just make everything slower.
-  static const double gravityScale = 0.6;
-
-  /// How fast simulated time runs against real time.
-  ///
-  /// Below 1 everything is slower without anything moving differently: the
-  /// trajectories are identical, just played back at this rate. That is what
-  /// separates it from turning gravity down, which changes the shape of the
-  /// arcs as well as the pace of them.
-  static const double timeScale = 0.85;
-
-  /// Accelerometer magnitude beyond which we call it a shake and wake the dice.
-  static const double wakeAcceleration = 12.5;
-
-  /// Sensor readings are clamped here before becoming forces. A dropped phone
-  /// or a sensor glitch should not launch the dice into next week.
-  static const double maxFieldMagnitude = 70.0;
-}
+export 'dice.dart';
+export 'tuning.dart';
 
 /// The six inward-facing planes of a tray `width` × `height` × `depth`.
 ///
@@ -121,59 +53,107 @@ class DiceTray {
     required this.width,
     required this.height,
     this.depth = Tuning.trayDepth,
+    List<DieSpec>? dice,
     int diceCount = 2,
     math.Random? random,
-  }) : _random = random ?? math.Random() {
+  }) : specs = List<DieSpec>.unmodifiable(
+         dice ??
+             List<DieSpec>.generate(
+               diceCount,
+               (_) => const DieSpec(kind: DieKind.d6, colour: kDiceWhite),
+             ),
+       ),
+       _random = random ?? math.Random() {
     world = PhysicsWorld(
       walls: trayWalls(width: width, height: height, depth: depth),
     );
-    for (int i = 0; i < diceCount; i++) {
-      world.bodies.add(_makeDie());
+    for (final DieSpec spec in specs) {
+      world.bodies.add(
+        RigidBody(
+          shape: spec.shape,
+          mass: spec.mass,
+          restitution: Tuning.dieRestitution,
+          friction: Tuning.dieFriction,
+        ),
+      );
     }
-    scatter();
+    throwDice();
   }
 
   final double width;
   final double height;
   final double depth;
+
+  /// What each die is — its shape and its colour — in the same order as
+  /// [dice]. The physics has no opinion about colour, so it lives here.
+  final List<DieSpec> specs;
+
   final math.Random _random;
 
   late final PhysicsWorld world;
 
-  List<RigidBox> get dice => world.bodies;
+  List<RigidBody> get dice => world.bodies;
 
-  RigidBox _makeDie() {
-    const double half = Tuning.dieSize / 2;
-    final double volume = math.pow(Tuning.dieSize, 3).toDouble();
-    return RigidBox(
-      halfExtents: Vector3.all(half),
-      mass: volume * Tuning.dieDensity,
-      radius: Tuning.dieBevel,
-      restitution: Tuning.dieRestitution,
-      friction: Tuning.dieFriction,
+  /// Throws the dice in from the top of the tray.
+  ///
+  /// They start along the top edge on a grid spaced by their own width, so any
+  /// mixture of shapes packs without starting inside each other, and they leave
+  /// with enough downward speed to reach the floor at about 1.9 m/s — hard
+  /// enough to bounce back a visible fraction of the tray before they settle.
+  void throwDice() {
+    double reach = 0;
+    for (final RigidBody die in dice) {
+      reach = math.max(reach, die.circumradius);
+    }
+    final double spacing = 2.05 * reach;
+
+    // The band of depth the dice are launched into: the middle half of the
+    // tray, so none of them start flat against the glass or lost at the back.
+    final double bandNear = -depth * 0.25;
+    final double bandFar = -depth * 0.75;
+
+    final int columns = math.max(
+      1,
+      ((width - 2 * reach) / spacing).floor() + 1,
     );
-  }
+    final int layers = math.max(
+      1,
+      ((bandNear - bandFar).abs() / spacing).floor() + 1,
+    );
 
-  /// Drops the dice in from random positions and orientations, mid-depth so
-  /// they have room to fall.
-  void scatter() {
-    final double margin = Tuning.dieSize;
+    double jitter(double scale) => (_random.nextDouble() - 0.5) * scale;
+
     for (int i = 0; i < dice.length; i++) {
-      final RigidBox die = dice[i];
-      // Spread across the width, high up, so they fall and tumble on landing
-      // rather than appearing already at rest.
-      final double slot = (i + 0.5) / dice.length;
+      final RigidBody die = dice[i];
+      final int column = i % columns;
+      final int layer = (i ~/ columns) % layers;
+      final int row = i ~/ (columns * layers);
+
+      final double x =
+          columns == 1
+              ? 0.0
+              : -(width / 2 - reach) +
+                  column * (width - 2 * reach) / (columns - 1);
+      final double z =
+          layers == 1
+              ? (bandNear + bandFar) / 2
+              : bandNear + layer * (bandFar - bandNear) / (layers - 1);
+
       die.position = Vector3(
-        (slot - 0.5) * (width - 2 * margin),
-        height / 2 - margin - _random.nextDouble() * margin,
-        -depth / 2,
+        x + jitter(reach * 0.3),
+        height / 2 - reach - row * spacing,
+        z + jitter(reach * 0.3),
       );
       die.orientation = _randomOrientation();
-      die.velocity.setZero();
+      die.velocity.setValues(
+        jitter(0.3),
+        -(Tuning.throwSpeed + _random.nextDouble() * 0.6),
+        jitter(0.3),
+      );
       die.angularVelocity.setValues(
-        _random.nextDouble() * 8 - 4,
-        _random.nextDouble() * 8 - 4,
-        _random.nextDouble() * 8 - 4,
+        jitter(2 * Tuning.throwSpin),
+        jitter(2 * Tuning.throwSpin),
+        jitter(2 * Tuning.throwSpin),
       );
       die.syncDerived();
     }
@@ -222,41 +202,35 @@ class DiceTray {
     world.advance(dt * Tuning.timeScale);
   }
 
-  /// The pip value showing on top, where "up" is opposite the current field.
+  /// The number showing on top, where "up" is opposite the current field.
   ///
   /// Reading the die off its actual orientation rather than choosing a number
   /// and animating towards it is the whole point of simulating in 3D: the face
   /// you see is the face the physics landed on.
-  int faceUp(RigidBox die) {
+  ///
+  /// A D4 is read the other way up. A tetrahedron at rest has a *vertex*
+  /// pointing at the sky and no face at all, so the number it rolled is the one
+  /// on the face it is sitting on — which is why a real D4 prints that number
+  /// along the bottom edge of the three faces you can see.
+  int faceUp(RigidBody die) {
     final Vector3 up =
         world.gravity.length2 > 1e-6
             ? -world.gravity.normalized()
             : Vector3(0, 0, 1);
+    final Vector3 towards = die.shape.readsDownFace ? -up : up;
+
     int best = 1;
-    double bestDot = -2.0;
-    for (int k = 0; k < 3; k++) {
-      final Vector3 axis = die.axis(k);
-      final double d = axis.dot(up);
+    double bestDot = double.negativeInfinity;
+    for (int f = 0; f < die.shape.faces.length; f++) {
+      final double d = die.faceNormal(f).dot(towards);
       if (d > bestDot) {
         bestDot = d;
-        best = faceValue(k, 1);
-      }
-      if (-d > bestDot) {
-        bestDot = -d;
-        best = faceValue(k, -1);
+        best = die.shape.faces[f].value;
       }
     }
     return best;
   }
-}
 
-/// Pip value of the face whose outward local normal is [sign] on axis [axis].
-///
-/// +x is 1, +y is 2, +z is 3 and opposite faces sum to seven, which is the
-/// standard right-handed western die: looking in at the corner where 1, 2 and 3
-/// meet, they read anticlockwise.
-int faceValue(int axis, int sign) {
-  const List<int> positive = <int>[1, 2, 3];
-  final int value = positive[axis];
-  return sign > 0 ? value : 7 - value;
+  /// What every die is showing, in tray order.
+  List<int> get faces => <int>[for (final RigidBody die in dice) faceUp(die)];
 }

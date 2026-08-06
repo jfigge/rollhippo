@@ -6,9 +6,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:rollhippo2/motion/motion.dart';
-import 'package:rollhippo2/render/tray_painter.dart';
-import 'package:rollhippo2/tray/tray.dart';
+import 'package:rollhippo/motion/motion.dart';
+import 'package:rollhippo/render/tray_painter.dart';
+import 'package:rollhippo/tray/tray.dart';
 
 /// Renders a scripted roll to an animated GIF, so the *motion* can be judged
 /// rather than a set of poses. Run with:
