@@ -58,6 +58,21 @@ Future<void> tapText(WidgetTester tester, String label) async {
   await tester.pump();
 }
 
+/// The rack's plus: the empty slot the next die would land in, which is where
+/// adding one is done.
+///
+/// Scoped to the first set. Card mode has a plus of its own one screen to the
+/// side, and so does every group the page view has built.
+final Finder diceAdd = find.descendant(
+  of: find.byKey(const ValueKey<int>(0)),
+  matching: find.byKey(kAddDie),
+);
+
+Future<void> tapAdd(WidgetTester tester) async {
+  await tester.tap(diceAdd);
+  await tester.pump();
+}
+
 void main() {
   group('the picker', () {
     testWidgets('shows one die per die, and starts on the first', (
@@ -104,7 +119,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
       await tapDie(tester, 1);
       await tapText(tester, 'D12');
-      await tapText(tester, 'Add a die');
+      await tapAdd(tester);
 
       expect(rack(tester).length, 3);
       expect(rack(tester)[2].kind, DieKind.d12);
@@ -118,10 +133,13 @@ void main() {
 
     testWidgets('the rack fills to ten and stops', (WidgetTester tester) async {
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      for (int i = kDefaultDice.length; i < kMaxDice + 3; i++) {
-        await tapText(tester, 'Add a die');
+      for (int i = kDefaultDice.length; i < kMaxDice; i++) {
+        await tapAdd(tester);
       }
       expect(rack(tester).length, kMaxDice);
+      // And there it stops, because there is nothing left to ask with: the
+      // plus is a slot, and a full rack has no slot to spare.
+      expect(diceAdd, findsNothing);
     });
 
     testWidgets('removing selects a die that still exists', (

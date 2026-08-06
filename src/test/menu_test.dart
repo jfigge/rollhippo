@@ -44,9 +44,16 @@ final Finder gainSlider = find.descendant(
 );
 
 Future<void> openMenu(WidgetTester tester) async {
-  await tester.tap(find.byIcon(Icons.menu));
+  await tester.tap(find.byType(AppMenuButton));
   await tester.pumpAndSettle();
 }
+
+/// The plus in the first set's rack, which is how a die is added. Scoped to
+/// that rack: card mode has one of its own, one screen to the side.
+final Finder addDie = find.descendant(
+  of: find.byKey(const ValueKey<int>(0)),
+  matching: find.byKey(kAddDie),
+);
 
 /// The picker, with the settings put back afterwards.
 ///
@@ -71,7 +78,7 @@ void main() {
     ) async {
       await pumpPicker(tester);
 
-      final Offset menu = tester.getCenter(find.byIcon(Icons.menu));
+      final Offset menu = tester.getCenter(find.byType(AppMenuButton));
       expect(
         menu.dy,
         lessThan(tester.getSize(find.byType(ConfigScreen)).height / 2),
@@ -274,7 +281,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await pumpPicker(tester);
-      await tester.tap(find.text('Add a die'));
+      await tester.tap(addDie);
       await tester.pump();
       await tester.tap(find.text('D20'));
       await tester.pump();

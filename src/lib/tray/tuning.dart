@@ -230,4 +230,23 @@ class Tuning {
   /// of the table with the deck behind and above it, and it still covers only
   /// the bottom of the pile.
   static const double cardFloorGap = 0.0157;
+
+  /// How long a dealt card takes to come off the pile and reach the glass.
+  ///
+  /// A deal is a hand putting a card down rather than a throw, and it is the
+  /// one thing on this table that moves at all — so it wants to be quick
+  /// enough that asking for a card is never waiting for one, and slow enough
+  /// that the turn is something you watch rather than something you work out
+  /// afterwards from the fact that the card changed. Comfortably inside the
+  /// wait between one shake and the next, so a shaken card has always landed
+  /// before another one can be asked for.
+  static const double dealDuration = 0.45;
+
+  /// How far into that journey the card has finished turning over, 0 to 1.
+  ///
+  /// Short of the landing on purpose. A card still turning as it reaches the
+  /// glass reads as one that was dropped; finishing the turn with a fifth of
+  /// the journey left puts the card face up in the air and then lays it flat,
+  /// which is what a hand does with one.
+  static const double dealTurn = 0.78;
 }

@@ -40,7 +40,7 @@ Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
 src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue) · share_code (the QR payload)
 src/lib/motion/    MotionSource — the sensors, and a synthetic phone for the harness
-src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable
+src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable · Deal
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
 src/lib/app/       ConfigScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
@@ -154,6 +154,16 @@ test exists to make the change deliberate, not to make it hard.
   the box on screen only, and feeds `HapticEngine.impact` **every** frame,
   including silent and frozen ones — the engine's rate limit keeps time off that
   `dt`, and a gap that only advanced on frames with an impact would never close.
+- **A dealt card is dealt before it has arrived.** `CardTable.draw` takes the
+  card off the shoe at once and `Deck.shown` is the new one immediately; `Deal`
+  animates only its journey from the top of the pile to the glass. So a second
+  ask mid-flight lands the first card rather than losing it, and anything that
+  wants the card *presently on the glass* during a deal has to ask `Deal.under`
+  rather than `Deck.shown`. The flying card is drawn behind the card it is
+  landing on until it has turned past its own edge, and in front afterwards —
+  ordering the two by depth instead would be true to the box and wrong to look
+  at, because the card is behind the glass for all but the last instant of the
+  journey and would slide in underneath the one it is being dealt onto.
 - **A held die keeps the face *index* it was read at**, in `DiceTray.held`.
   Reading one live is reading it against a gravity that has nothing to do with
   the face it is resting on — it cannot fall over to re-read itself when the

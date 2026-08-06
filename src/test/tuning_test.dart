@@ -127,6 +127,8 @@ void main() {
     expect(Tuning.cardHeight, 0.0635);
     expect(Tuning.cardThickness, 0.00032, reason: 'real card stock');
     expect(Tuning.cardFloorGap, 0.0157, reason: 'a drawn card, off the floor');
+    expect(Tuning.dealDuration, 0.45, reason: 'a hand putting a card down');
+    expect(Tuning.dealTurn, 0.78, reason: 'over before it lands');
   });
 
   test('a 16 mm acrylic die still weighs what one weighs', () {

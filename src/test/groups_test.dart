@@ -33,14 +33,27 @@ PageDots trayDotsOf(WidgetTester tester) =>
     tester.widget<PageDots>(find.byType(PageDots));
 
 /// Swipes the rack one group to the left, and lets the page view land.
+///
+/// Settled rather than pumped for a fixed while: a page view ignores pointers
+/// for as long as it is still moving, so a rack that is a few points short of
+/// home takes no taps — and the plus that adds a die is a tap on the rack.
 Future<void> swipeLeft(WidgetTester tester) async {
   await tester.drag(find.byType(PageView), const Offset(-300, 0));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pumpAndSettle();
 }
 
-Future<void> tapText(WidgetTester tester, String label) async {
-  await tester.tap(find.text(label));
+/// The plus in one group's rack: the empty slot another die would land in.
+///
+/// Per group, because every rack with room in it draws one and the page view
+/// keeps more than one built — and because the plus adds to the set it is
+/// drawn in rather than to whichever one is on screen.
+Finder addIn(int group) => find.descendant(
+  of: find.byKey(ValueKey<int>(group)),
+  matching: find.byKey(kAddDie),
+);
+
+Future<void> tapAdd(WidgetTester tester, int group) async {
+  await tester.tap(addIn(group));
   await tester.pump();
 }
 
@@ -108,7 +121,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
       await swipeLeft(tester);
 
-      await tapText(tester, 'Add a die');
+      await tapAdd(tester, 1);
       expect(rackOf(tester, 1).length, 1);
       expect(dotsOf(tester).filled, <bool>[true, true, false]);
       // A first die has nothing to copy, so it is what the app starts with.
@@ -143,7 +156,7 @@ void main() {
       // Faded and behind an IgnorePointer, so this lands on nothing at all.
       await tester.tap(find.text('D20'), warnIfMissed: false);
       await tester.pump();
-      await tapText(tester, 'Add a die');
+      await tapAdd(tester, 1);
 
       expect(rackOf(tester, 1).single.kind, DieKind.d6);
     });

@@ -84,8 +84,12 @@ const double _kBackPip = 0.079;
 const double _kFaceMargin = 0.055;
 
 /// How far out of square a hand-shuffled pile stands, as a fraction of its own
-/// height.
+/// height, and how far off the back wall the whole pile stands, metres.
+///
+/// Two millimetres, so the pile reads as standing in the box rather than as
+/// printed on the back of it.
 const double _kPileLean = 0.10;
+const double _kPileGap = 0.002;
 
 /// The cards under the top one. Shades of the back rather than of the stock:
 /// a pile seen this near to head on shows no edge worth the name, so what says
@@ -113,19 +117,106 @@ void paintCardScene(Canvas canvas, Size size, CardTable table) {
 
   _paintPile(canvas, camera, table);
 
-  final PlayingCard? shown = table.deck.shown;
-  if (shown != null) {
-    _paintShadow(canvas, camera, _drawnY(table), 0);
-    // One style per die, from the same derivation the tray uses on a real one:
-    // the body is what was chosen and the ink is whichever of black and ivory
-    // can be read against it. A card is a printed die, so it is printed the
-    // same way.
-    _paintFace(canvas, camera, shown, _drawnY(table), 0, <DieStyle>[
-      for (int i = 0; i < shown.faces.length; i++)
-        DieStyle.of(table.colourOf(i)),
-    ]);
+  // A card in the air has already replaced [Deck.shown] — the draw happens the
+  // moment it is asked for and only the arrival is animated — so while one is
+  // flying, what is lying on the glass is the deal's own memory of the card it
+  // is going to cover.
+  final Deal deal = table.deal;
+  final PlayingCard? flying = deal.card;
+  final PlayingCard? lying = flying != null ? deal.under : table.deck.shown;
+
+  // Which of the two is in front, and the whole of what says so is which way
+  // the flying card is facing. A card still face down is on its way over and
+  // has not been laid on anything yet; a card that has turned past its own
+  // edge is one a hand is putting down, and it goes on top.
+  //
+  // The two of them cross over at exactly the instant the card is edge on,
+  // which is the one moment in the deal when there is nothing of it on screen
+  // for the swap to be visible in. Ordering by depth instead would be true to
+  // the box and wrong to look at: the card is behind the glass for all but the
+  // last instant of the journey, so it would slide in *behind* the card it is
+  // being dealt onto and appear at the end.
+  final double squash = flying == null ? 1 : math.cos(deal.turn);
+  final bool onTop = squash < 0;
+
+  if (!onTop) _paintFlight(canvas, camera, table, squash);
+  if (lying != null) {
+    _paintShadow(canvas, camera, 0, _drawnY(table), 0);
+    _paintFace(canvas, camera, lying, 0, _drawnY(table), 0, _stylesOf(table));
+  }
+  if (onTop) _paintFlight(canvas, camera, table, squash);
+}
+
+/// The card being dealt, wherever it has got to. Nothing, when none is.
+///
+/// [squash] is what is left of its height, and its sign is which side of it is
+/// facing you: a card rotated about its own left-to-right axis keeps all of its
+/// width and loses its height by the cosine of the angle, and past the quarter
+/// turn that cosine goes negative — which is the card presenting its other
+/// side. So the sign picks the side and what is left is how tall to draw it.
+///
+/// Each side is drawn the right way up in its own frame rather than mirrored
+/// through the stock, which is what a real card is: two designs printed on
+/// opposite faces of one piece of card, each the right way round from the only
+/// place it can be seen from. Turning a card end over end like this comes out
+/// right only because the back is symmetric about both of its axes — an
+/// asymmetric back would arrive upside down, which is a good part of why the
+/// backs of real cards are the designs they are.
+void _paintFlight(
+  Canvas canvas,
+  TrayCamera camera,
+  CardTable table,
+  double squash,
+) {
+  final PlayingCard? card = table.deal.card;
+  if (card == null) return;
+
+  // Off the top of the pile and down onto the glass. Both ends of the journey
+  // are worked out from the tray exactly as the resting positions are, so the
+  // card leaves the deck it was really dealt from and lands where a dealt card
+  // lies, on whatever screen it is being dealt on.
+  final Vector3 from = _pileTop(table);
+  final Vector3 to = Vector3(0, _drawnY(table), 0);
+  final Vector3 at = from + (to - from) * table.deal.travel;
+
+  // The shadow gathers as the card comes forward. Back at the wall there is
+  // nothing between the card and the glass for one to fall on.
+  _paintShadow(
+    canvas,
+    camera,
+    at.x,
+    at.y,
+    at.z,
+    squash: squash.abs(),
+    fade: table.deal.travel,
+  );
+
+  if (squash >= 0) {
+    _paintBack(canvas, camera, at.x, at.y, at.z, squash: squash);
+  } else {
+    _paintFace(
+      canvas,
+      camera,
+      card,
+      at.x,
+      at.y,
+      at.z,
+      _stylesOf(table),
+      squash: -squash,
+    );
   }
 }
+
+/// One style per die on a card, from the same derivation the tray uses on a
+/// real one: the body is what was chosen and the ink is whichever of black and
+/// ivory can be read against it. A card is a printed die, so it is printed the
+/// same way.
+///
+/// Three of them however many the card carries, because the list is indexed by
+/// position and a card is only ever the first one, two or three of them.
+List<DieStyle> _stylesOf(CardTable table) => <DieStyle>[
+  for (int i = 0; i < 3; i++) DieStyle.of(table.colourOf(i)),
+];
 
 /// Where a drawn card lies: along the bottom of the glass.
 ///
@@ -178,34 +269,11 @@ void _cardRect(
 /// stock had around it before. Every layer here is card-shaped, so there is
 /// nothing in the pile that is not the shape of a card.
 void _paintPile(Canvas canvas, TrayCamera camera, CardTable table) {
-  final int count = table.deck.remaining;
-  if (count == 0) return;
+  if (table.deck.remaining == 0) return;
 
-  // Two millimetres off the wall, so the pile reads as standing in the box
-  // rather than printed on the back of it.
-  //
-  // Real stock while a real stack would fit, and no thicker. Three dice across
-  // three decks is six hundred and forty-eight cards, which at 0.32 mm each is
-  // a pile deeper than the tray — it would come out through the glass. Past
-  // the cap the pile stops being a measurement and goes back to being a
-  // picture of one, which is the only thing it can be at that size.
-  final double back = -table.depth + 0.002;
-  final double thickness = math.min(
-    count * Tuning.cardThickness,
-    table.depth * _maxPileDepth,
-  );
-  // The lean of the pile, and the whole reason you can tell there is more than
-  // one card in it. A stack this square to the glass hides its own edge — the
-  // front card is nearer, so it projects larger than every card behind it and
-  // covers the lot. A pile that has been shuffled by hand is not square, and
-  // this is how far out of true it is: a tenth of its own height, which is
-  // nothing for the six cards left at the end of a shoe and a visible fan for
-  // the six hundred at the start of one.
-  //
-  // Taken off the middle rather than added to one side of it, so that the pile
-  // as a whole still stands in the centre of the wall and only the fan itself
-  // is off square.
-  final double lean = thickness * _kPileLean;
+  final double back = -table.depth + _kPileGap;
+  final double thickness = _pileThickness(table);
+  final double lean = _pileLean(table);
 
   // Enough layers to read as a stack and not so many that the near ones land
   // inside a pixel of each other.
@@ -219,6 +287,45 @@ void _paintPile(Canvas canvas, TrayCamera camera, CardTable table) {
 
   _paintBack(canvas, camera, -lean / 2, 0, back + thickness);
 }
+
+/// How deep the pile stands, metres.
+///
+/// Real stock while a real stack would fit, and no thicker. Three dice across
+/// three decks is six hundred and forty-eight cards, which at 0.32 mm each is
+/// a pile deeper than the tray — it would come out through the glass. Past the
+/// cap the pile stops being a measurement and goes back to being a picture of
+/// one, which is the only thing it can be at that size.
+double _pileThickness(CardTable table) => math.min(
+  table.deck.remaining * Tuning.cardThickness,
+  table.depth * _maxPileDepth,
+);
+
+/// How far out of true the pile stands, metres, and the whole reason you can
+/// tell there is more than one card in it.
+///
+/// A stack this square to the glass hides its own edge — the front card is
+/// nearer, so it projects larger than every card behind it and covers the lot.
+/// A pile that has been shuffled by hand is not square, and this is how far
+/// off: a tenth of its own height, which is nothing for the six cards left at
+/// the end of a shoe and a visible fan for the six hundred at the start of one.
+///
+/// Taken off the middle rather than added to one side of it, so that the pile
+/// as a whole still stands in the centre of the wall and only the fan itself is
+/// off square.
+double _pileLean(CardTable table) => _pileThickness(table) * _kPileLean;
+
+/// Where the top of the pile stands, and so where a card is dealt from.
+///
+/// Read off the pile as it is *now*, one card lighter than it was when the card
+/// in the air came off it. That difference is a third of a millimetre at the
+/// back of a box three hundred deep, which is nothing you could see — and
+/// paying for a second pile geometry to be exactly right about it would be
+/// paying for nothing.
+Vector3 _pileTop(CardTable table) => Vector3(
+  -_pileLean(table) / 2,
+  0,
+  -table.depth + _kPileGap + _pileThickness(table),
+);
 
 /// The top of the pile: the back of a card.
 ///
@@ -235,13 +342,14 @@ void _paintBack(
   TrayCamera camera,
   double x,
   double y,
-  double z,
-) {
+  double z, {
+  double squash = 1,
+}) {
   const double w = Tuning.cardWidth;
   const double h = Tuning.cardHeight;
 
   canvas.save();
-  _intoCard(canvas, camera, x, y, z);
+  _intoCard(canvas, camera, x, y, z, squash);
 
   // y runs up in here, so the corner the light comes from is +y and the far
   // one is −y. The gradient goes between those two and nowhere near the
@@ -314,11 +422,24 @@ Path _diamond(Offset centre, double radius) =>
       ..close();
 
 /// Puts the canvas into one card's own frame: millimetres, y running up.
-void _intoCard(Canvas canvas, TrayCamera camera, double x, double y, double z) {
+///
+/// [squash] is how much of its height a card turning over has left, 1 for one
+/// lying flat to the glass and 0 for one exactly edge on. It goes on the one
+/// axis, because that is the whole of what a turn about the card's left-to-
+/// right axis does to it from here — the printing on the card foreshortens with
+/// the card, which is why it is done to the frame rather than to the shape.
+void _intoCard(
+  Canvas canvas,
+  TrayCamera camera,
+  double x,
+  double y,
+  double z,
+  double squash,
+) {
   final double scale = camera.scaleAt(z) * camera.pixelsPerMetre;
   final Offset centre = camera.project(Vector3(x, y, z));
   canvas.translate(centre.dx, centre.dy);
-  canvas.scale(scale, -scale);
+  canvas.scale(scale, -scale * squash);
 }
 
 /// A card lying face up, with the roll it stands for printed on it.
@@ -332,15 +453,17 @@ void _paintFace(
   Canvas canvas,
   TrayCamera camera,
   PlayingCard card,
+  double x,
   double y,
   double z,
-  List<DieStyle> styles,
-) {
+  List<DieStyle> styles, {
+  double squash = 1,
+}) {
   const double w = Tuning.cardWidth;
   const double h = Tuning.cardHeight;
 
   canvas.save();
-  _intoCard(canvas, camera, 0, y, z);
+  _intoCard(canvas, camera, x, y, z, squash);
 
   const Rect rect = Rect.fromLTRB(-w / 2, -h / 2, w / 2, h / 2);
   final RRect stock = RRect.fromRectAndRadius(
@@ -426,13 +549,27 @@ void _paintPipSquare(
 ///
 /// Not cast along the light the dice use: a card on the glass is flat against
 /// the front of the tray, and what reads is a plain drop shadow behind it.
-void _paintShadow(Canvas canvas, TrayCamera camera, double y, double z) {
+///
+/// [squash] is the turn, exactly as [_intoCard] takes it — a card edge on has
+/// no face left to block the light with. [fade] is for a card still crossing
+/// the box: against the back wall there is nothing behind it for a shadow to
+/// fall on, and one that arrives at full strength the moment a card is dealt
+/// would read as a second card rather than as this one's shadow.
+void _paintShadow(
+  Canvas canvas,
+  TrayCamera camera,
+  double x,
+  double y,
+  double z, {
+  double squash = 1,
+  double fade = 1,
+}) {
   final double scale = camera.scaleAt(z) * camera.pixelsPerMetre;
-  final Offset centre = camera.project(Vector3(0, y, z));
+  final Offset centre = camera.project(Vector3(x, y, z));
   final Rect rect = Rect.fromCenter(
     center: centre.translate(0, Tuning.cardWidth * _kCorner * scale),
     width: Tuning.cardWidth * scale,
-    height: Tuning.cardHeight * scale,
+    height: Tuning.cardHeight * scale * squash,
   );
   canvas.drawRRect(
     RRect.fromRectAndRadius(
@@ -440,7 +577,7 @@ void _paintShadow(Canvas canvas, TrayCamera camera, double y, double z) {
       Radius.circular(Tuning.cardWidth * _kCorner * scale),
     ),
     Paint()
-      ..color = Colors.black.withValues(alpha: 0.45)
+      ..color = Colors.black.withValues(alpha: 0.45 * fade)
       ..maskFilter = ui.MaskFilter.blur(
         ui.BlurStyle.normal,
         Tuning.cardWidth * 0.10 * scale,
@@ -450,9 +587,16 @@ void _paintShadow(Canvas canvas, TrayCamera camera, double y, double z) {
 
 /// Paints [table] whenever [repaint] says something about it has changed.
 class CardPainter extends CustomPainter {
-  const CardPainter({required this.table});
+  CardPainter({required this.table, required this.repaint})
+    : super(repaint: repaint);
 
   final CardTable table;
+
+  /// Ticked on the frames a card is in the air, and on no others. Nothing else
+  /// on this table moves — the pile stands where it stands and a card that has
+  /// landed stays landed — so a repaint it does not ask for is a repaint of
+  /// exactly the same picture.
+  final Listenable repaint;
 
   @override
   void paint(Canvas canvas, Size size) => paintCardScene(canvas, size, table);

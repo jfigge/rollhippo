@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:rollhippo/app/chrome.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
@@ -20,7 +21,18 @@ import 'package:rollhippo/tray/tray.dart';
 /// colours — which is the whole of what the card panel's swatches do. Everything with a shape
 /// to it is exactly what the phone draws; the pips are real, because they are
 /// circles rather than glyphs.
+///
+/// And a gif of the deal, because the one thing on this table that moves
+/// cannot be judged from a still: a card coming off the pile and turning over
+/// is either the weight of a hand putting a card down or it is not, and no
+/// single frame of it says which.
 const double _kOutputScale = 2;
+
+/// The gif: small enough to look at whole, and the same 30 fps off a 120 Hz
+/// clock the roll gif is captured on.
+const double _kGifScale = 0.5;
+const double _kGifStep = 1 / 120;
+const int _kCaptureEvery = 4;
 
 void main() {
   final String dir =
@@ -57,6 +69,82 @@ void main() {
       table(colours: <int>[kDicePalette[5], kDicePalette[2]]),
     );
   });
+
+  test('a card being dealt', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+
+    final CardTable table = CardTable(
+      width: kHarnessScreen.width / Tuning.logicalPixelsPerMetre,
+      height: kHarnessScreen.height / Tuning.logicalPixelsPerMetre,
+      deck: Deck(dice: 2, decks: 2, reshuffleAt: 5, random: math.Random(4)),
+      colours: <int>[kDicePalette[5], kDicePalette[2]],
+    );
+
+    // A card already lying on the glass before the one being watched, because
+    // that is what every deal after the first one lands on.
+    table.draw();
+    while (table.deal.flying) {
+      table.advance(_kGifStep);
+    }
+
+    // A beat of the shoe standing still, the deal, and a beat of the card
+    // lying where it landed. Both beats are for the loop: a gif that starts
+    // moving on its first frame and stops dead on its last reads as a stutter
+    // rather than as a card being dealt.
+    const double lead = 0.25;
+    const double hold = 0.6;
+    final img.GifEncoder encoder = img.GifEncoder(repeat: 0);
+    final int steps = ((lead + Tuning.dealDuration + hold) / _kGifStep).round();
+    bool dealt = false;
+
+    for (int step = 0; step <= steps; step++) {
+      if (!dealt && step * _kGifStep >= lead) {
+        table.draw();
+        dealt = true;
+      }
+      if (step % _kCaptureEvery == 0) {
+        encoder.addFrame(
+          await _rgba(table),
+          // Hundredths of a second, to match the capture interval.
+          duration: (100 * _kGifStep * _kCaptureEvery).round(),
+        );
+      }
+      table.advance(_kGifStep);
+    }
+
+    final String path = '$dir/cards-deal.gif';
+    File(path).writeAsBytesSync(encoder.finish()!);
+    // ignore: avoid_print
+    print('wrote $path');
+  });
+}
+
+/// One frame of the table, at gif size and in the bytes the encoder wants.
+Future<img.Image> _rgba(CardTable table) async {
+  const Size screen = kHarnessScreen;
+  final int width = (screen.width * _kGifScale).round();
+  final int height = (screen.height * _kGifScale).round();
+
+  final ui.PictureRecorder recorder = ui.PictureRecorder();
+  final Canvas canvas = Canvas(recorder);
+  canvas.scale(_kGifScale);
+  canvas.drawRect(
+    Offset.zero & screen,
+    Paint()..color = const Color(0xFF0B0E13),
+  );
+  paintCardScene(canvas, screen, table);
+
+  final ui.Image shot = await recorder.endRecording().toImage(width, height);
+  final ByteData? raw = await shot.toByteData(
+    format: ui.ImageByteFormat.rawRgba,
+  );
+  shot.dispose();
+  return img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: raw!.buffer,
+    numChannels: 4,
+  );
 }
 
 Future<void> _write(String path, CardTable table) async {

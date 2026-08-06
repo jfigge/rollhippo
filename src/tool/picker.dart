@@ -41,7 +41,7 @@ void main() {
     // time — which also means this tool fails if the picker stops working.
     for (int i = 0; i < kMaxDice; i++) {
       if (i >= kDefaultDice.length) {
-        await tester.tap(find.text('Add a die'));
+        await tester.tap(_addDie);
         await tester.pump();
       } else {
         await tester.tap(_dice(find.byType(DiePreview)).at(i));
@@ -148,6 +148,12 @@ Finder _dice(Finder finder) =>
 
 Finder _card(Finder finder) =>
     find.descendant(of: find.byKey(kCardPage), matching: finder);
+
+/// The plus in the first set's rack, which is where a die is added.
+final Finder _addDie = find.descendant(
+  of: find.byKey(const ValueKey<int>(0)),
+  matching: find.byKey(kAddDie),
+);
 
 /// The palette swatch for one colour — a filled circle, which is enough to
 /// tell it from every other [Container] on the screen.

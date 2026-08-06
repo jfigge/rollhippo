@@ -122,6 +122,81 @@ class Deck {
   }
 }
 
+/// A card on its way from the top of the pile to the glass, turning over as it
+/// goes.
+///
+/// Time, and nothing else. Where the pile stands and where a dealt card lies
+/// are the painter's business — it works both out from the tray's own
+/// measurements, and a second copy of them in here would be a second thing to
+/// get wrong. What this holds is how far through the journey the card is, how
+/// far over it has turned, and which card it is landing on top of.
+///
+/// The deal is not the draw. [Deck.draw] happens at once and the card is off
+/// the pile the instant it is asked for — this is only the card arriving, and
+/// interrupting it costs nothing but the sight of it.
+class Deal {
+  PlayingCard? _card;
+  PlayingCard? _under;
+  double _elapsed = 0;
+
+  /// The card in the air, or null when nothing is being dealt.
+  PlayingCard? get card => _card;
+
+  /// The card it is landing on: whatever was lying on the glass when this one
+  /// was asked for, and null if the glass was empty.
+  ///
+  /// Worth keeping, because the alternative is a blank glass for the length of
+  /// the flight — the outgoing card vanishing the moment the new one lifts off
+  /// reads as a card being taken away rather than as one being covered.
+  PlayingCard? get under => _under;
+
+  /// True while a card is in the air.
+  bool get flying => _card != null;
+
+  /// How far along the journey the card is: 0 on the pile, 1 on the glass.
+  double get travel => _ease(_fraction(Tuning.dealDuration));
+
+  /// How far over it has turned, radians. Nought is face down, pi is face up,
+  /// and halfway is the card edge on.
+  ///
+  /// On its own clock, which runs out at [Tuning.dealTurn] of the journey: the
+  /// turn is finished before the landing is.
+  double get turn =>
+      math.pi * _ease(_fraction(Tuning.dealDuration * Tuning.dealTurn));
+
+  double _fraction(double over) => (_elapsed / over).clamp(0.0, 1.0);
+
+  /// Sends [card] on its way, onto [under]. A null [card] — which is what a
+  /// reshuffle deals — clears the air instead, and lands anything already in
+  /// it.
+  void start(PlayingCard? card, PlayingCard? under) {
+    _card = card;
+    _under = card == null ? null : under;
+    _elapsed = 0;
+  }
+
+  /// One frame, in real seconds.
+  void advance(double dt) {
+    if (_card == null) return;
+    _elapsed += dt;
+    if (_elapsed < Tuning.dealDuration) return;
+    // Landed. The card is the deck's [Deck.shown] now and the painter draws it
+    // lying on the glass, which is where this left it.
+    _card = null;
+    _under = null;
+    _elapsed = 0;
+  }
+}
+
+/// Cubic ease in and out, the same curve the readout moves the dice on and
+/// written out here for the same reason: nothing below the widgets may import
+/// Flutter's `Curves`, and a card has to be dealt headless in the tools and the
+/// tests.
+double _ease(double t) =>
+    t < 0.5
+        ? 4 * t * t * t
+        : 1 - (-2 * t + 2) * (-2 * t + 2) * (-2 * t + 2) / 2;
+
 /// The box, with a pile of cards in it instead of dice.
 ///
 /// The same tray, the same walls and the same camera — what changes is what is
@@ -156,4 +231,28 @@ class CardTable {
 
   /// What the die in position [i] on a card is printed in.
   int colourOf(int i) => i < colours.length ? colours[i] : kDiceWhite;
+
+  /// The card presently in the air, if any. See [Deal].
+  final Deal deal = Deal();
+
+  /// Turns the top card over onto the glass, or reshuffles if the shoe is
+  /// spent — and sends whatever came of that on its way across the box.
+  ///
+  /// The deal is the whole of what is animated here, and it is animated after
+  /// the fact: the card has already left the pile by the time this returns,
+  /// and [Deck.shown] is already the new one. Nothing about which card it is
+  /// waits on the flight, so a second ask arriving mid-flight simply lands the
+  /// first one and starts again.
+  void draw() {
+    final PlayingCard? under = deck.shown;
+    deck.draw();
+    deal.start(deck.shown, under);
+  }
+
+  /// One frame, in real seconds.
+  ///
+  /// Nothing on this table is simulated — a card is not a rigid body and there
+  /// is nothing in the box to throw. The only thing that moves is the card
+  /// being dealt.
+  void advance(double dt) => deal.advance(dt);
 }

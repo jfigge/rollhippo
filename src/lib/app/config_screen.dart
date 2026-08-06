@@ -110,6 +110,14 @@ const Key kCardPage = ValueKey<String>('card-page');
 /// slider too, and the picker is still built underneath it.
 const Key kReshuffleSlider = ValueKey<String>('reshuffle');
 
+/// The empty slot that takes the next die: the large plus drawn where that die
+/// would land, which is where adding one is done now that no button does it.
+///
+/// Every rack with room in it has one — both modes are built at once and the
+/// page view keeps more than one group built — so anything reaching for it has
+/// to say whose rack it means.
+const Key kAddDie = ValueKey<String>('add-die');
+
 const List<DieSpec> kDefaultDice = <DieSpec>[
   DieSpec(kind: DieKind.d6, colour: kDiceWhite),
   DieSpec(kind: DieKind.d6, colour: kDiceWhite),
@@ -236,7 +244,7 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   /// Adds a die to the card, matching the one before it and arriving selected.
   ///
-  /// The same bargain [_add] makes in dice mode, for the same two reasons: the
+  /// The same bargain [_addTo] makes in dice mode, for the same two reasons: the
   /// common thing to want is another of what you already have, and the other
   /// common thing is for it to be different.
   void _addCardDie() {
@@ -299,19 +307,22 @@ class _ConfigScreenState extends State<ConfigScreen>
     _goToMode(to.clamp(0, 1));
   }
 
-  void _add() {
-    if (_cards) {
-      _addCardDie();
-      return;
-    }
-    if (_dice.length >= kMaxDice) return;
+  /// Adds a die to [group] — the set whose rack was tapped, rather than
+  /// whichever one happens to be on screen.
+  ///
+  /// The two are the same except mid-swipe, where the page view has two racks
+  /// built and the one under your finger is not yet the one the editor is
+  /// about. A plus belongs to the rack it is drawn in.
+  void _addTo(int group) {
+    final List<DieSpec> dice = _groups[group];
+    if (dice.length >= kMaxDice) return;
     setState(() {
       // A new die matches the one before it, because the common thing to want
       // is another of what you already have — and it arrives selected, since
       // the other common thing is to want it different. The first die of an
       // empty group has nothing to match, so it is what the app starts with.
-      _dice.add(_dice.isEmpty ? kDefaultDice.first : _dice.last);
-      _selectedIn[_group] = _dice.length - 1;
+      dice.add(dice.isEmpty ? kDefaultDice.first : dice.last);
+      _selectedIn[group] = dice.length - 1;
     });
   }
 
@@ -326,7 +337,10 @@ class _ConfigScreenState extends State<ConfigScreen>
     });
   }
 
-  void _select(int index) => setState(() => _selectedIn[_group] = index);
+  /// Points the editor at die [index] of [group], and takes the group for the
+  /// same reason [_addTo] does: a tap lands on the rack it was drawn in.
+  void _select(int group, int index) =>
+      setState(() => _selectedIn[group] = index);
 
   /// The guard is for an empty group, where there is no die for the editor to
   /// be talking about. Nothing can reach this — the controls are behind an
@@ -427,7 +441,7 @@ class _ConfigScreenState extends State<ConfigScreen>
                 _block(),
                 _modeDots(),
                 const Spacer(),
-                _buttons(),
+                _rollButton(),
               ],
             ),
           ),
@@ -622,18 +636,24 @@ class _ConfigScreenState extends State<ConfigScreen>
                           child:
                               i < kMaxCardDice
                                   ? _RackSlot(
+                                    key: i == _cardDice ? kAddDie : null,
                                     spec: i < _cardDice ? _cardSpec(i) : null,
                                     selected: i == _cardSelected,
+                                    adds: i == _cardDice,
                                     // Tappable, and selected the same way the
                                     // dice rack is: the swatches below are
                                     // about one die of the card, and this is
                                     // where you say which. There is still no
                                     // kind to choose — every card-mode die is
                                     // a D6 — so colour is all a tap can lead
-                                    // to here.
+                                    // to here. The slot past the last die is
+                                    // the plus, and takes another; past three
+                                    // there is no slot at all.
                                     onTap:
                                         i < _cardDice
                                             ? () => _selectCardDie(i)
+                                            : i == _cardDice
+                                            ? _addCardDie
                                             : null,
                                   )
                                   : const SizedBox.shrink(),
@@ -855,9 +875,21 @@ class _ConfigScreenState extends State<ConfigScreen>
                         child: AspectRatio(
                           aspectRatio: 1,
                           child: _RackSlot(
+                            // The first empty slot is where another die would
+                            // go, so it is where you ask for one. A full rack
+                            // has no such slot, and that is the whole of the
+                            // limit: nothing to tap, and nothing greyed out
+                            // to explain why not.
+                            key: i == dice.length ? kAddDie : null,
                             spec: i < dice.length ? dice[i] : null,
                             selected: i == selected,
-                            onTap: i < dice.length ? () => _select(i) : null,
+                            adds: i == dice.length,
+                            onTap:
+                                i < dice.length
+                                    ? () => _select(group, i)
+                                    : i == dice.length
+                                    ? () => _addTo(group)
+                                    : null,
                           ),
                         ),
                       ),
@@ -987,108 +1019,113 @@ class _ConfigScreenState extends State<ConfigScreen>
     );
   }
 
-  Widget _buttons() {
-    final bool room =
-        _cards ? _cardDice < kMaxCardDice : _dice.length < kMaxDice;
+  /// Roll, across the whole width, with nothing beside it.
+  ///
+  /// Adding a die is done in the rack now, in the slot the die will land in,
+  /// which is both where you are already looking and the only place that can
+  /// say — by having no slot left — that there is no room for another. So the
+  /// bottom of the screen is one button about the whole set, rather than a
+  /// button about the set sharing a row with one about a die.
+  Widget _rollButton() {
     final bool anything =
         _cards || _groups.any((List<DieSpec> g) => g.isNotEmpty);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            flex: 4,
-            child: TextButton.icon(
-              onPressed: room ? _add : null,
-              icon: const Icon(Icons.add, size: 20),
-              label: const Text('Add a die'),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFBFD0E4),
-                disabledForegroundColor: const Color(0x44BFD0E4),
-                minimumSize: const Size.fromHeight(56),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color:
-                        room
-                            ? const Color(0x22FFFFFF)
-                            : const Color(0x11FFFFFF),
-                  ),
-                ),
-              ),
-            ),
+      child: FilledButton(
+        onPressed: anything ? _roll : null,
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF3F6FA8),
+          foregroundColor: const Color(0xFFF2F7FF),
+          minimumSize: const Size.fromHeight(56),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 5,
-            child: FilledButton(
-              onPressed: anything ? _roll : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF3F6FA8),
-                foregroundColor: const Color(0xFFF2F7FF),
-                minimumSize: const Size.fromHeight(56),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              // Card mode does not throw anything. What the button does there
-              // is put a shoe together and hand it to you face down, which is
-              // a shuffle and reads as one.
-              child: Text(
-                _cards ? 'Shuffle' : 'Roll',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
+        // Card mode does not throw anything. What the button does there is put
+        // a shoe together and hand it to you face down, which is a shuffle and
+        // reads as one.
+        child: Text(
+          _cards ? 'Shuffle' : 'Roll',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
 }
 
-/// One place in the rack: a die you can select, or the space where one would go.
+/// One place in the rack: a die you can select, the space the next die goes in,
+/// or a slot the set has not reached yet.
 class _RackSlot extends StatelessWidget {
   const _RackSlot({
+    super.key,
     required this.spec,
     required this.selected,
     required this.onTap,
+    this.adds = false,
   });
 
-  /// Null for a slot the set has not reached yet.
+  /// Null for a slot with no die in it.
   final DieSpec? spec;
   final bool selected;
   final VoidCallback? onTap;
+
+  /// Whether this is the slot another die would land in — drawn as a plus the
+  /// size of the die that is about to be there, and the only empty slot in the
+  /// rack a tap does anything to. Never true of a slot that has a [spec].
+  final bool adds;
 
   @override
   Widget build(BuildContext context) {
     final DieSpec? spec = this.spec;
     // Only a filled slot can be selected; an empty one never draws the ring.
     final bool lit = selected && spec != null;
-    return GestureDetector(
+    // Three weights of edge, because there are three kinds of slot. The one
+    // that adds is brighter than the empty ones past it: it is worth aiming
+    // at, and they are only there to say how much room is left.
+    final Color edge =
+        lit
+            ? const Color(0xFF6E9AD0)
+            : spec != null
+            ? const Color(0x14FFFFFF)
+            : adds
+            ? const Color(0x22FFFFFF)
+            : const Color(0x0CFFFFFF);
+    final Widget slot = GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         decoration: BoxDecoration(
           color: lit ? const Color(0x223F6FA8) : const Color(0x0AFFFFFF),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color:
-                lit
-                    ? const Color(0xFF6E9AD0)
-                    : spec != null
-                    ? const Color(0x14FFFFFF)
-                    : const Color(0x0CFFFFFF),
-            width: lit ? 2 : 1,
-          ),
+          border: Border.all(color: edge, width: lit ? 2 : 1),
         ),
         // The die is inset from the ring so a selected one does not touch it.
         padding: const EdgeInsets.all(4),
-        child: spec == null ? null : DiePreview(spec: spec),
+        child:
+            adds
+                ? const FractionallySizedBox(
+                  // Half the slot: a mark saying where the next die goes,
+                  // rather than a thing pretending to be one. A fraction and
+                  // not a point size, so it stays half of whatever the slot
+                  // turns out to be — the same bargain [DiePreview] makes by
+                  // filling one.
+                  widthFactor: 0.5,
+                  heightFactor: 0.5,
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: Icon(Icons.add, size: 24, color: Color(0x99BFD0E4)),
+                  ),
+                )
+                : spec == null
+                ? null
+                : DiePreview(spec: spec),
       ),
     );
+    // The plus used to be a button with a word on it. Losing the word to the
+    // rack should not lose it to a screen reader as well.
+    return adds
+        ? Semantics(button: true, label: 'Add a die', child: slot)
+        : slot;
   }
 }
 

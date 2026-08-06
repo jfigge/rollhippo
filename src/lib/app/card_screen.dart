@@ -65,6 +65,11 @@ class _CardScreenState extends State<CardScreen>
 
   final FocusNode _focus = FocusNode();
 
+  /// Ticked on every frame a card is in the air, and on no other. Nothing on
+  /// this table moves by itself, so this is the whole of what the painter has
+  /// to watch. See [CardPainter.repaint].
+  final ValueNotifier<int> _frame = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +80,7 @@ class _CardScreenState extends State<CardScreen>
   @override
   void dispose() {
     _focus.dispose();
+    _frame.dispose();
     _ticker.dispose();
     _motion.dispose();
     super.dispose();
@@ -97,6 +103,16 @@ class _CardScreenState extends State<CardScreen>
     // it was last asked and skipping frames would hand it one enormous one.
     final MotionFrame motion = _motion.sample(dt);
     if (isShake(motion) && _since >= _kDrawCooldown) _draw();
+
+    // And the one thing on this table that moves. The test is before the
+    // advance rather than after it, so the frame the card lands on is painted
+    // too — asking afterwards would leave it drawn a frame short of the glass
+    // and nothing would come along to finish it.
+    final CardTable? table = _table;
+    if (table != null && table.deal.flying) {
+      table.advance(dt);
+      _frame.value++;
+    }
   }
 
   void _ensureTable(Size size) {
@@ -116,14 +132,16 @@ class _CardScreenState extends State<CardScreen>
 
   /// Turns the top card over, or reshuffles if the shoe is down to the cut.
   ///
-  /// A rebuild rather than a repaint notifier: unlike the tray, nothing here
-  /// moves between one card and the next, so the only frames worth painting
-  /// are the ones where this has happened.
+  /// A repaint rather than a rebuild: nothing above the painter has anything
+  /// to say about which card is showing, and the flight that follows is a
+  /// repaint a frame anyway. The card itself is dealt here and now — the
+  /// animation is it arriving, not it being chosen.
   void _draw() {
     final CardTable? table = _table;
     if (table == null) return;
     _since = 0;
-    setState(table.deck.draw);
+    table.draw();
+    _frame.value++;
   }
 
   void _handleKey(KeyEvent event) {
@@ -157,7 +175,9 @@ class _CardScreenState extends State<CardScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: <Widget>[
-                    CustomPaint(painter: CardPainter(table: table)),
+                    CustomPaint(
+                      painter: CardPainter(table: table, repaint: _frame),
+                    ),
                     Positioned(
                       left: 0,
                       right: 0,

@@ -52,6 +52,11 @@ Finder swatchOf(Key page, int colour) => find.descendant(
 PageDots dotsOf(WidgetTester tester, Key key) =>
     tester.widget<PageDots>(find.byKey(key));
 
+/// The plus in one mode's rack — the empty slot that takes another die. Both
+/// modes are built at once and both have one, so it has to say which.
+Finder addOf(Key page) =>
+    find.descendant(of: find.byKey(page), matching: find.byKey(kAddDie));
+
 /// Drags the panel — the one thing on the picker that switches modes.
 Future<void> swipePanel(WidgetTester tester, Finder onPanel, double dx) async {
   await tester.drag(onPanel, Offset(dx, 0));
@@ -217,6 +222,96 @@ void main() {
     });
   });
 
+  group('a card being dealt', () {
+    CardTable table({int dice = 2, int decks = 1, int reshuffleAt = 0}) =>
+        CardTable(
+          width: kHarnessScreen.width / Tuning.logicalPixelsPerMetre,
+          height: kHarnessScreen.height / Tuning.logicalPixelsPerMetre,
+          deck: Deck(
+            dice: dice,
+            decks: decks,
+            reshuffleAt: reshuffleAt,
+            random: math.Random(7),
+          ),
+        );
+
+    /// Runs [seconds] of table time past it, in frame-sized steps that add up
+    /// to exactly that — the deal is eased, so it is steepest in the middle
+    /// and half a frame of overshoot there is a fifth of a radian of turn.
+    void run(CardTable table, double seconds) {
+      const int steps = 24;
+      for (int i = 0; i < steps; i++) {
+        table.advance(seconds / steps);
+      }
+    }
+
+    test('is off the pile at once, and only then flies', () {
+      final CardTable deal = table();
+      deal.draw();
+
+      // The card is dealt the instant it is asked for. Only the arrival is
+      // animated, which is why interrupting it cannot cost a card.
+      expect(deal.deck.remaining, 35);
+      expect(deal.deck.shown, isNotNull);
+      expect(deal.deal.flying, isTrue);
+      expect(deal.deal.card, same(deal.deck.shown));
+      expect(deal.deal.under, isNull, reason: 'the glass was empty');
+      expect(deal.deal.travel, 0);
+
+      run(deal, Tuning.dealDuration / 2);
+      expect(deal.deal.travel, closeTo(0.5, 0.02), reason: 'eased both ends');
+      expect(deal.deal.flying, isTrue);
+
+      run(deal, Tuning.dealDuration / 2);
+      expect(deal.deal.flying, isFalse);
+      expect(deal.deck.shown, isNotNull, reason: 'and it is lying there now');
+    });
+
+    test('turns from its back to its face, and is over before it lands', () {
+      final CardTable deal = table();
+      deal.draw();
+      expect(deal.deal.turn, 0, reason: 'face down, off the top of the pile');
+
+      // Halfway through the turn's own clock is the card exactly edge on,
+      // which is where the painter swaps one side of it for the other.
+      run(deal, Tuning.dealDuration * Tuning.dealTurn / 2);
+      expect(deal.deal.turn, closeTo(math.pi / 2, 0.05));
+      expect(deal.deal.travel, lessThan(0.5), reason: 'still on its way');
+
+      // And by the end of that clock it is face up, with the last fifth of the
+      // journey left to lie down in.
+      run(deal, Tuning.dealDuration * Tuning.dealTurn / 2);
+      expect(deal.deal.turn, closeTo(math.pi, 0.02));
+      expect(deal.deal.flying, isTrue, reason: 'over, but not landed');
+    });
+
+    test('a second ask lands the first card and deals onto it', () {
+      final CardTable deal = table();
+      deal.draw();
+      final PlayingCard first = deal.deck.shown!;
+      run(deal, Tuning.dealDuration / 3);
+
+      deal.draw();
+      expect(deal.deal.under, same(first), reason: 'it is covering that one');
+      expect(deal.deal.card, same(deal.deck.shown));
+      expect(deal.deal.travel, 0, reason: 'the new one starts at the pile');
+      expect(deal.deck.remaining, 34, reason: 'and both were really dealt');
+    });
+
+    test('a reshuffle clears the air rather than dealing into it', () {
+      final CardTable deal = table(dice: 1);
+      for (int i = 0; i < 6; i++) {
+        deal.draw();
+      }
+      expect(deal.deck.remaining, 0);
+
+      deal.draw();
+      expect(deal.deck.shown, isNull);
+      expect(deal.deal.flying, isFalse, reason: 'there is no card to fly');
+      expect(deal.deal.under, isNull, reason: 'and none left on the glass');
+    });
+  });
+
   group('the picker in two modes', () {
     testWidgets('starts on dice, with both modes there to swipe to', (
       WidgetTester tester,
@@ -264,15 +359,15 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
-      await tester.tap(find.text('Add a die'));
+      await tester.tap(addOf(kCardPage));
       await tester.pump();
       expect(rackOf(tester, kCardPage), 3);
       expect(find.text('(432 in the shoe)'), findsOneWidget);
 
-      // And it stops there, however many times it is asked.
-      await tester.tap(find.text('Add a die'));
-      await tester.pump();
+      // And it stops there, because there is nothing left to ask with: three
+      // is every slot the card has, so the plus has nowhere to be.
       expect(rackOf(tester, kCardPage), kMaxCardDice);
+      expect(addOf(kCardPage), findsNothing);
 
       // Remove takes them off again, the same control dice mode uses.
       final Finder remove = find.descendant(
@@ -349,7 +444,7 @@ void main() {
       await tester.tap(swatchOf(kCardPage, green));
       await tester.pump();
       // A third, which arrives matching the one before it and selected.
-      await tester.tap(find.text('Add a die'));
+      await tester.tap(addOf(kCardPage));
       await tester.pump();
       await tester.tap(swatchOf(kCardPage, violet));
       await tester.pump();
@@ -458,6 +553,30 @@ void main() {
       final PlayingCard first = table.deck.shown!;
       await tester.pump(const Duration(seconds: 2));
       expect(table.deck.shown, same(first));
+    }, variant: harness);
+
+    testWidgets('a drawn card flies out of the pile and lands', (
+      WidgetTester tester,
+    ) async {
+      final CardTable table = await open(tester);
+
+      await tester.tap(find.text('Draw'));
+      await tester.pump();
+      expect(table.deal.flying, isTrue);
+
+      // A few frames in, on its way — the screen's own ticker is what carries
+      // it, so this is also the test that the ticker is wired to the table.
+      for (int i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(table.deal.flying, isTrue);
+      expect(table.deal.travel, greaterThan(0));
+
+      for (int i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(table.deal.flying, isFalse);
+      expect(table.deck.shown, isNotNull);
     }, variant: harness);
 
     testWidgets('a shake deals one card, not a fistful', (

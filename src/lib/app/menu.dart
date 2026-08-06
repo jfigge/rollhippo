@@ -30,29 +30,41 @@ const int _kGainSteps = 12;
 /// The top of the slider. See [Tuning.hapticMaxGain].
 const double _kMaxGain = Tuning.hapticMaxGain;
 
-/// The menu button's tap target, and the icon centred inside it.
+/// The menu button's tap target, the icon centred inside it, and how thick a
+/// stroke the three lines are drawn with.
 ///
 /// 48 is the accessibility minimum for something a thumb has to find, and what
 /// [IconButton] gives you by default; 26 is the size that matches the title it
 /// sits beside.
+///
+/// The stroke is why the lines are drawn here rather than set in `Icons.menu`.
+/// Every Material glyph is 2 points thick on a 24-point grid whatever size it
+/// is used at, which beside a 26-point title puts a heavier mark on the screen
+/// than the capital R it is level with. There is no lighter hamburger in the
+/// font — the weight is in the outlines — so the only way to a thinner one is
+/// to stop asking the font for it.
 const double _kMenuTarget = 48;
 const double _kMenuIcon = 26;
+const double _kMenuStroke = 1.5;
+
+/// Where the three lines sit inside the icon's own box, as fractions of it.
+///
+/// Material's own grid, kept to the point: `Icons.menu` runs its bars from 3
+/// to 21 across a 24-point square, centred on 7, 12 and 17 down it. Drawing
+/// them somewhere else would move the button out from under everything that
+/// lines up against [kAppMenuInset].
+const double _kMenuBarInset = 3 / 24;
+const List<double> _kMenuBarRows = <double>[7 / 24, 12 / 24, 17 / 24];
 
 /// How far into [AppMenuButton] its three strokes actually begin.
 ///
 /// The visible part of this button is a good deal smaller than the box it
 /// needs for a thumb, which matters to anything trying to line it up with
 /// something else. The icon floats in the middle of a tap target nearly twice
-/// its size, and Material insets `Icons.menu` by a further eighth of the icon
-/// at each end — its bars run from 3 to 21 of a 24-point grid. Fourteen and a
-/// quarter points, all told.
-///
-/// Read off the rendered pixels rather than worked out on paper, because it is
-/// easy to be wrong here and hard to notice: `flutter test` substitutes a font
-/// with no glyphs in it, so an unwary measurement returns the notdef box —
-/// which is a different size, and centred differently.
+/// its size, and the lines begin an eighth of the icon in from that. Fourteen
+/// and a quarter points, all told.
 const double kAppMenuInset =
-    (_kMenuTarget - _kMenuIcon) / 2 + _kMenuIcon * 3 / 24;
+    (_kMenuTarget - _kMenuIcon) / 2 + _kMenuIcon * _kMenuBarInset;
 
 /// Quits.
 ///
@@ -139,7 +151,7 @@ class _AppMenuButtonState extends State<AppMenuButton> {
         side: const BorderSide(color: Color(0x14FFFFFF)),
       ),
       padding: EdgeInsets.zero,
-      icon: const Icon(Icons.menu, color: Color(0xFFBFD0E4), size: _kMenuIcon),
+      icon: const _MenuBars(),
       onSelected: (_MenuItem item) => unawaited(_run(item)),
       itemBuilder:
           (BuildContext context) => <PopupMenuEntry<_MenuItem>>[
@@ -167,6 +179,42 @@ class _AppMenuButtonState extends State<AppMenuButton> {
       ),
     );
   }
+}
+
+/// Three lines, thinner than the font draws them. See [_kMenuStroke].
+class _MenuBars extends StatelessWidget {
+  const _MenuBars();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.square(
+    // The size the glyph was, so the button keeps the tap target it had and
+    // [kAppMenuInset] keeps meaning what it says.
+    dimension: _kMenuIcon,
+    child: CustomPaint(painter: _MenuBarsPainter()),
+  );
+}
+
+class _MenuBarsPainter extends CustomPainter {
+  const _MenuBarsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint =
+        Paint()
+          ..color = const Color(0xFFBFD0E4)
+          ..strokeWidth = _kMenuStroke;
+    final double left = size.width * _kMenuBarInset;
+    final double right = size.width - left;
+    for (final double row in _kMenuBarRows) {
+      final double y = size.height * row;
+      // Butt ends, not round: a rounded cap hangs half a stroke past each end,
+      // and the left one is the edge the subtitle and the rack line up with.
+      canvas.drawLine(Offset(left, y), Offset(right, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuBarsPainter oldDelegate) => false;
 }
 
 /// The settings panel.
