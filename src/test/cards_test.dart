@@ -10,13 +10,44 @@ import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
 import 'package:rollhippo/render/die_preview.dart';
+import 'package:rollhippo/tray/tray.dart';
+
+/// Two of the palette, named so that a test reads as what it is doing.
+const int green = 0xFF4A8A55;
+const int violet = 0xFF7B5AA6;
 
 /// The dice showing in one mode's rack.
-int rackOf(WidgetTester tester, Key page) =>
-    find
-        .descendant(of: find.byKey(page), matching: find.byType(DiePreview))
-        .evaluate()
-        .length;
+List<DieSpec> specsOf(WidgetTester tester, Key page) => <DieSpec>[
+  for (final DiePreview preview in tester.widgetList<DiePreview>(
+    find.descendant(of: find.byKey(page), matching: find.byType(DiePreview)),
+  ))
+    preview.spec,
+];
+
+/// How many of them there are, and what colours they came out.
+int rackOf(WidgetTester tester, Key page) => specsOf(tester, page).length;
+
+List<int> coloursOf(WidgetTester tester, Key page) => <int>[
+  for (final DieSpec spec in specsOf(tester, page)) spec.colour,
+];
+
+/// The dice in one mode's rack, which in card mode is where you say which die
+/// the swatches are about.
+Finder dieOf(Key page) =>
+    find.descendant(of: find.byKey(page), matching: find.byType(DiePreview));
+
+/// The palette swatch for one colour, in one mode's panel. Both modes have the
+/// whole palette and both are built at once, so a swatch has to say which.
+Finder swatchOf(Key page, int colour) => find.descendant(
+  of: find.byKey(page),
+  matching: find.byWidgetPredicate((Widget widget) {
+    if (widget is! Container) return false;
+    final Decoration? decoration = widget.decoration;
+    return decoration is BoxDecoration &&
+        decoration.shape == BoxShape.circle &&
+        decoration.color == Color(colour);
+  }),
+);
 
 PageDots dotsOf(WidgetTester tester, Key key) =>
     tester.widget<PageDots>(find.byKey(key));
@@ -281,6 +312,87 @@ void main() {
       await tester.tap(find.text('3'));
       await tester.pump();
       expect(find.text('(108 in the shoe)'), findsOneWidget);
+    });
+
+    testWidgets('a colour lands on the selected die and nowhere else', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+
+      // DieSpec is compared field by field: it has no `==` of its own, and a
+      // spec built fresh every build would never be the same instance twice.
+      for (final DieSpec spec in specsOf(tester, kCardPage)) {
+        expect(spec.kind, kCardDie.kind);
+        expect(spec.colour, kCardDie.colour);
+      }
+
+      // The second die of the card, tapped exactly as the rack next door is.
+      await tester.tap(dieOf(kCardPage).at(1));
+      await tester.pump();
+      await tester.tap(swatchOf(kCardPage, green));
+      await tester.pump();
+      expect(coloursOf(tester, kCardPage), <int>[kDiceWhite, green]);
+
+      // And the dice next door are still the dice next door.
+      expect(coloursOf(tester, kDicePage), everyElement(kDiceWhite));
+    });
+
+    testWidgets('a die takes its colour with it when it goes', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+
+      await tester.tap(dieOf(kCardPage).at(1));
+      await tester.pump();
+      await tester.tap(swatchOf(kCardPage, green));
+      await tester.pump();
+      // A third, which arrives matching the one before it and selected.
+      await tester.tap(find.text('Add a die'));
+      await tester.pump();
+      await tester.tap(swatchOf(kCardPage, violet));
+      await tester.pump();
+      expect(coloursOf(tester, kCardPage), <int>[kDiceWhite, green, violet]);
+
+      // Now take the green one out. The violet die moves up a place rather
+      // than handing its colour back to the slot it left.
+      await tester.tap(dieOf(kCardPage).at(1));
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(kCardPage),
+          matching: find.text('Remove'),
+        ),
+      );
+      await tester.pump();
+      expect(coloursOf(tester, kCardPage), <int>[kDiceWhite, violet]);
+    });
+
+    testWidgets('the colours chosen are the colours the cards are printed in', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+
+      await tester.tap(swatchOf(kCardPage, violet));
+      await tester.pump();
+      await tester.tap(dieOf(kCardPage).at(1));
+      await tester.pump();
+      await tester.tap(swatchOf(kCardPage, green));
+      await tester.pump();
+
+      await tester.tap(find.text('Shuffle'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final CardTable table = tableOf(tester);
+      expect(table.colours, <int>[violet, green]);
+      expect(table.colourOf(0), violet);
+      expect(table.colourOf(1), green);
+      // And a die nobody said anything about is ivory, which is how a table
+      // built without any colours at all comes out.
+      expect(table.colourOf(2), kDiceWhite);
     });
 
     testWidgets('the big button shuffles rather than rolls', (

@@ -29,6 +29,7 @@ class CardScreen extends StatefulWidget {
     required this.dice,
     required this.decks,
     required this.reshuffleAt,
+    this.colours = const <int>[],
   });
 
   /// How many dice a card stands for.
@@ -39,6 +40,11 @@ class CardScreen extends StatefulWidget {
 
   /// The percentage of the shoe left at which it is reshuffled.
   final int reshuffleAt;
+
+  /// What colour each die printed on a card is, one per die, in the order they
+  /// are laid out down the card. Short — empty, for a screen that was opened
+  /// without an opinion about it — and the rest are ivory.
+  final List<int> colours;
 
   @override
   State<CardScreen> createState() => _CardScreenState();
@@ -104,6 +110,7 @@ class _CardScreenState extends State<CardScreen>
         decks: widget.decks,
         reshuffleAt: widget.reshuffleAt,
       ),
+      colours: widget.colours,
     );
   }
 

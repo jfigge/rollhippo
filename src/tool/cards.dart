@@ -15,9 +15,11 @@ import 'package:rollhippo/tray/tray.dart';
 ///
 ///     flutter test tool/cards.dart
 ///
-/// Two images: the position the table starts in, and the same table one draw
-/// later. Everything with a shape to it is exactly what the phone draws; the
-/// pips are real, because they are circles rather than glyphs.
+/// Three images: the position the table starts in, the same table one draw
+/// later, and that card with its two dice printed in two of the picker's
+/// colours — which is the whole of what the card panel's swatches do. Everything with a shape
+/// to it is exactly what the phone draws; the pips are real, because they are
+/// circles rather than glyphs.
 const double _kOutputScale = 2;
 
 void main() {
@@ -27,15 +29,33 @@ void main() {
   test('the card table, before and after a draw', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
 
-    final CardTable table = CardTable(
+    // One deck, looked at through three tables: the shoe is what it is, and
+    // the colour is only how the dice on a card are printed. Sharing it means
+    // the coloured picture is the same card as the ivory one, so the two can
+    // be held up against each other.
+    final Deck deck = Deck(
+      dice: 2,
+      decks: 2,
+      reshuffleAt: 5,
+      random: math.Random(4),
+    );
+    CardTable table({List<int> colours = const <int>[]}) => CardTable(
       width: kHarnessScreen.width / Tuning.logicalPixelsPerMetre,
       height: kHarnessScreen.height / Tuning.logicalPixelsPerMetre,
-      deck: Deck(dice: 2, decks: 2, reshuffleAt: 5, random: math.Random(4)),
+      deck: deck,
+      colours: colours,
     );
 
-    await _write('$dir/cards-fresh.png', table);
-    table.deck.draw();
-    await _write('$dir/cards-drawn.png', table);
+    await _write('$dir/cards-fresh.png', table());
+    deck.draw();
+    await _write('$dir/cards-drawn.png', table());
+    // Two colours, because they are chosen a die at a time: the top die of the
+    // card is the first of them and the one below it the second, which is also
+    // the only thing on a card that says which die is which.
+    await _write(
+      '$dir/cards-colour.png',
+      table(colours: <int>[kDicePalette[5], kDicePalette[2]]),
+    );
   });
 }
 

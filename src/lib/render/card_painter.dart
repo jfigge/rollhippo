@@ -8,25 +8,45 @@ import '../cards/deck.dart';
 import '../tray/tray.dart';
 import 'tray_painter.dart';
 
-/// The face of a card, and the ink the dice on it are printed in.
-const Color _cardStock = Color(0xFFF6F2E8);
-const Color _cardInk = Color(0xFF20242B);
+/// The stock a card is printed on. What the dice on it are printed in is not a
+/// constant — it is whatever colour was chosen for them, and the ink follows
+/// the body the way it does on a real die. See [DieStyle.of].
+const Color _cardStock = Color(0xFFF5ECD9);
 
-/// The back. The blue everything chosen in this app is drawn in, so a pile of
-/// cards belongs to the same object as a kept die and a selected slot.
-const Color _cardBack = Color(0xFF3F6FA8);
-const Color _cardBackDeep = Color(0xFF2F5581);
-const Color _cardBackInk = Color(0xFF6E9AD0);
-
-/// The face's border, and the rule inside it. The blue pair with its hue turned
-/// round — same saturation, same lightness, 213° become 4° — so the two sides of
-/// a card are the same printing in two inks rather than two different designs.
+/// The outline around a printed die: how wide it is as a fraction of the die,
+/// and how solid it is as a fraction of that die's own ink.
 ///
-/// Red because the face is the side that says something. The pile it is lying
-/// against is blue and so is everything else chosen in this app, and a dealt
-/// card wants to be the one thing on the glass that is not.
-const Color _cardFaceBorder = Color(0xFFA8463F);
-const Color _cardFaceInk = Color(0xFFD0756E);
+/// There is one at all because the palette's ivory on this card's cream stock
+/// is two shades of the same thing: without a rule around it a white die is a
+/// square that is not quite there. Faint, because on any of the other seven
+/// colours the body already draws its own edge and a full-strength line would
+/// read as a frame somebody put round it.
+const double _kDieOutlineWidth = 0.045;
+const double _kDieOutline = 0.35;
+
+/// The back: navy stock, printed in gold.
+///
+/// Two navies rather than one, because a card back that is a single flat
+/// colour reads as a hole cut in the picture. They run corner to corner — the
+/// lighter one at the top left, where the light in this tray comes from — so
+/// the top of the pile catches it the way the dice standing next to it do.
+const Color _cardBack = Color(0xFF1E2946);
+const Color _cardBackDeep = Color(0xFF13192C);
+
+/// The ink the back is printed in, and the deeper gold of the one thing on it
+/// that is filled rather than drawn.
+const Color _cardGold = Color(0xFFC1945A);
+const Color _cardGoldDeep = Color(0xFFA88355);
+
+/// The gold the face is ruled in.
+///
+/// The same gold as the back, a shade warmer. A gold mixed to read against
+/// navy goes pale on cream — there is no more contrast left above it, only
+/// less — so the one that keeps its weight on this stock is the one with more
+/// red in it. Held to the same lightness, because the two sides of a card are
+/// one printing in two inks and a face ruled in a visibly *darker* gold would
+/// be two designs.
+const Color _cardFaceGold = Color(0xFFC9924F);
 
 /// How much of the tray's depth the pile is allowed to take up.
 const double _maxPileDepth = 0.45;
@@ -34,9 +54,34 @@ const double _maxPileDepth = 0.45;
 /// A card's corner radius, as a fraction of its width.
 const double _kCorner = 0.06;
 
-/// The blue border, as a fraction of a card's width. Both faces of a card carry
-/// it, so it lives out here rather than twice over.
-const double _kBorder = 0.055;
+/// The rule and the four corners, as fractions of a card's width.
+///
+/// One set of numbers rather than two, because both sides of a card carry
+/// them: [_kRuleInset] is how far inside the edge the rule runs, [_kRuleLine]
+/// how heavy every line on either side is, and [_kCornerInset] with
+/// [_kCornerPip] place and size the small diamond at each corner — that far in
+/// from *both* edges, which is the same distance in millimetres at the top as
+/// at the side and is what makes the four of them read as one border rather
+/// than as four marks that happen to be near the corners.
+const double _kRuleInset = 0.025;
+const double _kRuleLine = 0.007;
+const double _kCornerInset = 0.090;
+const double _kCornerPip = 0.036;
+
+/// The back's own middle: the outlined diamond, and the filled one inside it.
+/// The face has nothing there because the dice go there.
+const double _kBackDiamond = 0.174;
+const double _kBackPip = 0.079;
+
+/// How far in from the edge the printed dice keep, as a fraction of a card's
+/// width.
+///
+/// Twice the rule's inset, so the rule reads as a border drawn round them
+/// rather than as a line they are sitting on. It is also what the dice are
+/// *sized* against, which is why it stayed the number the old red border was:
+/// the layout below was settled against it, and the printing round it changing
+/// is no reason for the dice on a three-dice card to change size.
+const double _kFaceMargin = 0.055;
 
 /// How far out of square a hand-shuffled pile stands, as a fraction of its own
 /// height.
@@ -46,8 +91,8 @@ const double _kPileLean = 0.10;
 /// a pile seen this near to head on shows no edge worth the name, so what says
 /// "several" has to be the backs of the ones underneath — and a pale strip of
 /// stock around a card reads as a fringe on it rather than as more cards.
-const Color _cardEdge = Color(0xFF35608F);
-const Color _cardEdgeDark = Color(0xFF24405F);
+const Color _cardEdge = Color(0xFF1B243E);
+const Color _cardEdgeDark = Color(0xFF0D1220);
 
 /// The whole card table: the box, the pile standing in it, and whatever has
 /// been dealt onto the glass.
@@ -71,7 +116,14 @@ void paintCardScene(Canvas canvas, Size size, CardTable table) {
   final PlayingCard? shown = table.deck.shown;
   if (shown != null) {
     _paintShadow(canvas, camera, _drawnY(table), 0);
-    _paintFace(canvas, camera, shown, _drawnY(table), 0);
+    // One style per die, from the same derivation the tray uses on a real one:
+    // the body is what was chosen and the ink is whichever of black and ivory
+    // can be read against it. A card is a printed die, so it is printed the
+    // same way.
+    _paintFace(canvas, camera, shown, _drawnY(table), 0, <DieStyle>[
+      for (int i = 0; i < shown.faces.length; i++)
+        DieStyle.of(table.colourOf(i)),
+    ]);
   }
 }
 
@@ -170,9 +222,13 @@ void _paintPile(Canvas canvas, TrayCamera camera, CardTable table) {
 
 /// The top of the pile: the back of a card.
 ///
-/// A lattice inside a border, which is what the back of a playing card has
-/// looked like since somebody worked out that a plain one shows every crease.
-/// Drawn in the card's own millimetres and scaled into place, so the pattern
+/// Navy, ruled in gold, with a diamond in the middle and a smaller one in each
+/// corner — which is what the back of a playing card has looked like since
+/// somebody worked out that a plain one shows every crease. Nothing here is
+/// asymmetric: a back has to look the same whichever way up the card is dealt,
+/// and a diamond is the shape that manages it about both axes at once.
+///
+/// Drawn in the card's own millimetres and scaled into place, so the design
 /// holds together at whatever size the pile happens to be seen at.
 void _paintBack(
   Canvas canvas,
@@ -187,61 +243,75 @@ void _paintBack(
   canvas.save();
   _intoCard(canvas, camera, x, y, z);
 
+  // y runs up in here, so the corner the light comes from is +y and the far
+  // one is −y. The gradient goes between those two and nowhere near the
+  // Rect's own idea of top and bottom, which is upside down by this point.
   const Rect rect = Rect.fromLTRB(-w / 2, -h / 2, w / 2, h / 2);
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(rect, const Radius.circular(w * _kCorner)),
-    Paint()..color = _cardBack,
+  final RRect card = RRect.fromRectAndRadius(
+    rect,
+    const Radius.circular(w * _kCorner),
   );
-
-  final RRect panel = RRect.fromRectAndRadius(
-    rect.deflate(w * _kBorder),
-    const Radius.circular(w * 0.045),
-  );
-  canvas.drawRRect(panel, Paint()..color = _cardBackDeep);
-
-  canvas.save();
-  canvas.clipRRect(panel);
-  final Paint hatch =
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = w * 0.013
-        ..color = _cardBackInk.withValues(alpha: 0.5);
-  const double reach = w + h;
-  for (double d = -reach; d <= reach; d += w * 0.15) {
-    canvas.drawLine(Offset(d, -reach), Offset(d + 2 * reach, reach), hatch);
-    canvas.drawLine(Offset(d, reach), Offset(d + 2 * reach, -reach), hatch);
-  }
-  canvas.restore();
-
   canvas.drawRRect(
-    panel,
+    card,
     Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.020
-      ..color = _cardBackInk,
+      ..shader = ui.Gradient.linear(
+        const Offset(-w / 2, h / 2),
+        const Offset(w / 2, -h / 2),
+        const <Color>[_cardBack, _cardBackDeep],
+      ),
   );
 
-  // A lozenge in the middle, which is where a card back puts whatever it has
-  // instead of a picture. It also gives the eye somewhere to settle on a
-  // pattern that is otherwise the same everywhere.
-  final Path lozenge =
-      Path()
-        ..moveTo(0, h * 0.15)
-        ..lineTo(w * 0.21, 0)
-        ..lineTo(0, -h * 0.15)
-        ..lineTo(-w * 0.21, 0)
-        ..close();
-  canvas.drawPath(lozenge, Paint()..color = _cardBack);
+  final Paint gold = _rulePaint(_cardGold);
+  _paintRule(canvas, card, gold);
+
+  // And the middle, which is the back's alone: one diamond drawn, one filled
+  // inside it.
+  canvas.drawPath(_diamond(Offset.zero, w * _kBackDiamond), gold);
   canvas.drawPath(
-    lozenge,
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.015
-      ..color = _cardBackInk,
+    _diamond(Offset.zero, w * _kBackPip),
+    Paint()..color = _cardGoldDeep,
   );
 
   canvas.restore();
 }
+
+/// The pen both sides of a card are ruled with, in whichever gold the stock
+/// under it takes.
+Paint _rulePaint(Color gold) =>
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = Tuning.cardWidth * _kRuleLine
+      ..color = gold;
+
+/// The printing both sides of a card share: a rule just inside the edge,
+/// following it round, and a small diamond in each of the four corners.
+///
+/// The rule is deflated by the inset *and* half the line, so the whole stroke
+/// lies inside the card rather than half of it hanging over the edge into
+/// whatever is behind.
+void _paintRule(Canvas canvas, RRect card, Paint gold) {
+  const double w = Tuning.cardWidth;
+  const double h = Tuning.cardHeight;
+  canvas.drawRRect(card.deflate(w * (_kRuleInset + _kRuleLine / 2)), gold);
+
+  final double x = w / 2 - w * _kCornerInset;
+  final double y = h / 2 - w * _kCornerInset;
+  for (final double sx in <double>[-1, 1]) {
+    for (final double sy in <double>[-1, 1]) {
+      canvas.drawPath(_diamond(Offset(sx * x, sy * y), w * _kCornerPip), gold);
+    }
+  }
+}
+
+/// A diamond: a square stood on its corner, [radius] from the middle to each
+/// of the four points.
+Path _diamond(Offset centre, double radius) =>
+    Path()
+      ..moveTo(centre.dx, centre.dy + radius)
+      ..lineTo(centre.dx + radius, centre.dy)
+      ..lineTo(centre.dx, centre.dy - radius)
+      ..lineTo(centre.dx - radius, centre.dy)
+      ..close();
 
 /// Puts the canvas into one card's own frame: millimetres, y running up.
 void _intoCard(Canvas canvas, TrayCamera camera, double x, double y, double z) {
@@ -253,19 +323,18 @@ void _intoCard(Canvas canvas, TrayCamera camera, double x, double y, double z) {
 
 /// A card lying face up, with the roll it stands for printed on it.
 ///
-/// Bordered the way the back is, and for the same reason a printer borders one:
-/// a card that is stock all the way to the corner is a slab of white, and next
-/// to a blue pile it reads as a hole in the picture rather than as the other
-/// side of the same card. The rim and the pale rule inside it are the same
-/// numbers [_paintBack] uses — same inset, same radius, same stroke — and only
-/// the ink is different, so the card the deck deals is visibly the card the
-/// deck is made of.
+/// The same printing as the back — the same rule at the same inset, the same
+/// diamond in each corner, the same weight of line — on cream instead of navy.
+/// That is the whole of what makes a dealt card visibly the card the deck is
+/// made of: turn one over and nothing about the border has moved, only the
+/// ground it is printed on and what is standing in the middle of it.
 void _paintFace(
   Canvas canvas,
   TrayCamera camera,
   PlayingCard card,
   double y,
   double z,
+  List<DieStyle> styles,
 ) {
   const double w = Tuning.cardWidth;
   const double h = Tuning.cardHeight;
@@ -274,34 +343,23 @@ void _paintFace(
   _intoCard(canvas, camera, 0, y, z);
 
   const Rect rect = Rect.fromLTRB(-w / 2, -h / 2, w / 2, h / 2);
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(rect, const Radius.circular(w * _kCorner)),
-    Paint()..color = _cardFaceBorder,
+  final RRect stock = RRect.fromRectAndRadius(
+    rect,
+    const Radius.circular(w * _kCorner),
   );
-
-  const double inset = w * _kBorder;
-  final RRect panel = RRect.fromRectAndRadius(
-    rect.deflate(inset),
-    const Radius.circular(w * 0.045),
-  );
-  canvas.drawRRect(panel, Paint()..color = _cardStock);
-  canvas.drawRRect(
-    panel,
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.020
-      ..color = _cardFaceInk,
-  );
+  canvas.drawRRect(stock, Paint()..color = _cardStock);
+  _paintRule(canvas, stock, _rulePaint(_cardFaceGold));
 
   // One pip square per die, down the card, sized to whichever runs out first —
   // the width of the card with one die on it, or its height with three. Both
-  // measured inside the border rather than across the whole card: three dice
-  // sized against the full height would have the top and bottom ones sitting on
-  // the rule.
+  // measured inside [_kFaceMargin] rather than across the whole card: three
+  // dice sized against the full height would have the top and bottom ones
+  // sitting on the rule.
+  const double margin = w * _kFaceMargin;
   final int count = card.faces.length;
   final double side = math.min(
-    (w - 2 * inset) * 0.62,
-    (h - 2 * inset) / (count + 0.6),
+    (w - 2 * margin) * 0.62,
+    (h - 2 * margin) / (count + 0.6),
   );
   final double pitch = side * 1.16;
   for (int i = 0; i < count; i++) {
@@ -310,21 +368,39 @@ void _paintFace(
       Offset(0, (count - 1) / 2 * pitch - i * pitch),
       side,
       card.faces[i],
+      styles[i],
     );
   }
 
   canvas.restore();
 }
 
-/// One die face on a card: the outline of a die, and the pips it is showing.
-void _paintPipSquare(Canvas canvas, Offset centre, double side, int value) {
+/// One die face on a card: a die in [style]'s colours, and the pips it shows.
+///
+/// Printed flat, without any of the shading a die in the tray gets. There is
+/// no light on a card — it is ink on stock, and a gradient across a square
+/// this size would read as a smudge rather than as a solid.
+void _paintPipSquare(
+  Canvas canvas,
+  Offset centre,
+  double side,
+  int value,
+  DieStyle style,
+) {
   final Rect box = Rect.fromCenter(center: centre, width: side, height: side);
+  final RRect face = RRect.fromRectAndRadius(box, Radius.circular(side * 0.16));
+  final double outline = side * _kDieOutlineWidth;
+  canvas.drawRRect(face, Paint()..color = style.body);
+  // Wholly inside the die rather than across its edge. A stroke centred on the
+  // boundary puts half its width on the stock, and a faint dark line there
+  // comes out pale — a grey halo around a green die, which reads as a gap
+  // between the die and the card rather than as the edge of the die.
   canvas.drawRRect(
-    RRect.fromRectAndRadius(box, Radius.circular(side * 0.16)),
+    face.deflate(outline / 2),
     Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = side * 0.045
-      ..color = _cardInk.withValues(alpha: 0.35),
+      ..strokeWidth = outline
+      ..color = style.ink.withValues(alpha: _kDieOutline),
   );
 
   final List<Offset>? layout = pipLayout(value);
@@ -336,7 +412,7 @@ void _paintPipSquare(Canvas canvas, Offset centre, double side, int value) {
   // into a third of the square they were nearer together than they were wide.
   // The radius follows from the same place, 0.165 of the half-width.
   final double reach = side / 2;
-  final Paint ink = Paint()..color = _cardInk;
+  final Paint ink = Paint()..color = style.ink;
   for (final Offset pip in layout) {
     canvas.drawCircle(
       centre + Offset(pip.dx * reach, pip.dy * reach),

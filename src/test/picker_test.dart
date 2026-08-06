@@ -41,6 +41,18 @@ Future<void> tapRemove(WidgetTester tester) async {
   await tester.pump();
 }
 
+/// The palette swatch for one colour, in one mode's panel — a filled circle,
+/// which is enough to tell it from every other [Container] on the screen.
+///
+/// Both modes have the whole palette in them and both are built at once, so a
+/// swatch has to say which panel it belongs to the way the rack does.
+Finder swatch(Key page, int colour) => find.descendant(
+  of: find.byKey(page),
+  matching: find.byWidgetPredicate(
+    (Widget w) => w is Container && _fillOf(w) == Color(colour),
+  ),
+);
+
 Future<void> tapText(WidgetTester tester, String label) async {
   await tester.tap(find.text(label));
   await tester.pump();
@@ -65,11 +77,7 @@ void main() {
       expect(find.text('Die 2 — D6'), findsOneWidget);
 
       const int red = 0xFFB3453F;
-      await tester.tap(
-        find.byWidgetPredicate(
-          (Widget w) => w is Container && _fillOf(w) == const Color(red),
-        ),
-      );
+      await tester.tap(swatch(kDicePage, red));
       await tester.pump();
 
       expect(rack(tester)[0].colour, kDiceWhite);

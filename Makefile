@@ -52,7 +52,7 @@ picker:  ## Render the picker in both modes, and the six kinds at rack size
 cards:  ## Render the card table: a full shoe, and a card face up on the glass
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && CARDS_OUT=$(SCRATCH) flutter test tool/cards.dart
-	@echo "→ $(SCRATCH)/cards-fresh.png, $(SCRATCH)/cards-drawn.png"
+	@echo "→ $(SCRATCH)/cards-fresh.png, $(SCRATCH)/cards-drawn.png, $(SCRATCH)/cards-colour.png"
 
 clean:  ## Remove build output
 	cd $(SRC) && flutter clean

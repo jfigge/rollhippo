@@ -44,14 +44,14 @@ void main() {
         await tester.tap(find.text('Add a die'));
         await tester.pump();
       } else {
-        await tester.tap(find.byType(DiePreview).at(i));
+        await tester.tap(_dice(find.byType(DiePreview)).at(i));
         await tester.pump();
       }
       await tester.tap(
-        find.text(DieKind.values[i % DieKind.values.length].label),
+        _dice(find.text(DieKind.values[i % DieKind.values.length].label)),
       );
       await tester.pump();
-      await tester.tap(_swatch(kDicePalette[i % kDicePalette.length]));
+      await tester.tap(_dice(_swatch(kDicePalette[i % kDicePalette.length])));
       await tester.pump();
     }
     await tester.pumpAndSettle();
@@ -87,6 +87,16 @@ void main() {
           )
           .at(1),
     );
+    await tester.pumpAndSettle();
+
+    // Two dice in two colours, because ivory is what the card looks like
+    // already and the point of this picture is the swatch row the panel grew —
+    // and that it paints one die of the card at a time, the way the rack does.
+    await tester.tap(_card(_swatch(kDicePalette[5])));
+    await tester.pump();
+    await tester.tap(_card(find.byType(DiePreview)).at(1));
+    await tester.pump();
+    await tester.tap(_card(_swatch(kDicePalette[2])));
     await tester.pumpAndSettle();
 
     await _write(tester, '$dir/picker-cards.png');
@@ -129,6 +139,15 @@ void main() {
     await _write(tester, '$dir/kinds.png', pixelRatio: 4);
   });
 }
+
+/// Whichever of [finder]'s widgets is in one mode's panel. Both modes are built
+/// at once, one screen apart, and both have a rack and a palette — so anything
+/// they share has to say which of them it means.
+Finder _dice(Finder finder) =>
+    find.descendant(of: find.byKey(kDicePage), matching: finder);
+
+Finder _card(Finder finder) =>
+    find.descendant(of: find.byKey(kCardPage), matching: finder);
 
 /// The palette swatch for one colour — a filled circle, which is enough to
 /// tell it from every other [Container] on the screen.

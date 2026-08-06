@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../tray/dice.dart';
 import '../tray/tuning.dart';
 
 /// One card: a single possible outcome of the dice being thrown.
@@ -131,6 +132,7 @@ class CardTable {
     required this.height,
     this.depth = Tuning.trayDepth,
     required this.deck,
+    this.colours = const <int>[],
   });
 
   final double width;
@@ -138,4 +140,20 @@ class CardTable {
   final double depth;
 
   final Deck deck;
+
+  /// What colour each die printed on a card is, packed ARGB and one per die —
+  /// ints rather than `Color`s for the same reason [DieSpec] keeps one, so
+  /// that nothing below the widgets has to know Flutter exists.
+  ///
+  /// They belong to the table rather than to the [Deck], because a deck is the
+  /// combinatorics — which outcomes exist and how many of each — and what ink
+  /// they happen to be printed in is not one of them.
+  ///
+  /// A table can be built without saying, and usually is by the tests and the
+  /// harness; anything this list does not reach is ivory, which is what a die
+  /// is anywhere else in the app. See [colourOf].
+  final List<int> colours;
+
+  /// What the die in position [i] on a card is printed in.
+  int colourOf(int i) => i < colours.length ? colours[i] : kDiceWhite;
 }

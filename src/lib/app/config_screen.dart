@@ -80,9 +80,13 @@ const int kMaxDecks = 3;
 /// The highest cut the shoe can be given, as a percentage left.
 const int kMaxReshuffleAt = 20;
 
-/// What a card-mode die is. There is no choosing: a deck of every outcome only
-/// makes sense for dice that all have the same faces, and the six-sided one is
-/// the die everybody means.
+/// What a card-mode die is before it has been coloured in.
+///
+/// The *kind* is not a choice: a deck of every outcome only makes sense for
+/// dice that all have the same faces, and the six-sided one is the die
+/// everybody means. The colour is one, per die — see
+/// [_ConfigScreenState._cardColours] — and this is where every one of them
+/// starts.
 const DieSpec kCardDie = DieSpec(kind: DieKind.d6, colour: kDiceWhite);
 
 /// The band the page dots sit in, kept the same in both modes so that the
@@ -189,10 +193,30 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   bool get _cards => _mode == ConfigMode.cards;
 
-  /// How many dice a card stands for, and what the shoe is made of.
-  int _cardDice = 2;
+  /// What is printed on a card: one colour per die, in the order they are laid
+  /// out down the card.
+  ///
+  /// The list *is* the dice — there is no separate count, because a card with
+  /// two dice on it is a card with two colours on it and two numbers that
+  /// would have to be kept in step. Only the colours vary: every one of them
+  /// is a D6, since a deck of every outcome only makes sense for dice that all
+  /// have the same faces.
+  final List<int> _cardColours = <int>[kCardDie.colour, kCardDie.colour];
+
+  /// Which of them the swatches are pointed at, exactly as [_selectedIn] does
+  /// for a group of real dice. Card mode always has at least one die, so this
+  /// always names a real one.
+  int _cardSelected = 0;
+
+  /// What the shoe is made of.
   int _decks = 2;
   int _reshuffleAt = 5;
+
+  /// How many dice a card stands for.
+  int get _cardDice => _cardColours.length;
+
+  /// The die in slot [i] of the card: a D6 in whatever colour it was given.
+  DieSpec _cardSpec(int i) => kCardDie.copyWith(colour: _cardColours[i]);
 
   /// The group on screen. Everything below the rack is about this one.
   List<DieSpec> get _dice => _groups[_group];
@@ -210,8 +234,42 @@ class _ConfigScreenState extends State<ConfigScreen>
     super.dispose();
   }
 
-  void _setCardDice(int count) =>
-      setState(() => _cardDice = count.clamp(1, kMaxCardDice));
+  /// Adds a die to the card, matching the one before it and arriving selected.
+  ///
+  /// The same bargain [_add] makes in dice mode, for the same two reasons: the
+  /// common thing to want is another of what you already have, and the other
+  /// common thing is for it to be different.
+  void _addCardDie() {
+    if (_cardDice >= kMaxCardDice) return;
+    setState(() {
+      _cardColours.add(_cardColours.last);
+      _cardSelected = _cardColours.length - 1;
+    });
+  }
+
+  /// Takes the selected die off the card.
+  ///
+  /// The selected one rather than the last one, now that there is a selection
+  /// to honour: taking away die two of three has to leave the other two the
+  /// colours they were, not shuffle the third one's colour up into its place.
+  /// One die always stays — a shoe with no dice in it is not a shoe.
+  void _removeCardDie() {
+    if (_cardDice <= 1) return;
+    setState(() {
+      _cardColours.removeAt(_cardSelected);
+      _cardSelected = _cardSelected.clamp(0, _cardColours.length - 1);
+    });
+  }
+
+  void _selectCardDie(int index) => setState(() => _cardSelected = index);
+
+  /// Paints the selected die of the card.
+  ///
+  /// No guard, where [_set] needs one: a group of real dice can be emptied and
+  /// leave its editor talking about nothing, and card mode cannot — the last
+  /// die always stays — so there is always a die here for a swatch to land on.
+  void _setCardColour(int colour) =>
+      setState(() => _cardColours[_cardSelected] = colour);
 
   /// Commits to a mode and lets the block coast the rest of the way there.
   void _goToMode(int index) {
@@ -243,7 +301,7 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   void _add() {
     if (_cards) {
-      _setCardDice(_cardDice + 1);
+      _addCardDie();
       return;
     }
     if (_dice.length >= kMaxDice) return;
@@ -330,6 +388,7 @@ class _ConfigScreenState extends State<ConfigScreen>
                 dice: _cardDice,
                 decks: _decks,
                 reshuffleAt: _reshuffleAt,
+                colours: List<int>.of(_cardColours),
               ),
         ),
       );
@@ -563,13 +622,19 @@ class _ConfigScreenState extends State<ConfigScreen>
                           child:
                               i < kMaxCardDice
                                   ? _RackSlot(
-                                    spec: i < _cardDice ? kCardDie : null,
-                                    selected: false,
-                                    // Not tappable. There is nothing to select
-                                    // — every card-mode die is the same D6 —
-                                    // and Add and Remove do the counting here
-                                    // exactly as they do in dice mode.
-                                    onTap: null,
+                                    spec: i < _cardDice ? _cardSpec(i) : null,
+                                    selected: i == _cardSelected,
+                                    // Tappable, and selected the same way the
+                                    // dice rack is: the swatches below are
+                                    // about one die of the card, and this is
+                                    // where you say which. There is still no
+                                    // kind to choose — every card-mode die is
+                                    // a D6 — so colour is all a tap can lead
+                                    // to here.
+                                    onTap:
+                                        i < _cardDice
+                                            ? () => _selectCardDie(i)
+                                            : null,
                                   )
                                   : const SizedBox.shrink(),
                         ),
@@ -631,13 +696,31 @@ class _ConfigScreenState extends State<ConfigScreen>
                   ),
                 ),
               ),
-              _RemoveButton(
-                onPressed:
-                    _cardDice > 1 ? () => _setCardDice(_cardDice - 1) : null,
-              ),
+              _RemoveButton(onPressed: _cardDice > 1 ? _removeCardDie : null),
             ],
           ),
           const SizedBox(height: 8),
+          // The same swatches the die editor has, in the same place under the
+          // panel's title, doing the same thing to the die the rack above has
+          // a ring round.
+          //
+          // Across the whole panel rather than in the label column the two
+          // rows below keep to: eight of them do not fit beside a label on a
+          // narrow phone, and a swatch row that wrapped there would make this
+          // panel a different height on different handsets.
+          Wrap(
+            spacing: 5,
+            runSpacing: 6,
+            children: <Widget>[
+              for (final int colour in kDicePalette)
+                _Swatch(
+                  colour: colour,
+                  selected: colour == _cardColours[_cardSelected],
+                  onTap: () => _setCardColour(colour),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Row(
             children: <Widget>[
               const SizedBox(width: _kFieldLabel, child: _FieldLabel('Decks')),
