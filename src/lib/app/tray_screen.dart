@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -9,23 +8,15 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../motion/motion.dart';
 import '../render/tray_painter.dart';
 import '../tray/tray.dart';
+import 'chrome.dart';
 import 'haptics.dart';
 import 'page_dots.dart';
 import 'settings.dart';
 
-/// True when a real accelerometer is expected to be present.
-bool get onDevice =>
-    defaultTargetPlatform == TargetPlatform.iOS ||
-    defaultTargetPlatform == TargetPlatform.android;
-
-/// The tray the desktop harness pretends to be — an iPhone 15 Pro, in logical
-/// pixels.
-///
-/// The harness letterboxes to this rather than filling its window, so the tray
-/// it simulates is 64 × 140 mm whatever size the window happens to be. A tray
-/// that changes size with the window is a tray whose feel you cannot compare
-/// against the device.
-const Size kHarnessScreen = Size(393, 852);
+// Everything that imports the tray screen has always got `onDevice` and
+// `kHarnessScreen` from it. They live next door now, so that the card table can
+// have them too, but this is still where they are reached from.
+export 'chrome.dart';
 
 /// How hard a flick has to be to carry the box to the next group on its own,
 /// in screens per second. Below this the box goes wherever it is nearest to.
@@ -356,7 +347,7 @@ class _TrayScreenState extends State<TrayScreen>
         focusNode: _focus,
         autofocus: true,
         onKeyEvent: _handleKey,
-        child: _letterbox(
+        child: letterbox(
           LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final Size size = constraints.biggest;
@@ -423,7 +414,7 @@ class _TrayScreenState extends State<TrayScreen>
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: <Widget>[
-                              _TrayButton(
+                              TrayButton(
                                 label: 'Close',
                                 onTap: () => Navigator.of(context).pop(),
                               ),
@@ -435,7 +426,7 @@ class _TrayScreenState extends State<TrayScreen>
                                     true,
                                   ),
                                 ),
-                              _TrayButton(
+                              TrayButton(
                                 label: 'Throw',
                                 onTap: _throwCurrent,
                                 emphasis: true,
@@ -450,23 +441,6 @@ class _TrayScreenState extends State<TrayScreen>
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-
-  /// On a device the tray *is* the screen. Everywhere else it is pinned to
-  /// [kHarnessScreen] and scaled to fit, so the harness and the phone are
-  /// showing the same tray.
-  Widget _letterbox(Widget child) {
-    if (onDevice) return child;
-    return Center(
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-          width: kHarnessScreen.width,
-          height: kHarnessScreen.height,
-          child: child,
         ),
       ),
     );
@@ -522,34 +496,4 @@ class _ShakePrompt extends StatelessWidget {
 /// Ticks once per simulated frame; the painter listens to it.
 class _FrameNotifier extends ChangeNotifier {
   void tick() => notifyListeners();
-}
-
-class _TrayButton extends StatelessWidget {
-  const _TrayButton({
-    required this.label,
-    required this.onTap,
-    this.emphasis = false,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool emphasis;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onTap,
-      style: TextButton.styleFrom(
-        backgroundColor:
-            emphasis ? const Color(0xE63F6FA8) : const Color(0x33FFFFFF),
-        foregroundColor: const Color(0xFFF2F7FF),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
 }

@@ -121,6 +121,12 @@ void main() {
       lessThan(Tuning.hapticCeiling),
       reason: 'an ordinary throw must leave headroom above it',
     );
+
+    // Cards, for the mode that deals a roll instead of throwing one.
+    expect(Tuning.cardWidth, 0.0445, reason: 'a mini card, and it fits');
+    expect(Tuning.cardHeight, 0.0635);
+    expect(Tuning.cardThickness, 0.00032, reason: 'real card stock');
+    expect(Tuning.cardFloorGap, 0.0157, reason: 'a drawn card, off the floor');
   });
 
   test('a 16 mm acrylic die still weighs what one weighs', () {

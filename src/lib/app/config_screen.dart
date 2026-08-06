@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../cards/deck.dart';
 import '../render/die_preview.dart';
 import '../tray/tray.dart';
+import 'card_screen.dart';
 import 'menu.dart';
 import 'page_dots.dart';
 import 'tray_screen.dart';
@@ -57,6 +59,53 @@ const double kPickerWidth = 440;
 const double _kMenuEdge = kRackEdge - kAppMenuInset;
 
 /// What you get before you have chosen anything.
+/// Which of the two things the picker is setting up.
+///
+/// They are pages of the same screen rather than two screens, because they are
+/// alternatives: whichever one you are looking at is what Roll will do, and a
+/// mode you have to go somewhere else to find is a mode nobody finds.
+enum ConfigMode { dice, cards }
+
+/// The most dice a card can stand for.
+///
+/// Three, because a card carries every outcome of the dice it replaces and
+/// there are six to the power of them: two dice is thirty-six cards, three is
+/// two hundred and sixteen, and four would be a shoe of over a thousand that
+/// nobody would get to the bottom of.
+const int kMaxCardDice = 3;
+
+/// The most copies of the full set that can be shuffled together.
+const int kMaxDecks = 3;
+
+/// The highest cut the shoe can be given, as a percentage left.
+const int kMaxReshuffleAt = 20;
+
+/// What a card-mode die is. There is no choosing: a deck of every outcome only
+/// makes sense for dice that all have the same faces, and the six-sided one is
+/// the die everybody means.
+const DieSpec kCardDie = DieSpec(kind: DieKind.d6, colour: kDiceWhite);
+
+/// The band the page dots sit in, kept the same in both modes so that the
+/// panel underneath does not jump as one slides in over the other.
+const double kDotsBand = 26;
+
+/// The two page controls on the picker, named so that a finger — or a test —
+/// can tell which one it has hold of. One counts the sets of dice, the other
+/// counts the modes.
+const Key kGroupDots = ValueKey<String>('group-dots');
+const Key kModeDots = ValueKey<String>('mode-dots');
+
+/// The two modes' pages. Both are built at all times — the block takes the
+/// taller of them, so neither the panel nor anything under it jumps when a
+/// swipe lands — which means anything looking for a die, or a slider, has to
+/// say which mode's it means.
+const Key kDicePage = ValueKey<String>('dice-page');
+const Key kCardPage = ValueKey<String>('card-page');
+
+/// The cut slider in the card panel. Named because the settings sheet has a
+/// slider too, and the picker is still built underneath it.
+const Key kReshuffleSlider = ValueKey<String>('reshuffle');
+
 const List<DieSpec> kDefaultDice = <DieSpec>[
   DieSpec(kind: DieKind.d6, colour: kDiceWhite),
   DieSpec(kind: DieKind.d6, colour: kDiceWhite),
@@ -106,7 +155,8 @@ class ConfigScreen extends StatefulWidget {
   State<ConfigScreen> createState() => _ConfigScreenState();
 }
 
-class _ConfigScreenState extends State<ConfigScreen> {
+class _ConfigScreenState extends State<ConfigScreen>
+    with SingleTickerProviderStateMixin {
   /// The three sets. The first is the one the app starts with and always has at
   /// least one die in it; the other two begin with none, and are allowed to go
   /// back to none, because an empty group is how you say you only wanted one.
@@ -125,6 +175,25 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   final PageController _racks = PageController();
 
+  /// Where the two modes have got to, dice at 0 and cards at 1. Driven by a
+  /// finger on the panel, and left to coast when the finger lets go.
+  late final AnimationController _slide = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
+
+  /// The mode Roll will act on. Set the moment a swipe is committed to rather
+  /// than when it lands, so the button and the dots agree with the box that is
+  /// on its way in.
+  ConfigMode _mode = ConfigMode.dice;
+
+  bool get _cards => _mode == ConfigMode.cards;
+
+  /// How many dice a card stands for, and what the shoe is made of.
+  int _cardDice = 2;
+  int _decks = 2;
+  int _reshuffleAt = 5;
+
   /// The group on screen. Everything below the rack is about this one.
   List<DieSpec> get _dice => _groups[_group];
 
@@ -136,11 +205,47 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   @override
   void dispose() {
+    _slide.dispose();
     _racks.dispose();
     super.dispose();
   }
 
+  void _setCardDice(int count) =>
+      setState(() => _cardDice = count.clamp(1, kMaxCardDice));
+
+  /// Commits to a mode and lets the block coast the rest of the way there.
+  void _goToMode(int index) {
+    setState(() => _mode = index == 0 ? ConfigMode.dice : ConfigMode.cards);
+    _slide.animateTo(
+      index.toDouble(),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _modeDrag(double delta, double width) =>
+      _slide.value = (_slide.value - delta / width).clamp(0.0, 1.0);
+
+  void _modeDragEnd(double velocity, double width) {
+    // A flick carries it; otherwise a quarter of the way over is far enough to
+    // have meant it. The same bargain the tray's boxes make.
+    final double fling = -velocity / width;
+    final int from = _cards ? 1 : 0;
+    final double moved = _slide.value - from;
+    int to = from;
+    if (fling.abs() > 0.9) {
+      to = from + (fling > 0 ? 1 : -1);
+    } else if (moved.abs() > 0.25) {
+      to = from + (moved > 0 ? 1 : -1);
+    }
+    _goToMode(to.clamp(0, 1));
+  }
+
   void _add() {
+    if (_cards) {
+      _setCardDice(_cardDice + 1);
+      return;
+    }
     if (_dice.length >= kMaxDice) return;
     setState(() {
       // A new die matches the one before it, because the common thing to want
@@ -217,6 +322,19 @@ class _ConfigScreenState extends State<ConfigScreen> {
   );
 
   void _roll() {
+    if (_cards) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder:
+              (BuildContext context) => CardScreen(
+                dice: _cardDice,
+                decks: _decks,
+                reshuffleAt: _reshuffleAt,
+              ),
+        ),
+      );
+      return;
+    }
     final List<List<DieSpec>> groups = rollableGroups(_groups);
     if (groups.isEmpty) return;
     Navigator.of(context).push(
@@ -244,13 +362,11 @@ class _ConfigScreenState extends State<ConfigScreen> {
             child: Column(
               children: <Widget>[
                 _header(),
-                _racksView(),
-                _dots(),
-                // Directly under the rack, so the colours and the shapes read
-                // as belonging to the die you just tapped rather than to the
-                // set. What is left over goes at the bottom, which is where a
-                // gap is worth having: it keeps Roll under your thumb.
-                _editor(),
+                // The rack and the panel below it move together, because they
+                // are one thing: a set of dice and what you do to it, or a
+                // shoe of cards and what it is made of.
+                _block(),
+                _modeDots(),
                 const Spacer(),
                 _buttons(),
               ],
@@ -297,14 +413,23 @@ class _ConfigScreenState extends State<ConfigScreen> {
             padding: const EdgeInsets.only(left: kRackEdge),
             child: Row(
               children: <Widget>[
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Tap a die to change it. Swipe for another set.',
-                    style: TextStyle(color: Color(0x99BFD0E4), fontSize: 13),
+                    _cards
+                        ? 'A card for every roll. Swipe back for dice.'
+                        : 'Tap a die to change it. Swipe for another set.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0x99BFD0E4),
+                      fontSize: 13,
+                    ),
                   ),
                 ),
                 Text(
-                  '${_dice.length} / $kMaxDice',
+                  _cards
+                      ? '$_cardDice / $kMaxCardDice'
+                      : '${_dice.length} / $kMaxDice',
                   style: const TextStyle(
                     color: Color(0x99BFD0E4),
                     fontSize: 13,
@@ -313,6 +438,265 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The two modes, side by side, one of them on screen.
+  ///
+  /// A [Stack] rather than another [PageView]: the two pages are different
+  /// heights — one has a row of page dots in it and a card of swatches, the
+  /// other has neither — and a stack takes the taller of them without anyone
+  /// having to work out in advance which that is. What slides is a transform,
+  /// which costs no layout at all.
+  ///
+  /// The gesture is on the panel and nowhere else. The rack has a page view of
+  /// its own for the three sets, and a sideways drag that starts there belongs
+  /// to that; one that starts on the panel belongs to this.
+  Widget _block() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double width = constraints.maxWidth;
+        return ClipRect(
+          child: AnimatedBuilder(
+            animation: _slide,
+            builder:
+                (BuildContext context, Widget? child) => Stack(
+                  children: <Widget>[
+                    for (int page = 0; page < 2; page++)
+                      Transform.translate(
+                        offset: Offset((page - _slide.value) * width, 0),
+                        child: SizedBox(
+                          key: page == 0 ? kDicePage : kCardPage,
+                          width: width,
+                          child:
+                              page == 0 ? _dicePage(width) : _cardsPage(width),
+                        ),
+                      ),
+                  ],
+                ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _dicePage(double width) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      _racksView(),
+      _dots(),
+      // Directly under the rack, so the colours and the shapes read as
+      // belonging to the die you just tapped rather than to the set.
+      _swipeable(_editor(), width),
+    ],
+  );
+
+  Widget _cardsPage(double width) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      _cardRack(),
+      // Empty, but exactly as tall as the dots the other mode has there, so
+      // the two panels sit at the same height as one slides over the other.
+      const SizedBox(height: kDotsBand),
+      _swipeable(_cardPanel(), width),
+    ],
+  );
+
+  /// Arms [child] as the handle the two modes are dragged by.
+  Widget _swipeable(Widget child, double width) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onHorizontalDragUpdate:
+        (DragUpdateDetails d) => _modeDrag(d.delta.dx, width),
+    onHorizontalDragEnd:
+        (DragEndDetails d) =>
+            _modeDragEnd(d.velocity.pixelsPerSecond.dx, width),
+    child: child,
+  );
+
+  /// Which mode you are in, under the block that holds it.
+  ///
+  /// Outside the block rather than in it, because it is the one thing on the
+  /// screen that is about both modes and so the one thing that should not
+  /// slide when they do.
+  Widget _modeDots() => Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Center(
+      child: PageDots(
+        key: kModeDots,
+        current: _cards ? 1 : 0,
+        filled: const <bool>[true, true],
+        onTap: _goToMode,
+      ),
+    ),
+  );
+
+  /// The rack, in card mode: three slots where there were ten.
+  ///
+  /// The other seven are not drawn, but their space is still there — the rack
+  /// is the same size in both modes, so swapping between them moves nothing
+  /// but the slots themselves.
+  Widget _cardRack() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: kRackMargin),
+      child: Column(
+        children: <Widget>[
+          for (int row = 0; row * kRackColumns < kMaxDice; row++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: kRackRowGap),
+              child: Row(
+                children: <Widget>[
+                  for (
+                    int i = row * kRackColumns;
+                    i < (row + 1) * kRackColumns;
+                    i++
+                  )
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: kRackGutter,
+                        ),
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child:
+                              i < kMaxCardDice
+                                  ? _RackSlot(
+                                    spec: i < _cardDice ? kCardDie : null,
+                                    selected: false,
+                                    // Not tappable. There is nothing to select
+                                    // — every card-mode die is the same D6 —
+                                    // and Add and Remove do the counting here
+                                    // exactly as they do in dice mode.
+                                    onTap: null,
+                                  )
+                                  : const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// What the shoe is made of: how many decks are in it, and how deep it is
+  /// cut before it goes back together.
+  Widget _cardPanel() {
+    final int size = Deck.build(_cardDice, _decks).length;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141A23),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0x14FFFFFF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              // The title sits in the label column and the count starts where
+              // the first deck button does, so the panel reads as two columns
+              // rather than as three rows that happen to be stacked.
+              const SizedBox(
+                width: _kFieldLabel,
+                child: Text(
+                  'Cards',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFFE8EEF6),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: _kChipMargin),
+                  child: Text(
+                    '($size in the shoe)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xAABFD0E4),
+                      fontSize: 13,
+                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ),
+              _RemoveButton(
+                onPressed:
+                    _cardDice > 1 ? () => _setCardDice(_cardDice - 1) : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              const SizedBox(width: _kFieldLabel, child: _FieldLabel('Decks')),
+              for (int n = 1; n <= kMaxDecks; n++)
+                Expanded(
+                  child: _Chip(
+                    label: '$n',
+                    selected: n == _decks,
+                    onTap: () => setState(() => _decks = n),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              const SizedBox(
+                width: _kFieldLabel,
+                child: _FieldLabel('Reshuffle'),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 14,
+                    ),
+                  ),
+                  child: Slider(
+                    key: kReshuffleSlider,
+                    value: _reshuffleAt.toDouble(),
+                    max: kMaxReshuffleAt.toDouble(),
+                    divisions: kMaxReshuffleAt,
+                    activeColor: const Color(0xFF3F6FA8),
+                    inactiveColor: const Color(0x22FFFFFF),
+                    onChanged:
+                        (double v) => setState(() => _reshuffleAt = v.round()),
+                  ),
+                ),
+              ),
+              SizedBox(
+                // Wide enough for the longest it gets, which is "<20%".
+                width: 46,
+                child: Text(
+                  // Below this much left, not above it: the shoe goes back
+                  // together when it is nearly out, and a bare number does not
+                  // say which way round that is.
+                  '<$_reshuffleAt%',
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Color(0xFFE8EEF6),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -409,10 +793,11 @@ class _ConfigScreenState extends State<ConfigScreen> {
   /// it belongs to the group you are on and swipes with it, everything below is
   /// about one die and stays put.
   Widget _dots() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+    return SizedBox(
+      height: kDotsBand,
       child: Center(
         child: PageDots(
+          key: kGroupDots,
           current: _group,
           filled: <bool>[
             for (final List<DieSpec> group in _groups) group.isNotEmpty,
@@ -469,17 +854,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   ),
                 ),
               ),
-              TextButton.icon(
+              _RemoveButton(
                 onPressed: _dice.length > _floor ? _removeSelected : null,
-                icon: const Icon(Icons.close, size: 16),
-                label: const Text('Remove'),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xAABFD0E4),
-                  disabledForegroundColor: const Color(0x33BFD0E4),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(fontSize: 13),
-                ),
               ),
             ],
           ),
@@ -511,8 +887,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     children: <Widget>[
                       for (final DieKind kind in DieKind.values)
                         Expanded(
-                          child: _KindChip(
-                            kind: kind,
+                          child: _Chip(
+                            label: kind.label,
                             selected: !empty && kind == spec.kind,
                             onTap: () => _set(spec.copyWith(kind: kind)),
                           ),
@@ -529,8 +905,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
   }
 
   Widget _buttons() {
-    final bool room = _dice.length < kMaxDice;
-    final bool anything = _groups.any((List<DieSpec> g) => g.isNotEmpty);
+    final bool room =
+        _cards ? _cardDice < kMaxCardDice : _dice.length < kMaxDice;
+    final bool anything =
+        _cards || _groups.any((List<DieSpec> g) => g.isNotEmpty);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Row(
@@ -570,9 +948,15 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              child: const Text(
-                'Roll',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              // Card mode does not throw anything. What the button does there
+              // is put a shoe together and hand it to you face down, which is
+              // a shuffle and reads as one.
+              child: Text(
+                _cards ? 'Shuffle' : 'Roll',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -666,14 +1050,62 @@ class _Swatch extends StatelessWidget {
   }
 }
 
-class _KindChip extends StatelessWidget {
-  const _KindChip({
-    required this.kind,
+/// How wide a field's name is in the card panel. One column, so the decks and
+/// the cut line up with each other rather than each starting where its own
+/// label happens to end.
+const double _kFieldLabel = 74;
+
+/// The gutter each chip keeps to either side of itself.
+const double _kChipMargin = 2;
+
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    // One line whatever happens. A label that wraps takes the field beside it
+    // down the screen with it, and the two fields would stop lining up.
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: const TextStyle(color: Color(0xAABFD0E4), fontSize: 13),
+  );
+}
+
+/// Takes one die away. The same control in both modes, because taking a die
+/// out of a set and taking one off a card are the same thing to look at.
+class _RemoveButton extends StatelessWidget {
+  const _RemoveButton({required this.onPressed});
+
+  /// Null when there is nothing left to remove.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+    onPressed: onPressed,
+    icon: const Icon(Icons.close, size: 16),
+    label: const Text('Remove'),
+    style: TextButton.styleFrom(
+      foregroundColor: const Color(0xAABFD0E4),
+      disabledForegroundColor: const Color(0x33BFD0E4),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      visualDensity: VisualDensity.compact,
+      textStyle: const TextStyle(fontSize: 13),
+    ),
+  );
+}
+
+/// One of a row of choices — a kind of die, or a number of decks.
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.label,
     required this.selected,
     required this.onTap,
   });
 
-  final DieKind kind;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
 
@@ -684,14 +1116,14 @@ class _KindChip extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Container(
         height: 36,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
+        margin: const EdgeInsets.symmetric(horizontal: _kChipMargin),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? const Color(0xFF3F6FA8) : const Color(0x14FFFFFF),
           borderRadius: BorderRadius.circular(9),
         ),
         child: Text(
-          kind.label,
+          label,
           style: TextStyle(
             color: selected ? const Color(0xFFF2F7FF) : const Color(0xAABFD0E4),
             fontSize: 13,

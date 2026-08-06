@@ -178,7 +178,14 @@ void paintTrayScene(Canvas canvas, Size size, DiceTray tray) {
   // that what is lit is the thing you are being asked to read.
   final double dim = tray.readout.progress * _readoutDim;
 
-  _paintBox(canvas, camera, tray, dim);
+  paintTrayBox(
+    canvas,
+    camera,
+    width: tray.width,
+    height: tray.height,
+    depth: tray.depth,
+    dim: dim,
+  );
   for (final RigidBody die in tray.dice) {
     _paintShadow(canvas, camera, tray, die, dim);
   }
@@ -322,10 +329,22 @@ class TrayPagesPainter extends CustomPainter {
   bool shouldRepaint(TrayPagesPainter oldDelegate) => true;
 }
 
-void _paintBox(Canvas canvas, TrayCamera camera, DiceTray tray, double dim) {
-  final double w = tray.width / 2;
-  final double h = tray.height / 2;
-  final double d = tray.depth;
+/// The box itself: the back wall and the four sides, and nothing in it.
+///
+/// Taken by its measurements rather than by a [DiceTray], because the card
+/// table is the same box with no dice in it and there is no sense in it
+/// carrying a physics world around to be drawn.
+void paintTrayBox(
+  Canvas canvas,
+  TrayCamera camera, {
+  required double width,
+  required double height,
+  required double depth,
+  double dim = 0,
+}) {
+  final double w = width / 2;
+  final double h = height / 2;
+  final double d = depth;
 
   Offset front(int i) =>
       camera.project(Vector3((i == 0 || i == 3) ? -w : w, (i < 2) ? h : -h, 0));

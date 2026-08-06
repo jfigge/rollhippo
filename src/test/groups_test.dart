@@ -25,6 +25,11 @@ List<DieSpec> rackOf(WidgetTester tester, int group) => <DieSpec>[
 ];
 
 PageDots dotsOf(WidgetTester tester) =>
+    tester.widget<PageDots>(find.byKey(kGroupDots));
+
+/// The tray's own dots, which say which box you are looking at. The only page
+/// control on that screen, so it needs no name.
+PageDots trayDotsOf(WidgetTester tester) =>
     tester.widget<PageDots>(find.byType(PageDots));
 
 /// Swipes the rack one group to the left, and lets the page view land.
@@ -39,16 +44,28 @@ Future<void> tapText(WidgetTester tester, String label) async {
   await tester.pump();
 }
 
+/// The dice panel's Remove. Card mode is built at the same time, one screen to
+/// the side, and it has a Remove of its own.
+final Finder diceRemove = find.descendant(
+  of: find.byKey(kDicePage),
+  matching: find.text('Remove'),
+);
+
+Future<void> tapRemove(WidgetTester tester) async {
+  await tester.tap(diceRemove);
+  await tester.pump();
+}
+
 /// Whether the button carrying [label] can be pressed at all.
 ///
 /// By base class rather than by type: `TextButton.icon` hands back a private
 /// subclass, which `find.byType` — being exact about runtime types — does not
 /// match.
-bool enabled(WidgetTester tester, String label) =>
+bool enabled(WidgetTester tester, Finder label) =>
     tester
         .widget<ButtonStyleButton>(
           find.ancestor(
-            of: find.text(label),
+            of: label,
             matching: find.byWidgetPredicate(
               (Widget widget) => widget is ButtonStyleButton,
             ),
@@ -81,7 +98,7 @@ void main() {
       expect(rackOf(tester, 1), isEmpty);
       // The editor is still exactly where it was, saying so.
       expect(find.text(kEmptyEditor), findsOneWidget);
-      expect(enabled(tester, 'Remove'), isFalse);
+      expect(enabled(tester, diceRemove), isFalse);
       expect(find.text('0 / $kMaxDice'), findsOneWidget);
     });
 
@@ -99,8 +116,8 @@ void main() {
       expect(rackOf(tester, 1).single.colour, kDiceWhite);
 
       // Unlike the first group, this one is allowed to go back to nothing.
-      expect(enabled(tester, 'Remove'), isTrue);
-      await tapText(tester, 'Remove');
+      expect(enabled(tester, diceRemove), isTrue);
+      await tapRemove(tester);
       expect(rackOf(tester, 1), isEmpty);
       expect(dotsOf(tester).filled, <bool>[true, false, false]);
       expect(find.text(kEmptyEditor), findsOneWidget);
@@ -110,10 +127,10 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tapText(tester, 'Remove');
+      await tapRemove(tester);
 
       expect(rackOf(tester, 0).length, 1);
-      expect(enabled(tester, 'Remove'), isFalse);
+      expect(enabled(tester, diceRemove), isFalse);
       expect(dotsOf(tester).filled.first, isTrue);
     });
 
@@ -219,13 +236,13 @@ void main() {
         await open(tester, 2);
         await run(tester, 4);
 
-        expect(dotsOf(tester).current, 0);
+        expect(trayDotsOf(tester).current, 0);
         expect(find.text(kPrompt), findsNothing);
 
         await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));
         await run(tester, 1);
 
-        expect(dotsOf(tester).current, 1);
+        expect(trayDotsOf(tester).current, 1);
         expect(
           find.text(kPrompt),
           findsOneWidget,
@@ -251,7 +268,11 @@ void main() {
       await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));
       await run(tester, 1);
 
-      expect(dotsOf(tester).current, 0, reason: 'a roll in flight swiped away');
+      expect(
+        trayDotsOf(tester).current,
+        0,
+        reason: 'a roll in flight swiped away',
+      );
     }, variant: harness);
   });
 

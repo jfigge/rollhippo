@@ -68,6 +68,30 @@ void main() {
     await _write(tester, '$dir/picker-empty.png');
   });
 
+  testWidgets('the picker in card mode', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(kHarnessScreen);
+    tester.view.physicalSize = kHarnessScreen * 2;
+    tester.view.devicePixelRatio = 2.0;
+
+    await tester.pumpWidget(
+      const RepaintBoundary(child: MaterialApp(home: ConfigScreen())),
+    );
+
+    // The second mode dot, which is the same place a swipe on the panel gets
+    // you and a great deal easier to aim at from a script.
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byKey(kModeDots),
+            matching: find.byType(GestureDetector),
+          )
+          .at(1),
+    );
+    await tester.pumpAndSettle();
+
+    await _write(tester, '$dir/picker-cards.png');
+  });
+
   testWidgets('the six kinds at rack size', (WidgetTester tester) async {
     const double slot = 72;
     await tester.binding.setSurfaceSize(

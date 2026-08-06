@@ -7,7 +7,7 @@ DEVICE   ?= 00008110-000414C63A51401E   # Jason's iPhone
 SCRATCH  ?= /tmp/rollhippo
 
 .DEFAULT_GOAL := help
-.PHONY: help all format analyze test desktop ios gif filmstrip picker clean
+.PHONY: help all format analyze test desktop ios gif filmstrip picker cards clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -44,10 +44,15 @@ filmstrip:  ## Render a scripted roll to a contact sheet
 	cd $(SRC) && FILMSTRIP_OUT=$(SCRATCH)/filmstrip.png flutter test tool/filmstrip.dart
 	@echo "→ $(SCRATCH)/filmstrip.png"
 
-picker:  ## Render the dice picker, an empty group, and the six kinds at rack size
+picker:  ## Render the picker in both modes, and the six kinds at rack size
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && PICKER_OUT=$(SCRATCH) flutter test tool/picker.dart
-	@echo "→ $(SCRATCH)/picker.png, $(SCRATCH)/picker-empty.png, $(SCRATCH)/kinds.png"
+	@echo "→ $(SCRATCH)/picker*.png, $(SCRATCH)/kinds.png"
+
+cards:  ## Render the card table: a full shoe, and a card face up on the glass
+	@mkdir -p $(SCRATCH)
+	cd $(SRC) && CARDS_OUT=$(SCRATCH) flutter test tool/cards.dart
+	@echo "→ $(SCRATCH)/cards-fresh.png, $(SCRATCH)/cards-drawn.png"
 
 clean:  ## Remove build output
 	cd $(SRC) && flutter clean

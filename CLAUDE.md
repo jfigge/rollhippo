@@ -40,8 +40,9 @@ Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
 src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue) · share_code (the QR payload)
 src/lib/motion/    MotionSource — the sensors, and a synthetic phone for the harness
-src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · DiePreview (one die, held still)
-src/lib/app/       ConfigScreen (the rack) · TrayScreen (throw them) · PageDots
+src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable
+src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
+src/lib/app/       ConfigScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
                    haptics (HapticEngine + HapticDriver) · settings (the one stored preference)
 src/test/          headless
@@ -124,6 +125,16 @@ test exists to make the change deliberate, not to make it hard.
   nobody has thrown yet, which is fed `MotionFrame.still` off-screen until it
   sleeps so its dice are lying on the floor by the time you reach them. Anything
   that assumes every tray advances every frame will be wrong.
+- **A deck is every *ordered* outcome, six to the power of the dice.** 1-2 and
+  2-1 are two ways for a pair to land, and a deck holding each unordered pair
+  once would quietly halve the odds of every double. `Deck.build` counts in base
+  six for exactly that reason. It differs from rolling in the one way a shoe
+  always does — it is drawn without replacement — which is what `reshuffleAt`,
+  `Deck.cut` and `Deck.spent` are about.
+- **The card pile is life-sized until it cannot be.** Three dice across three
+  decks is 648 cards, and at real 0.32 mm stock that pile is deeper than the
+  tray — it would come out through the glass. `_maxPileDepth` in
+  `card_painter.dart` is where it stops being a measurement.
 - **A held die is a static body, not a sleeping one.** `RigidBody.held` takes
   `invMass` and the world-space inverse inertia to zero, and that is the whole
   mechanism: the solver's effective mass along a contact axis goes to infinity,

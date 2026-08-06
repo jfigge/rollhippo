@@ -10,13 +10,34 @@ import 'package:vector_math/vector_math_64.dart'
 /// The dice the rack is showing, left to right, top row then bottom.
 List<DieSpec> rack(WidgetTester tester) => <DieSpec>[
   for (final DiePreview preview in tester.widgetList<DiePreview>(
-    find.byType(DiePreview),
+    // Scoped to dice mode. Card mode is built at the same time, one screen to
+    // the side, and it has dice of its own in it.
+    find.descendant(
+      of: find.byKey(kDicePage),
+      matching: find.byType(DiePreview),
+    ),
   ))
     preview.spec,
 ];
 
 Future<void> tapDie(WidgetTester tester, int index) async {
-  await tester.tap(find.byType(DiePreview).at(index));
+  await tester.tap(
+    find
+        .descendant(
+          of: find.byKey(kDicePage),
+          matching: find.byType(DiePreview),
+        )
+        .at(index),
+  );
+  await tester.pump();
+}
+
+/// The dice panel's Remove — card mode, built one screen to the side, has one
+/// of its own.
+Future<void> tapRemove(WidgetTester tester) async {
+  await tester.tap(
+    find.descendant(of: find.byKey(kDicePage), matching: find.text('Remove')),
+  );
   await tester.pump();
 }
 
@@ -100,13 +121,13 @@ void main() {
     ) async {
       await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
       await tapDie(tester, 1);
-      await tapText(tester, 'Remove');
+      await tapRemove(tester);
 
       expect(rack(tester).length, 1);
       expect(find.text('Die 1 — D6'), findsOneWidget);
 
       // The last die is the set, and cannot be taken away.
-      await tapText(tester, 'Remove');
+      await tapRemove(tester);
       expect(rack(tester).length, 1);
     });
   });

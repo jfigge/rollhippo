@@ -41,10 +41,14 @@ class PageDots extends StatelessWidget {
           GestureDetector(
             onTap: onTap == null ? null : () => onTap(i),
             behavior: HitTestBehavior.opaque,
-            // The dot is 7 across and the target is 24, because a dot big
-            // enough to hit comfortably is a dot too big to be punctuation.
+            // The dot is 7 across and the target is bigger than it, because
+            // a dot big enough to hit comfortably is a dot too big to be
+            // punctuation. The target is wider than the dot by 11 rather than
+            // the 17 it started at: three dots set that far apart read as one
+            // piece of punctuation instead of three, and the full 24 of height
+            // is still there to be hit.
             child: SizedBox(
-              width: 24,
+              width: 18,
               height: 24,
               child: Center(
                 child: Container(

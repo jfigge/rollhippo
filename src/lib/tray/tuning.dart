@@ -204,4 +204,30 @@ class Tuning {
   /// second, which is below the solver's own resting threshold — so everything
   /// the physics is willing to call an impact at all is felt.
   static const double hapticMaxGain = 3.0;
+
+  /// A mini playing card — 44.5 × 63.5 mm, and the 0.32 mm of stock a real one
+  /// is printed on.
+  ///
+  /// Mini rather than poker size for the same reason the dice are 16 mm: it is
+  /// a real thing, and it is the real thing that fits. A 63 mm poker card in a
+  /// 64 mm tray would touch both walls.
+  static const double cardWidth = 0.0445;
+  static const double cardHeight = 0.0635;
+  static const double cardThickness = 0.00032;
+
+  /// How far a drawn card is lifted off the floor of the tray.
+  ///
+  /// The only number either card position needs. The pile stands in the middle
+  /// of the back wall and a drawn card lies along the bottom of the glass, and
+  /// both of those come out of the tray's own measurements — a height that
+  /// looked right on one phone would be somewhere else on another.
+  ///
+  /// A fifth of a card clear of the floor rather than the three millimetres of
+  /// clearance it started as. Three was enough to stop the card looking cut off
+  /// by the bottom edge and no more, which left it sitting on the very bottom
+  /// of the glass with the whole pile stacked above it; carried up by a fifth
+  /// of its own height the card sits where a dealt card sits, in the near half
+  /// of the table with the deck behind and above it, and it still covers only
+  /// the bottom of the pile.
+  static const double cardFloorGap = 0.0157;
 }

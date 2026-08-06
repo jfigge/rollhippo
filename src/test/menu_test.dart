@@ -34,7 +34,14 @@ Future<void> swipeLeft(WidgetTester tester) async {
 }
 
 PageDots dotsOf(WidgetTester tester) =>
-    tester.widget<PageDots>(find.byType(PageDots));
+    tester.widget<PageDots>(find.byKey(kGroupDots));
+
+/// The calibration slider, which is the one inside the sheet — the picker
+/// underneath it has a slider of its own for the cut in card mode.
+final Finder gainSlider = find.descendant(
+  of: find.byType(BottomSheet),
+  matching: find.byType(Slider),
+);
 
 Future<void> openMenu(WidgetTester tester) async {
   await tester.tap(find.byIcon(Icons.menu));
@@ -180,7 +187,7 @@ void main() {
       // All the way to the left is off, which is the setting that has to work
       // whatever else does: it is how someone who dislikes the whole feature
       // turns it off.
-      await tester.drag(find.byType(Slider), const Offset(-500, 0));
+      await tester.drag(gainSlider, const Offset(-500, 0));
       await tester.pumpAndSettle();
       expect(settings.hapticGain, 0.0);
       expect(find.text('Off'), findsOneWidget);
@@ -188,7 +195,7 @@ void main() {
 
       // And all the way to the right is the top of the scale rather than
       // wherever the drag happened to land.
-      await tester.drag(find.byType(Slider), const Offset(500, 0));
+      await tester.drag(gainSlider, const Offset(500, 0));
       await tester.pumpAndSettle();
       expect(settings.hapticGain, Tuning.hapticMaxGain);
       expect(find.text('300%'), findsOneWidget);
