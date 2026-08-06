@@ -90,7 +90,7 @@ class _TrayScreenState extends State<TrayScreen>
   @override
   void initState() {
     super.initState();
-    _motion = onDevice ? SensorMotionSource() : ManualMotionSource();
+    _motion = motionSourceFor(device: onDevice, motion: settings.motion);
     _haptics = HapticEngine(
       driver: hapticsFor(device: onDevice),
       gain: settings.hapticGain,
@@ -398,7 +398,7 @@ class _TrayScreenState extends State<TrayScreen>
                         repaint: _repaint,
                       ),
                     ),
-                    if (!box.thrown && !_frozen) const _ShakePrompt(),
+                    if (!box.thrown && !_frozen) const _RollPrompt(),
                     // Along the top, deliberately: the dice settle along the
                     // bottom edge, which is exactly where a control bar would
                     // sit on top of the thing you are trying to look at.
@@ -472,16 +472,22 @@ class _Slide {
 /// The dice are lying on the floor of the box, which on its own is ambiguous —
 /// it looks like a roll that came out badly. One line says it is not a roll at
 /// all yet, and goes away the instant it stops being true.
-class _ShakePrompt extends StatelessWidget {
-  const _ShakePrompt();
+///
+/// It names the gesture that actually works. With motion control off a shake
+/// does nothing, and a prompt that asked for one would be the app telling you
+/// to do something it has been told to ignore. Read rather than passed in, and
+/// not rebuilt: the setting lives behind the picker, a screen away, and cannot
+/// change while a tray is up.
+class _RollPrompt extends StatelessWidget {
+  const _RollPrompt();
 
   @override
   Widget build(BuildContext context) {
-    return const IgnorePointer(
+    return IgnorePointer(
       child: Center(
         child: Text(
-          'Shake to roll',
-          style: TextStyle(
+          settings.motion ? 'Shake to roll' : 'Tap Throw to roll',
+          style: const TextStyle(
             color: Color(0x66BFD0E4),
             fontSize: 15,
             fontWeight: FontWeight.w500,

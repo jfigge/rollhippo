@@ -7,7 +7,7 @@ DEVICE   ?= 00008110-000414C63A51401E   # Jason's iPhone
 SCRATCH  ?= /tmp/rollhippo
 
 .DEFAULT_GOAL := help
-.PHONY: help all format analyze test desktop ios gif filmstrip picker cards clean
+.PHONY: help all format analyze test desktop ios gif filmstrip picker cards icon clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -53,6 +53,10 @@ cards:  ## Render the card table, and a gif of a card being dealt
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && CARDS_OUT=$(SCRATCH) flutter test tool/cards.dart
 	@echo "→ $(SCRATCH)/cards-*.png, $(SCRATCH)/cards-deal.gif"
+
+icon:  ## Draw the app icon into the iOS and macOS asset catalogues
+	@# Writes into the project, not /tmp: the files it makes are the icon.
+	cd $(SRC) && flutter test tool/app_icon.dart
 
 clean:  ## Remove build output
 	cd $(SRC) && flutter clean

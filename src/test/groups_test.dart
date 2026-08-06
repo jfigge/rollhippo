@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/config_screen.dart';
 import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/physics/body.dart';
@@ -270,6 +271,41 @@ void main() {
       },
       variant: harness,
     );
+
+    testWidgets('with motion control off, the button is the whole of it', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.motion;
+      addTearDown(() => settings.motion = was);
+      settings.motion = false;
+
+      await open(tester, 2);
+      await run(tester, 4);
+
+      // Straight to the group nobody has thrown.
+      await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));
+      await run(tester, 1);
+      expect(
+        find.text('Tap Throw to roll'),
+        findsOneWidget,
+        reason: 'the prompt has to ask for a gesture that still works',
+      );
+      expect(find.text(kPrompt), findsNothing);
+
+      // A shake is nothing now: the tray is being handed a phone that is
+      // lying on a table whatever the real one is doing.
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await run(tester, 1);
+      expect(
+        find.text('Tap Throw to roll'),
+        findsOneWidget,
+        reason: 'a shake threw a group that was not listening for one',
+      );
+
+      await tester.tap(find.text('Throw'));
+      await run(tester, 2);
+      expect(find.text('Tap Throw to roll'), findsNothing);
+    }, variant: harness);
 
     testWidgets('the box will not move while the dice are', (
       WidgetTester tester,

@@ -29,7 +29,8 @@ Run from the repo root:
 | `make all` | format + analyze + test |
 | `make desktop` | macOS harness. Space shakes, **R** throws, arrows tilt, **G** toggles the rotational pseudo-forces for an A/B |
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
-| `make picker` | render the picker, and the six kinds at rack size, into `/tmp/rollhippo/` |
+| `make picker` | render the picker — both modes, its saves, the chooser and the naming dialog — and the six kinds at rack size, into `/tmp/rollhippo/` |
+| `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues — writes into the project, not `/tmp` |
 | `make ios` | `--profile`, not debug: debug cannot run on iOS 18.4+ with Flutter 3.29.2 (flutter#163984). That costs hot reload on device — tune on the harness, confirm on the phone |
 
 Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
@@ -38,20 +39,28 @@ Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 
 ```
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
-src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue) · share_code (the QR payload)
-src/lib/motion/    MotionSource — the sensors, and a synthetic phone for the harness
+src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue)
+                   config (Config · ConfigMode — the whole picker, as data) · share_code (both payloads)
+src/lib/motion/    MotionSource — the sensors, a synthetic phone for the harness, and a still one
+                   (StillMotionSource) for when motion control is switched off
 src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable · Deal
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
 src/lib/app/       ConfigScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
-                   haptics (HapticEngine + HapticDriver) · settings (the one stored preference)
+                   haptics (HapticEngine + HapticDriver) · settings (haptic gain · motion control)
+                   configs (SavedConfig · ConfigStore — the saves, stored)
+                   config_pills (the row of them, and the naming and delete dialogs)
+                   open_dialog (which one to open, asked once at launch)
+src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at
+                   runtime, `tool/app_icon.dart` transcribes it
 src/test/          headless
-src/tool/          filmstrip · roll_gif · one_die · picker — run via `flutter test`, they write image files
+src/tool/          filmstrip · roll_gif · one_die · picker · app_icon — run via `flutter test`,
+                   they write image files
 ```
 
-`tray.dart` re-exports `dice.dart`, `tuning.dart` and `share_code.dart`, so one
-`import 'tray/tray.dart'` still brings `Tuning`, `DieSpec`, `DieKind` and
-`encodeGroups`/`decodeGroups` with it.
+`tray.dart` re-exports `config.dart`, `dice.dart`, `tuning.dart` and
+`share_code.dart`, so one `import 'tray/tray.dart'` still brings `Tuning`,
+`DieSpec`, `DieKind`, `Config` and the encoders with it.
 
 **`lib/physics/` does not import Flutter**, only `dart:math` and `vector_math`.
 That is what makes the simulation testable without a device or a frame, and it
@@ -164,6 +173,40 @@ test exists to make the change deliberate, not to make it hard.
   ordering the two by depth instead would be true to the box and wrong to look
   at, because the card is behind the glass for all but the last instant of the
   journey and would slide in underneath the one it is being dealt onto.
+- **Motion control off is a source, not a flag.** `Settings.motion` is read in
+  exactly two places — `TrayScreen.initState` and `CardScreen.initState`, both
+  through `motionSourceFor` — and what it selects is a `StillMotionSource`
+  whose every frame is `MotionFrame.still`. Nothing below that knows the
+  setting exists: the tray asks how the phone is moving and is told, truthfully,
+  that it is lying on a table. So gravity points down the screen, `isShake` is
+  never true, and Throw and Draw are the whole interface. Anything that wants
+  to *test* the setting rather than obey the source is doing it wrong — with
+  one exception, the unthrown group's prompt, which has to name a gesture that
+  still works.
+
+- **There are two share codes, and they are different things.** `RH1:` is a set
+  of dice — `encodeGroups`/`decodeGroups` — and is now only what a save's dice
+  are written as *inside the preferences file*, where everything else is a plain
+  JSON field. `RH2:` is `encodeConfig`/`decodeConfig`: the whole picker, mode
+  and shoe and all, plus the name its owner saved it under, and it is what a QR
+  code carries. Each reader declines the other version outright rather than
+  decoding two thirds of it, which is what the version in the prefix is for.
+  What happens to a scanned one is decided in `ConfigScreen._scanned` and turns
+  entirely on that name: blank loads it unnamed, a name you already have and
+  match opens it without a word, and anything else asks. `Config` has value
+  equality — and `DieSpec` has it for that reason — because "do I already have
+  this one" is the question the whole tree hangs off.
+
+- **Nothing is saved on its own.** Two places write a configuration, and both
+  are gestures: `+ New`, which makes one out of what is on screen, and Save on
+  the menu a pill gives you when you hold it down (or right-click it). Between
+  them, `ConfigScreen._saveTo` and `_newSave` are the only callers of
+  `_capture()`, and an edit to the picker touches no save at all. So the lit
+  pill — and the title above it, which reads `Roll Hippo - <name>` — says which
+  configuration you *opened*, not that the screen still matches it. Save goes
+  onto whichever pill was held down, which need not be that one. The mode rides along in `_capture()`, which means a configuration is
+  saved on a page and opens on the page it was saved from. `ConfigStore.write`
+  is deliberately a no-op for a save that is no longer there.
 - **A held die keeps the face *index* it was read at**, in `DiceTray.held`.
   Reading one live is reading it against a gravity that has nothing to do with
   the face it is resting on — it cannot fall over to re-read itself when the

@@ -101,7 +101,7 @@ rollhippo/
 ├── Makefile
 └── src/
     ├── lib/physics/   body · shape · contact · collision · solver · world   (no Flutter)
-    ├── lib/tray/      tray geometry · dice · tuning constants · the share code
+    ├── lib/tray/      tray geometry · dice · tuning constants · a configuration · the share codes
     ├── lib/motion/    sensor source, and a synthetic one for the harness
     ├── lib/render/    perspective camera and painter
     ├── lib/app/       the two screens, the app menu, and the haptics
@@ -127,14 +127,21 @@ The app opens on the dice you are about to throw: add up to ten, give each one a
 colour and a number of sides, then **Roll**. In the tray, **Throw** puts them
 back in from the top and **Close** returns to the set.
 
-The three lines in the top left are the app menu. **Settings** is one control —
-how hard the phone taps back when a die hits the side of the box, which is
-keyed on the impulse the wall actually delivered, so a heavy die landing hard
-feels different from a light one nudging a wall. Drag the slider and it plays
-each notch back at you, because a multiplier is not a sensation and nobody can
-set one by reading it. **Share** turns the three sets into a QR code — every
-die, its kind and its colour, in fifty-odd characters — and **Scan** reads one
-back off another phone. **Exit** quits.
+The three lines in the top left are the app menu. **Settings** is two controls.
+**Motion control** is whether the phone's own movement plays at all: on, the box
+is simulated in the phone's frame of reference and tilting and shaking do what
+they look like they should; off, the tray is handed a phone held perfectly still
+— down is down the screen and stays there — and the buttons along the top are
+the only way to roll or deal. **Impact strength** is how hard the phone taps
+back when a die hits the side of the box, which is keyed on the impulse the wall
+actually delivered, so a heavy die landing hard feels different from a light one
+nudging a wall. Drag the slider and it plays each notch back at you, because a
+multiplier is not a sensation and nobody can set one by reading it. **Share** turns the whole configuration into a QR code —
+which page you are on, every die, its kind and its colour, the shoe if you are
+in card mode, and the name you saved it under — and **Scan** reads one back off
+another phone. A code that arrives with a name offers to become a save on this
+phone too; one that names a configuration you already have, and matches it,
+simply opens it. **Exit** quits.
 
 The desktop harness letterboxes to 393 × 852 points whatever size its window is,
 so the tray it simulates is the same 64 × 140 mm tray as the phone's. Drag to

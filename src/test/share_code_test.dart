@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/tray/tray.dart';
 
-/// [DieSpec] has no equality of its own, and giving it one for a test's benefit
-/// would be a change to the model. Compare it the way the picker does.
+/// Set by set, die by die — which says which set went wrong when one does,
+/// where comparing two lists whole says only that they differ.
 void expectSame(List<List<DieSpec>> got, List<List<DieSpec>> want) {
   expect(got.length, want.length, reason: 'wrong number of sets');
   for (int g = 0; g < want.length; g++) {
@@ -125,6 +126,149 @@ void main() {
         <DieSpec>[spec(DieKind.d8, kDicePalette[5])],
       ]);
       expect(decodeGroups('  $code\n'), isNotNull);
+    });
+  });
+
+  group('a configuration code', () {
+    Config config({
+      ConfigMode mode = ConfigMode.dice,
+      List<List<DieSpec>>? groups,
+      List<int> colours = const <int>[kDiceWhite, kDiceWhite],
+      int decks = 2,
+      int cut = 5,
+    }) => Config(
+      mode: mode,
+      groups:
+          groups ??
+          <List<DieSpec>>[
+            <DieSpec>[spec(DieKind.d6, kDiceWhite)],
+            <DieSpec>[],
+            <DieSpec>[],
+          ],
+      colours: colours,
+      decks: decks,
+      reshuffleAt: cut,
+    );
+
+    test('carries the whole picker, both modes of it', () {
+      final Config sent = config(
+        mode: ConfigMode.cards,
+        groups: <List<DieSpec>>[
+          <DieSpec>[
+            spec(DieKind.d20, kDicePalette[6]),
+            spec(DieKind.d4, kDiceWhite),
+          ],
+          <DieSpec>[],
+          <DieSpec>[spec(DieKind.d12, kDicePalette[3])],
+        ],
+        colours: <int>[kDicePalette[2], kDicePalette[5], kDiceWhite],
+        decks: 3,
+        cut: 17,
+      );
+
+      final ScannedConfig back =
+          decodeConfig(encodeConfig(sent, name: 'Catan'))!;
+
+      expect(back.name, 'Catan');
+      expect(
+        back.config,
+        sent,
+        reason: 'the same configuration, not a copy of half of it',
+      );
+      expect(back.config.mode, ConfigMode.cards);
+      expect(back.config.decks, 3);
+      expect(back.config.reshuffleAt, 17);
+      expect(back.config.colours, <int>[
+        kDicePalette[2],
+        kDicePalette[5],
+        kDiceWhite,
+      ]);
+      expectSame(back.config.groups, sent.groups);
+    });
+
+    test('a configuration nobody has saved has a blank name', () {
+      final ScannedConfig back = decodeConfig(encodeConfig(config()))!;
+      expect(back.name, isEmpty);
+      expect(back.config, config());
+    });
+
+    test('a name is whatever somebody typed, to the character', () {
+      for (final String name in <String>['A', 'Poker Night', 'Ünïcødé ✦']) {
+        expect(decodeConfig(encodeConfig(config(), name: name))!.name, name);
+      }
+    });
+
+    test('stays small enough to scan across a table', () {
+      final String code = encodeConfig(
+        Config(
+          mode: ConfigMode.cards,
+          groups: <List<DieSpec>>[
+            for (int g = 0; g < 3; g++)
+              <DieSpec>[
+                for (int d = 0; d < 10; d++) spec(DieKind.d20, kDicePalette[7]),
+              ],
+          ],
+          colours: <int>[kDiceWhite, kDiceWhite, kDiceWhite],
+          decks: 3,
+          reshuffleAt: 20,
+        ),
+        name: 'Poker Nights',
+      );
+      // The worst case there is: three full sets, three cards and the longest
+      // name allowed. Under a hundred characters is a coarse QR code.
+      expect(code.length, lessThan(100));
+    });
+
+    test('is not the other kind of code, and knows it', () {
+      // Each reader takes its own version and declines the other outright,
+      // which is the whole point of putting the version in the prefix.
+      final String sets = encodeGroups(<List<DieSpec>>[
+        <DieSpec>[spec(DieKind.d6, kDiceWhite)],
+      ]);
+      expect(decodeConfig(sets), isNull);
+      expect(decodeGroups(encodeConfig(config())), isNull);
+
+      expect(decodeConfig(''), isNull);
+      expect(decodeConfig('https://example.com/'), isNull);
+      expect(decodeConfig('${kConfigCodePrefix}not base64 at all!'), isNull);
+    });
+
+    test('refuses anything it cannot read the whole of', () {
+      final String code = encodeConfig(config(), name: 'Yahtzee');
+      final String body = code.substring(kConfigCodePrefix.length);
+      final Uint8List bytes = base64Url.decode(body);
+
+      // A byte short of the name, and a byte too many.
+      expect(
+        decodeConfig(
+          kConfigCodePrefix +
+              base64Url.encode(bytes.sublist(0, bytes.length - 1)),
+        ),
+        isNull,
+      );
+      expect(
+        decodeConfig(kConfigCodePrefix + base64Url.encode(<int>[...bytes, 0])),
+        isNull,
+      );
+
+      // A header and nothing else.
+      expect(
+        decodeConfig(kConfigCodePrefix + base64Url.encode(<int>[0, 2, 5])),
+        isNull,
+      );
+
+      // A mode this build has never heard of, and a colour it has not either.
+      final List<int> odd = <int>[...bytes];
+      odd[0] = 7;
+      expect(decodeConfig(kConfigCodePrefix + base64Url.encode(odd)), isNull);
+      final List<int> wrong = <int>[...bytes];
+      wrong[4] = 0x0F;
+      expect(decodeConfig(kConfigCodePrefix + base64Url.encode(wrong)), isNull);
+    });
+
+    test('surrounding whitespace is not a reason to refuse', () {
+      final String code = encodeConfig(config(), name: 'D&D');
+      expect(decodeConfig('  $code\n')!.name, 'D&D');
     });
   });
 }

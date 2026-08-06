@@ -48,6 +48,43 @@ abstract class MotionSource {
   void dispose() {}
 }
 
+/// A phone that is not moving, and never will be.
+///
+/// What the app runs on when motion control is turned off — see
+/// `Settings.motion`. Every frame is [MotionFrame.still], so gravity points
+/// down the screen and stays there, nothing is ever a shake, and the buttons
+/// along the top of the tray are the only way to roll or deal.
+///
+/// A source rather than a flag tested at the point of use, because "the phone
+/// is not moving" is a complete and honest answer to what the sensors are for.
+/// The tray needs to know nothing about the setting: it asks how the phone is
+/// moving and is told the truth, which is that it is sitting on a table.
+class StillMotionSource implements MotionSource {
+  const StillMotionSource();
+
+  @override
+  MotionFrame sample(double dt) => MotionFrame.still;
+
+  @override
+  void dispose() {}
+}
+
+/// The source a screen should be driven by.
+///
+/// Three answers: the sensors when there is a phone under them, the synthetic
+/// phone when there is not — that is the desktop harness, where dragging and
+/// the arrow keys stand in for a hand — and [StillMotionSource] when the
+/// player has said they do not want the phone's own movement in it at all.
+///
+/// The setting wins over both. Motion control off on the harness means the
+/// keyboard shake and tilt stop working too, which is the point: it is the
+/// same app with the same control taken away, and a harness that still tilted
+/// would be no use for judging what the phone now does.
+MotionSource motionSourceFor({required bool device, required bool motion}) {
+  if (!motion) return const StillMotionSource();
+  return device ? SensorMotionSource() : ManualMotionSource();
+}
+
 /// The real thing: iPhone accelerometer and gyroscope.
 class SensorMotionSource implements MotionSource {
   SensorMotionSource() {

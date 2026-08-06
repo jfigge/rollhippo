@@ -34,6 +34,16 @@ class DieSpec {
   DieSpec copyWith({DieKind? kind, int? colour}) =>
       DieSpec(kind: kind ?? this.kind, colour: colour ?? this.colour);
 
+  /// A die is two choices and nothing else, so two of them with the same
+  /// answers are the same die. [Config] compares whole sets this way, which is
+  /// how a scanned code can tell whether it is the save you already have.
+  @override
+  bool operator ==(Object other) =>
+      other is DieSpec && other.kind == kind && other.colour == colour;
+
+  @override
+  int get hashCode => Object.hash(kind, colour);
+
   ConvexShape get shape => shapeFor(kind);
 
   /// Real acrylic, so a D20 is genuinely heavier than a D4 of the same width.

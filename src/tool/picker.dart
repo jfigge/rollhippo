@@ -5,7 +5,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rollhippo/app/config_pills.dart';
 import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/configs.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
@@ -102,6 +104,50 @@ void main() {
     await _write(tester, '$dir/picker-cards.png');
   });
 
+  testWidgets('the saves, and the two dialogs about them', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(kHarnessScreen);
+    tester.view.physicalSize = kHarnessScreen * 2;
+    tester.view.devicePixelRatio = 2.0;
+
+    // Three saves, put straight into the store rather than made through the
+    // dialog: what these pictures are for is the row and the chooser, and
+    // typing three names in through a keyboard that is not there would only
+    // be a slower way to arrive at the same screen.
+    configs.add('Yahtzee', _saved(5));
+    configs.add('D&D', _saved(7));
+    configs.add('Poker Night', _saved(3));
+
+    await tester.pumpWidget(
+      const RepaintBoundary(child: MaterialApp(home: ConfigScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    // The first thing the app does when there is anything to open.
+    await _write(tester, '$dir/picker-open.png');
+
+    await tester.tap(find.text('+ New Configuration'));
+    await tester.pumpAndSettle();
+
+    // And the row underneath it, with one of them open.
+    await tester.tap(find.text('Yahtzee'));
+    await tester.pumpAndSettle();
+    await _write(tester, '$dir/picker-saves.png');
+
+    // Three names and the dashed pill are wider than a phone, so the way to
+    // the last of them is the way a thumb would take: sideways.
+    await tester.dragUntilVisible(
+      find.byKey(kNewConfigPill),
+      find.byKey(kConfigPills),
+      const Offset(-60, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(kNewConfigPill));
+    await tester.pumpAndSettle();
+    await _write(tester, '$dir/picker-name.png');
+  });
+
   testWidgets('the six kinds at rack size', (WidgetTester tester) async {
     const double slot = 72;
     await tester.binding.setSurfaceSize(
@@ -139,6 +185,23 @@ void main() {
     await _write(tester, '$dir/kinds.png', pixelRatio: 4);
   });
 }
+
+/// A configuration with [dice] dice in its first set, which is enough for the
+/// chooser to have something to say under each name.
+Config _saved(int dice) => Config(
+  mode: ConfigMode.dice,
+  groups: <List<DieSpec>>[
+    <DieSpec>[
+      for (int i = 0; i < dice; i++)
+        const DieSpec(kind: DieKind.d6, colour: kDiceWhite),
+    ],
+    <DieSpec>[],
+    <DieSpec>[],
+  ],
+  colours: const <int>[kDiceWhite, kDiceWhite],
+  decks: 2,
+  reshuffleAt: 5,
+);
 
 /// Whichever of [finder]'s widgets is in one mode's panel. Both modes are built
 /// at once, one screen apart, and both have a rack and a palette — so anything

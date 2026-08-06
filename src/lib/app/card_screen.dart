@@ -9,6 +9,7 @@ import '../motion/motion.dart';
 import '../render/card_painter.dart';
 import '../tray/tray.dart';
 import 'chrome.dart';
+import 'settings.dart';
 
 /// How long after a card is dealt before a shake can deal another.
 ///
@@ -22,7 +23,9 @@ const double _kDrawCooldown = 1.1;
 ///
 /// Nothing here is simulated. A card is not a rigid body and there is nothing
 /// to throw — the shoe is shuffled, the top card is turned over, and the only
-/// thing the accelerometer is asked for is whether the phone was shaken.
+/// thing the accelerometer is asked for is whether the phone was shaken. With
+/// motion control off it is not asked even that, and Draw is the whole of the
+/// interface. See [Settings.motion].
 class CardScreen extends StatefulWidget {
   const CardScreen({
     super.key,
@@ -73,7 +76,7 @@ class _CardScreenState extends State<CardScreen>
   @override
   void initState() {
     super.initState();
-    _motion = onDevice ? SensorMotionSource() : ManualMotionSource();
+    _motion = motionSourceFor(device: onDevice, motion: settings.motion);
     _ticker = createTicker(_onTick)..start();
   }
 

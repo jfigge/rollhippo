@@ -6,6 +6,7 @@ import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
+import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
 
@@ -61,7 +62,11 @@ final Finder addDie = find.descendant(
 /// leaves it dragged for whatever runs next.
 Future<void> pumpPicker(WidgetTester tester) async {
   final double was = settings.hapticGain;
-  addTearDown(() => settings.hapticGain = was);
+  final bool motion = settings.motion;
+  addTearDown(() {
+    settings.hapticGain = was;
+    settings.motion = motion;
+  });
   // Phone-shaped, because the picker is: at the default 800 × 600 the rack is
   // centred inside its [kPickerWidth] cap with 180 points of nothing either
   // side, and every measurement below would be against the window instead of
@@ -158,7 +163,8 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: AppMenuButton(
-              groups: const <List<DieSpec>>[<DieSpec>[]],
+              config: scanned(<List<DieSpec>>[<DieSpec>[]]).config,
+              name: '',
               onScanned: (_) {},
               onExit: () async => asked++,
             ),
@@ -209,6 +215,81 @@ void main() {
     });
   });
 
+  group('motion control', () {
+    testWidgets('is a switch in the settings sheet, and is on to begin with', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      settings.motion = true;
+
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Motion control'), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      expect(settings.motion, isFalse);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      // And the paragraph under it says what that now means.
+      expect(
+        find.textContaining('a shake does nothing'),
+        findsOneWidget,
+        reason: 'the explanation has to follow the switch',
+      );
+    });
+
+    testWidgets('decides what the screens are driven by', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.motion;
+      addTearDown(() => settings.motion = was);
+
+      settings.motion = false;
+      expect(
+        motionSourceFor(device: true, motion: settings.motion),
+        isA<StillMotionSource>(),
+        reason: 'the phone is told it is lying on a table',
+      );
+      expect(
+        motionSourceFor(device: false, motion: settings.motion),
+        isA<StillMotionSource>(),
+        reason: 'and so is the harness',
+      );
+
+      // A source that never moves is never a shake, whatever it is asked.
+      final MotionSource still = motionSourceFor(device: true, motion: false);
+      for (int i = 0; i < 120; i++) {
+        expect(isShake(still.sample(1 / 60)), isFalse);
+      }
+
+      settings.motion = true;
+      expect(
+        motionSourceFor(device: false, motion: settings.motion),
+        isA<ManualMotionSource>(),
+      );
+    });
+
+    testWidgets('survives a relaunch, because it is how you play', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.motion;
+      addTearDown(() => settings.motion = was);
+
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      settings.motion = false;
+      await tester.pumpAndSettle();
+
+      final Settings relaunched = Settings();
+      expect(relaunched.motion, isTrue, reason: 'on, until told otherwise');
+      await relaunched.load();
+      expect(relaunched.motion, isFalse);
+    });
+  });
+
   group('what is remembered', () {
     testWidgets('the calibration survives a relaunch', (
       WidgetTester tester,
@@ -239,6 +320,7 @@ void main() {
       final Settings offline = Settings();
       await offline.load();
       expect(offline.hapticGain, Tuning.hapticGain);
+      expect(offline.motion, isTrue);
       offline.hapticGain = 1.5;
       await tester.pumpAndSettle();
       expect(offline.hapticGain, 1.5, reason: 'still works, just forgets');
@@ -268,13 +350,17 @@ void main() {
       final ShareCodeView qr = tester.widget<ShareCodeView>(
         find.byType(ShareCodeView),
       );
-      // What the picker starts with: one set of two white D6s.
-      expectSame(decodeGroups(qr.code)!, <List<DieSpec>>[
+      // What the picker starts with: one set of two white D6s, on the dice
+      // page, and no name — nothing has been saved.
+      final ScannedConfig read = decodeConfig(qr.code)!;
+      expect(read.name, isEmpty);
+      expect(read.config.mode, ConfigMode.dice);
+      expectSame(read.config.groups, <List<DieSpec>>[
         List<DieSpec>.of(kDefaultDice),
         <DieSpec>[],
         <DieSpec>[],
       ]);
-      expect(find.text('1 set · 2 dice'), findsOneWidget);
+      expect(find.text('2 dice'), findsOneWidget);
     });
 
     testWidgets('follows the picker rather than the defaults', (
@@ -293,10 +379,10 @@ void main() {
       final ShareCodeView qr = tester.widget<ShareCodeView>(
         find.byType(ShareCodeView),
       );
-      final List<List<DieSpec>> coded = decodeGroups(qr.code)!;
+      final List<List<DieSpec>> coded = decodeConfig(qr.code)!.config.groups;
       expect(coded[0].length, 3);
       expect(coded[0].last.kind, DieKind.d20);
-      expect(find.text('1 set · 3 dice'), findsOneWidget);
+      expect(find.text('3 dice'), findsOneWidget);
     });
   });
 
@@ -312,20 +398,22 @@ void main() {
       final AppMenuButton menu = tester.widget<AppMenuButton>(
         find.byType(AppMenuButton),
       );
-      menu.onScanned(<List<DieSpec>>[
-        <DieSpec>[DieSpec(kind: DieKind.d20, colour: kDicePalette[6])],
-        <DieSpec>[
-          DieSpec(kind: DieKind.d4, colour: kDiceWhite),
-          DieSpec(kind: DieKind.d8, colour: kDicePalette[2]),
-        ],
-        <DieSpec>[],
-      ]);
+      menu.onScanned(
+        scanned(<List<DieSpec>>[
+          <DieSpec>[DieSpec(kind: DieKind.d20, colour: kDicePalette[6])],
+          <DieSpec>[
+            const DieSpec(kind: DieKind.d4, colour: kDiceWhite),
+            DieSpec(kind: DieKind.d8, colour: kDicePalette[2]),
+          ],
+          <DieSpec>[],
+        ]),
+      );
       await tester.pumpAndSettle();
 
       expect(rackOf(tester, 0).length, 1);
       expect(rackOf(tester, 0).single.kind, DieKind.d20);
       expect(
-        find.text('Dice set up from a shared code.'),
+        find.text('Set up from a shared code.'),
         findsOneWidget,
         reason: 'a scan that changes everything has to say that it did',
       );
@@ -351,15 +439,17 @@ void main() {
         find.byType(AppMenuButton),
       );
       // A code from some later build: four sets, and twelve dice in the first.
-      menu.onScanned(<List<DieSpec>>[
-        <DieSpec>[
-          for (int i = 0; i < 12; i++)
-            DieSpec(kind: DieKind.d6, colour: kDiceWhite),
-        ],
-        <DieSpec>[],
-        <DieSpec>[],
-        <DieSpec>[DieSpec(kind: DieKind.d12, colour: kDiceWhite)],
-      ]);
+      menu.onScanned(
+        scanned(<List<DieSpec>>[
+          <DieSpec>[
+            for (int i = 0; i < 12; i++)
+              const DieSpec(kind: DieKind.d6, colour: kDiceWhite),
+          ],
+          <DieSpec>[],
+          <DieSpec>[],
+          <DieSpec>[const DieSpec(kind: DieKind.d12, colour: kDiceWhite)],
+        ]),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -378,7 +468,9 @@ void main() {
       final AppMenuButton menu = tester.widget<AppMenuButton>(
         find.byType(AppMenuButton),
       );
-      menu.onScanned(<List<DieSpec>>[<DieSpec>[], <DieSpec>[], <DieSpec>[]]);
+      menu.onScanned(
+        scanned(<List<DieSpec>>[<DieSpec>[], <DieSpec>[], <DieSpec>[]]),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -390,7 +482,21 @@ void main() {
   });
 }
 
-/// [DieSpec] has no equality of its own; compare it the way the picker does.
+/// A code carrying [groups] and nothing else worth saying: the dice page, the
+/// shoe at its defaults, and no name on it.
+ScannedConfig scanned(List<List<DieSpec>> groups, {String name = ''}) =>
+    ScannedConfig(
+      name: name,
+      config: Config(
+        mode: ConfigMode.dice,
+        groups: groups,
+        colours: const <int>[kDiceWhite, kDiceWhite],
+        decks: 2,
+        reshuffleAt: 5,
+      ),
+    );
+
+/// Set by set, die by die — which says which set went wrong when one does.
 void expectSame(List<List<DieSpec>> got, List<List<DieSpec>> want) {
   expect(got.length, want.length);
   for (int g = 0; g < want.length; g++) {

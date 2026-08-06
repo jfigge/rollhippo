@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app/config_screen.dart';
+import 'app/configs.dart';
 import 'app/settings.dart';
 
 Future<void> main() async {
@@ -19,6 +20,11 @@ Future<void> main() async {
   // and then jumped to the stored value would be wrong exactly once — on the
   // throw the player was paying attention to.
   await settings.load();
+  // The same reasoning, harder. The first thing the picker does is decide
+  // whether to ask which configuration to open, and it can only ask once — a
+  // chooser that arrived a moment later would be a dialog thrown over a screen
+  // the player had already started using.
+  await configs.load();
   runApp(const RollHippoApp());
 }
 

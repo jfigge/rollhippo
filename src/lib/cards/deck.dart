@@ -75,7 +75,14 @@ class Deck {
   }
 
   /// How many cards a full shoe holds.
-  int get size => math.pow(6, dice).toInt() * decks;
+  int get size => sizeOf(dice, decks);
+
+  /// The same count, for a shoe nobody has built yet.
+  ///
+  /// The picker draws it under the card panel and the saved-configuration list
+  /// says it out loud — "2 decks, 72 cards" — and neither of them wants two
+  /// hundred [PlayingCard]s made and thrown away to find out what the number is.
+  static int sizeOf(int dice, int decks) => math.pow(6, dice).toInt() * decks;
 
   /// How many are left to deal.
   int get remaining => _pile.length;

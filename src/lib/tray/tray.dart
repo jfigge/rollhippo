@@ -11,6 +11,7 @@ import 'reading.dart';
 import 'readout.dart';
 import 'tuning.dart';
 
+export 'config.dart';
 export 'dice.dart';
 export 'reading.dart';
 export 'readout.dart';

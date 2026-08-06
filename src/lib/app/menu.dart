@@ -87,17 +87,24 @@ Future<void> quitApp() async {
 class AppMenuButton extends StatefulWidget {
   const AppMenuButton({
     super.key,
-    required this.groups,
+    required this.config,
+    required this.name,
     required this.onScanned,
     this.onExit = quitApp,
   });
 
-  /// The sets as they stand, for the Share sheet to turn into a code.
-  final List<List<DieSpec>> groups;
+  /// The picker as it stands — both modes of it — for the Share sheet to turn
+  /// into a code.
+  final Config config;
 
-  /// Handed the sets a scanned code described. Not called if the scanner was
-  /// closed without finding one.
-  final ValueChanged<List<List<DieSpec>>> onScanned;
+  /// What the open configuration is called, or blank if it is not a save. It
+  /// goes into the code, so that the phone reading it can offer to keep it
+  /// under the same name.
+  final String name;
+
+  /// Handed the configuration a scanned code described, and the name that came
+  /// with it. Not called if the scanner was closed without finding one.
+  final ValueChanged<ScannedConfig> onScanned;
 
   /// What Exit does.
   ///
@@ -119,20 +126,20 @@ class _AppMenuButtonState extends State<AppMenuButton> {
       case _MenuItem.scan:
         await _scan();
       case _MenuItem.share:
-        await showShareSheet(context, widget.groups);
+        await showShareSheet(context, widget.config, widget.name);
       case _MenuItem.exit:
         await widget.onExit();
     }
   }
 
   Future<void> _scan() async {
-    final List<List<DieSpec>>? groups = await Navigator.of(context).push(
-      MaterialPageRoute<List<List<DieSpec>>>(
+    final ScannedConfig? scanned = await Navigator.of(context).push(
+      MaterialPageRoute<ScannedConfig>(
         builder: (BuildContext context) => const ScanScreen(),
       ),
     );
-    if (groups == null || !mounted) return;
-    widget.onScanned(groups);
+    if (scanned == null || !mounted) return;
+    widget.onScanned(scanned);
   }
 
   @override
@@ -269,6 +276,49 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              // First, because it is the larger of the two: one of these
+              // settings is how hard the app taps back, and the other is
+              // whether the phone's own movement plays at all.
+              Row(
+                children: <Widget>[
+                  const Expanded(
+                    child: Text(
+                      'Motion control',
+                      style: TextStyle(
+                        color: Color(0xFFE8EEF6),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: settings.motion,
+                    activeColor: const Color(0xFF6E9AD0),
+                    activeTrackColor: const Color(0xFF3F6FA8),
+                    inactiveThumbColor: const Color(0xAABFD0E4),
+                    inactiveTrackColor: const Color(0x14FFFFFF),
+                    onChanged: (bool on) => settings.motion = on,
+                  ),
+                ],
+              ),
+              Text(
+                settings.motion
+                    ? 'Tilt to pour the dice down the screen, shake to throw '
+                        'them. Turn this off and the tray is handed a phone '
+                        'held perfectly still: down is down the screen and '
+                        'stays there, and Throw — or Draw, on the cards — is '
+                        'the only way to roll.'
+                    : 'Off. The tray ignores the phone: down is down the '
+                        'screen and stays there, and a shake does nothing. '
+                        'Throw — or Draw, on the cards — is the only way to '
+                        'roll, and it works exactly as it always did.',
+                style: const TextStyle(
+                  color: Color(0x99BFD0E4),
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
               Row(
                 children: <Widget>[
                   const Expanded(
@@ -338,21 +388,24 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 }
 
-/// The Share sheet: these dice, as a square somebody else can point a phone at.
-Future<void> showShareSheet(BuildContext context, List<List<DieSpec>> groups) =>
+/// The Share sheet: this configuration, as a square somebody else can point a
+/// phone at.
+Future<void> showShareSheet(BuildContext context, Config config, String name) =>
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: const Color(0xB3000000),
       constraints: const BoxConstraints(maxWidth: _kSheetWidth),
       isScrollControlled: true,
-      builder: (BuildContext context) => _ShareSheet(groups: groups),
+      builder:
+          (BuildContext context) => _ShareSheet(config: config, name: name),
     );
 
 class _ShareSheet extends StatelessWidget {
-  const _ShareSheet({required this.groups});
+  const _ShareSheet({required this.config, required this.name});
 
-  final List<List<DieSpec>> groups;
+  final Config config;
+  final String name;
 
   @override
   Widget build(BuildContext context) {
@@ -361,10 +414,10 @@ class _ShareSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Center(child: ShareCodeView(code: encodeGroups(groups))),
+          Center(child: ShareCodeView(code: encodeConfig(config, name: name))),
           const SizedBox(height: 16),
           Text(
-            _summary(groups),
+            name.isEmpty ? config.summary : '$name · ${config.summary}',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0xFFE8EEF6),
@@ -373,11 +426,17 @@ class _ShareSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Every set, every die, its kind and its colour. Scan it from '
-            'another phone to set that one up the same way.',
+          Text(
+            // What is actually in the square, said plainly, because the one
+            // thing a QR code cannot do is tell you what it is about to do to
+            // the phone that reads it.
+            'The whole set-up: which page you are on, every die, its kind and '
+            'its colour, and — in card mode — the shoe you built. Scan it from '
+            'another phone to set that one up the same way.'
+            '${name.isEmpty ? '' : ' The name goes with it, so they can keep '
+                    'it as "$name".'}',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Color(0x99BFD0E4),
               fontSize: 13,
               height: 1.45,
@@ -397,7 +456,7 @@ class _ShareSheet extends StatelessWidget {
 class ShareCodeView extends StatelessWidget {
   const ShareCodeView({super.key, required this.code});
 
-  /// The payload, from [encodeGroups].
+  /// The payload, from [encodeConfig].
   final String code;
 
   @override
@@ -435,17 +494,6 @@ class ShareCodeView extends StatelessWidget {
       ),
     );
   }
-}
-
-/// What the code says, in words, for someone who cannot read a QR code.
-String _summary(List<List<DieSpec>> groups) {
-  final List<int> counts = <int>[
-    for (final List<DieSpec> group in groups)
-      if (group.isNotEmpty) group.length,
-  ];
-  if (counts.isEmpty) return 'No dice';
-  final String sets = counts.length == 1 ? 'set' : 'sets';
-  return '${counts.length} $sets · ${counts.join(' + ')} dice';
 }
 
 /// The chrome both sheets share: a grab handle, a title, and the dark card.
