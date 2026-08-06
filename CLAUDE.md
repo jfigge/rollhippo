@@ -29,6 +29,7 @@ Run from the repo root:
 | `make all` | format + analyze + test |
 | `make desktop` | macOS harness. Space shakes, **R** throws, arrows tilt, **G** toggles the rotational pseudo-forces for an A/B |
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
+| `make picker` | render the picker, and the six kinds at rack size, into `/tmp/rollhippo/` |
 | `make ios` | `--profile`, not debug: debug cannot run on iOS 18.4+ with Flutter 3.29.2 (flutter#163984). That costs hot reload on device — tune on the harness, confirm on the phone |
 
 Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
@@ -39,10 +40,10 @@ Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
 src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue)
 src/lib/motion/    MotionSource — the sensors, and a synthetic phone for the harness
-src/lib/render/    TrayCamera · TrayPainter
-src/lib/app/       ConfigScreen (choose the dice) · TrayScreen (throw them)
+src/lib/render/    TrayCamera · TrayPainter · DiePreview (one die, held still)
+src/lib/app/       ConfigScreen (the rack) · TrayScreen (throw them)
 src/test/          headless
-src/tool/          filmstrip · roll_gif · one_die — run via `flutter test`, they write image files
+src/tool/          filmstrip · roll_gif · one_die · picker — run via `flutter test`, they write image files
 ```
 
 `tray.dart` re-exports `dice.dart` and `tuning.dart`, so one
@@ -106,3 +107,10 @@ test exists to make the change deliberate, not to make it hard.
   as a 16 mm D6 across its widest point, which is what lets `throwDice()` pack
   any mixture of ten on one grid without them starting inside each other. Change
   it and the spawn grid needs to change with it.
+- **vector_math turns a vector two different ways.** `Quaternion.rotated` applies
+  `q⁻¹ v q`; `asRotationMatrix` builds `q v q⁻¹`. They are inverses of each
+  other, and the app is on the matrix side — `RigidBody.syncDerived` derives all
+  its world geometry from `orientation.asRotationMatrix()`. Anything that
+  reasons about an orientation by hand, `previewOrientation` included, has to
+  turn its vectors with the matrix or it will silently work out the mirror
+  image. Composition follows the matrix: in `a * b`, `b` acts first.

@@ -7,7 +7,7 @@ DEVICE   ?= 00008110-000414C63A51401E   # Jason's iPhone
 SCRATCH  ?= /tmp/rollhippo
 
 .DEFAULT_GOAL := help
-.PHONY: help all format analyze test desktop ios gif filmstrip clean
+.PHONY: help all format analyze test desktop ios gif filmstrip picker clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -43,6 +43,11 @@ filmstrip:  ## Render a scripted roll to a contact sheet
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && FILMSTRIP_OUT=$(SCRATCH)/filmstrip.png flutter test tool/filmstrip.dart
 	@echo "→ $(SCRATCH)/filmstrip.png"
+
+picker:  ## Render the dice picker, and the six kinds at rack size
+	@mkdir -p $(SCRATCH)
+	cd $(SRC) && PICKER_OUT=$(SCRATCH) flutter test tool/picker.dart
+	@echo "→ $(SCRATCH)/picker.png, $(SCRATCH)/kinds.png"
 
 clean:  ## Remove build output
 	cd $(SRC) && flutter clean
