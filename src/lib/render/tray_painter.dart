@@ -61,6 +61,19 @@ final Vector3 _light = Vector3(-0.32, 0.52, 0.79)..normalize();
 
 const double _ambient = 0.34;
 
+/// The colour the tray fades towards while the dice are being read, and how far
+/// it gets.
+///
+/// It is the app's own background, so the box does not darken so much as get
+/// out of the way — and it stops short of vanishing, because the dice are
+/// standing in a tray and a tray that disappears leaves them floating in a
+/// void.
+const Color _backdrop = Color(0xFF0B0E13);
+const double _readoutDim = 0.72;
+
+Color _fade(Color colour, double amount) =>
+    amount <= 0 ? colour : Color.lerp(colour, _backdrop, amount)!;
+
 Color _shade(Color base, Vector3 normal) {
   final double lambert = math.max(0.0, normal.dot(_light));
   final double k = _ambient + (1 - _ambient) * lambert;
@@ -159,9 +172,13 @@ class TrayPainter extends CustomPainter {
       centre: Offset(size.width / 2, size.height / 2),
     );
 
-    _paintTray(canvas, camera);
+    // While the dice are being presented the box behind them steps back, so
+    // that what is lit is the thing you are being asked to read.
+    final double dim = tray.readout.progress * _readoutDim;
+
+    _paintTray(canvas, camera, dim);
     for (final RigidBody die in tray.dice) {
-      _paintShadow(canvas, camera, die);
+      _paintShadow(canvas, camera, die, dim);
     }
 
     // Whole dice back to front. Sorting by die rather than by face keeps the
@@ -177,7 +194,7 @@ class TrayPainter extends CustomPainter {
     }
   }
 
-  void _paintTray(Canvas canvas, TrayCamera camera) {
+  void _paintTray(Canvas canvas, TrayCamera camera, double dim) {
     final double w = tray.width / 2;
     final double h = tray.height / 2;
     final double d = tray.depth;
@@ -192,7 +209,7 @@ class TrayPainter extends CustomPainter {
     final Paint paint = Paint()..style = PaintingStyle.fill;
 
     // Back wall.
-    paint.color = _shade(const Color(0xFF1D2530), Vector3(0, 0, 1));
+    paint.color = _fade(_shade(const Color(0xFF1D2530), Vector3(0, 0, 1)), dim);
     canvas.drawPath(
       Path()
         ..moveTo(back(0).dx, back(0).dy)
@@ -220,7 +237,7 @@ class TrayPainter extends CustomPainter {
     for (int s = 0; s < 4; s++) {
       final int i = sides[s][0];
       final int j = sides[s][1];
-      paint.color = _shade(const Color(0xFF2A3442), normals[s]);
+      paint.color = _fade(_shade(const Color(0xFF2A3442), normals[s]), dim);
       canvas.drawPath(
         Path()
           ..moveTo(front(i).dx, front(i).dy)
@@ -236,7 +253,12 @@ class TrayPainter extends CustomPainter {
   /// A soft blob on the back wall, cast along the light. It is not a real
   /// shadow, but it is the cheapest cue there is for how far off the back wall
   /// a die is — and without it a tumbling die reads as a flat spinning sprite.
-  void _paintShadow(Canvas canvas, TrayCamera camera, RigidBody die) {
+  void _paintShadow(
+    Canvas canvas,
+    TrayCamera camera,
+    RigidBody die,
+    double dim,
+  ) {
     final double travel = (die.position.z + tray.depth) / _light.z;
     if (travel <= 0) return;
     final Vector3 landing = die.position - _light * travel;
@@ -253,7 +275,7 @@ class TrayPainter extends CustomPainter {
       centre,
       pixels,
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.42 / softness)
+        ..color = Colors.black.withValues(alpha: (0.42 / softness) * (1 - dim))
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, pixels * 0.45),
     );
   }

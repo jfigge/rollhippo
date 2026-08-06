@@ -49,6 +49,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
   /// the last die cannot be removed, so the set is never empty.
   int _selected = 0;
 
+  /// Whether settled dice tidy themselves into a formation you can read.
+  ///
+  /// On, because the phone is usually upright and upright is the posture where
+  /// the number a die landed on points at the ceiling rather than at you. Held
+  /// here rather than saved: writing it down would mean a preferences plugin
+  /// for one boolean, and the setting is one tap from wherever you are.
+  bool _readout = true;
+
   void _add() {
     if (_dice.length >= kMaxDice) return;
     setState(() {
@@ -77,7 +85,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder:
-            (BuildContext context) => TrayScreen(dice: List<DieSpec>.of(_dice)),
+            (BuildContext context) =>
+                TrayScreen(dice: List<DieSpec>.of(_dice), readout: _readout),
       ),
     );
   }
@@ -100,6 +109,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 // set. What is left over goes at the bottom, which is where a
                 // gap is worth having: it keeps Roll under your thumb.
                 _editor(),
+                _readoutSwitch(),
                 const Spacer(),
                 _buttons(),
               ],
@@ -186,6 +196,48 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Whether the dice tidy themselves up once they have stopped.
+  ///
+  /// Worth a switch rather than being simply how the app behaves: held flat on
+  /// a table the tray needs none of it — there "up" is already out through the
+  /// glass — and someone who rolls that way would rather watch the dice lie
+  /// where they fell.
+  Widget _readoutSwitch() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+      child: Row(
+        children: <Widget>[
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Tidy up to read',
+                  style: TextStyle(
+                    color: Color(0xFFE8EEF6),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Turn the dice to face you once they stop',
+                  style: TextStyle(color: Color(0x8ABFD0E4), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _readout,
+            onChanged: (bool on) => setState(() => _readout = on),
+            activeColor: const Color(0xFFF2F7FF),
+            activeTrackColor: const Color(0xFF3F6FA8),
+          ),
         ],
       ),
     );

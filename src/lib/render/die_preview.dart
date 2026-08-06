@@ -41,28 +41,46 @@ const double _dominance = 0.9;
 /// triangle, because its neighbouring faces lean 109° away and every one of
 /// them falls out of sight behind it.
 ///
-/// So the rule is stated instead of the answer. Turn the face carrying the
-/// die's highest number towards the viewer — a D20 should introduce itself with
+/// So the rule is stated instead of the answer. Turn the face the die's highest
+/// number is printed on towards the viewer — a D20 should introduce itself with
 /// a 20 on it — then rotate away from square-on in whichever direction, and as
 /// far, as brings the next two faces round it most fully into view, stopping
-/// while that face is still plainly the one you are being shown. On a cube that finds the corner
-/// and gives the familiar three-quarter view; on a D4 it finds an edge, which
-/// is exactly how a real one is photographed; on a D20, whose neighbours are
-/// only 42° apart, it stops early because turning further would hand the die to
-/// a face with no number you asked for on it.
+/// while that face is still plainly the one you are being shown. On a cube that
+/// finds the corner and gives the familiar three-quarter view; on a D4 it finds
+/// an edge, which is exactly how a real one is photographed; on a D20, whose
+/// neighbours are only 42° apart, it stops early because turning further would
+/// hand the die to a face with no number you asked for on it.
+///
+/// "The face it is printed on" is doing real work in that sentence. On a D4 it
+/// is not the face the number names — a tetrahedron is read off the face it
+/// rests on, so its numbers are printed along the edges of the three faces
+/// around each one. Aim a D4's face 4 at the viewer and the 4 is the one number
+/// you cannot see. [readMarking] is what knows the difference.
 Quaternion previewOrientation(ConvexShape shape) {
-  int front = 0;
+  int highest = 0;
   for (int f = 1; f < shape.faces.length; f++) {
-    if (shape.faces[f].value > shape.faces[front].value) front = f;
+    if (shape.faces[f].value > shape.faces[highest].value) highest = f;
   }
+
+  // Where that number is actually *printed*, which is not always the face it
+  // belongs to. A D4 carries its numbers along its edges, on the three faces
+  // next to the one they name — so introducing a D4 with its 4 means showing a
+  // neighbour of the 4 and levelling the edge they share. That is the same
+  // question the tray asks of a die it is about to turn towards you, so it is
+  // the same function that answers it.
+  final DieMarking marking = readMarking(shape, highest);
+  final int front = marking.face;
   final ConvexFace face = shape.faces[front];
   final Vector3 normal = face.normal;
 
-  // A basis in the plane of that face to sweep the tilt direction through. Its
-  // first edge is as good a place to start from as any, and it makes the sweep
-  // depend on nothing outside the shape.
+  // A basis in the plane of that face to sweep the tilt direction through, and
+  // the line the number is written along. One vector doing both jobs: the edge
+  // the numeral sits on is as good a place to start a sweep from as any other,
+  // and it is the one that has to end up level whatever the sweep decides.
+  final int corners = face.vertices.length;
   final Vector3 u =
-      (shape.vertices[face.vertices[1]] - shape.vertices[face.vertices[0]])
+      (shape.vertices[face.vertices[(marking.edge + 1) % corners]] -
+            shape.vertices[face.vertices[marking.edge]])
         ..normalize();
   final Vector3 w = normal.cross(u);
 
@@ -113,9 +131,9 @@ Quaternion previewOrientation(ConvexShape shape) {
 
   // That leaves one degree of freedom — the spin about the line of sight — and
   // it goes on standing the numeral up. Which way up it sits is decided by the
-  // face's first edge, since [paintDie] lays text along it: text runs along
-  // that edge and stands towards `normal × along`, so that is the direction to
-  // bring round to screen up.
+  // edge it is written along, since [paintDie] lays text down it: text runs
+  // along that edge and stands towards `normal × along`, so that is the
+  // direction to bring round to screen up.
   //
   // Turned by the rotation *matrix*, not by `Quaternion.rotated`: vector_math
   // builds its matrix from `q v q⁻¹` but rotates vectors by `q⁻¹ v q`, so the

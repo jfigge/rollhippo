@@ -35,6 +35,7 @@ void main() {
     final DiceTray tray = DiceTray(
       width: kScreen.width / Tuning.logicalPixelsPerMetre,
       height: kScreen.height / Tuning.logicalPixelsPerMetre,
+      readout: true,
       random: math.Random(11),
     );
     final ManualMotionSource motion = ManualMotionSource();
@@ -45,6 +46,7 @@ void main() {
       0.02, 0.09, 0.16, 0.30, // falling in and landing
       1.06, 1.16, 1.30, 1.55, // mid-shake
       2.05, 2.25, 2.60, 3.40, // settling and settled
+      3.75, 3.95, 4.15, 4.45, // turning to be read, and read
     ];
 
     final List<ui.Image> frames = <ui.Image>[];

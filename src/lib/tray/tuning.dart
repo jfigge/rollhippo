@@ -93,4 +93,35 @@ class Tuning {
   /// die's randomness actually comes from — without so much that the corner it
   /// lands on absorbs the whole bounce.
   static const double throwSpin = 8.0;
+
+  /// How long the dice sit where they landed before they tidy themselves up.
+  ///
+  /// Long enough to see the throw finish — the roll is the point, and a tray
+  /// that snatches the dice away the instant they stop has hidden the only
+  /// part of it that was ever in doubt.
+  static const double readoutDelay = 0.25;
+
+  /// How long the move into the reading formation takes.
+  static const double readoutDuration = 0.55;
+
+  /// How far the formation tips back from square-on, radians.
+  ///
+  /// Square on, a die is a polygon: a D6 showing a six is a square with six
+  /// dots on it and nothing about it says cube. Fifteen degrees brings the
+  /// faces above and beside it into view and costs three percent of the
+  /// number's height, which is not a cost anyone can see.
+  static const double readoutTilt = 0.26;
+
+  /// How much of the top of the tray the formation keeps clear of, metres.
+  ///
+  /// The Close and Throw buttons live along the top edge, and on a phone with a
+  /// notch they start below a 59-point safe area rather than at the top of the
+  /// glass — so they reach about 103 logical points down. 22 mm is 134 of them
+  /// at [logicalPixelsPerMetre], which leaves a gap you can see rather than one
+  /// that merely exists.
+  ///
+  /// It only costs anything with a full tray of ten, where it makes the dice
+  /// three percent smaller. Fewer than that and the formation is already
+  /// life-sized, and this just sits it lower on the screen.
+  static const double readoutTopClearance = 0.022;
 }

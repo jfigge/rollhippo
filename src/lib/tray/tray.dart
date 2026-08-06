@@ -7,9 +7,13 @@ import '../physics/body.dart';
 import '../physics/collision.dart';
 import '../physics/world.dart';
 import 'dice.dart';
+import 'reading.dart';
+import 'readout.dart';
 import 'tuning.dart';
 
 export 'dice.dart';
+export 'reading.dart';
+export 'readout.dart';
 export 'tuning.dart';
 
 /// The six inward-facing planes of a tray `width` × `height` × `depth`.
@@ -55,6 +59,7 @@ class DiceTray {
     this.depth = Tuning.trayDepth,
     List<DieSpec>? dice,
     int diceCount = 2,
+    bool readout = false,
     math.Random? random,
   }) : specs = List<DieSpec>.unmodifiable(
          dice ??
@@ -77,6 +82,13 @@ class DiceTray {
         ),
       );
     }
+    this.readout = Readout(
+      dice: world.bodies,
+      width: width,
+      height: height,
+      depth: depth,
+      enabled: readout,
+    );
     throwDice();
   }
 
@@ -91,6 +103,14 @@ class DiceTray {
   final math.Random _random;
 
   late final PhysicsWorld world;
+
+  /// What the dice do once they have stopped: see [Readout].
+  ///
+  /// Off unless asked for. A bare [DiceTray] is a box with dice in it, and
+  /// anything measuring where they came to rest — which is most of the test
+  /// suite — is measuring a tray that does not tidy itself up afterwards. The
+  /// app turns it on; so do the tools, which are showing the app.
+  late final Readout readout;
 
   List<RigidBody> get dice => world.bodies;
 
@@ -157,6 +177,7 @@ class DiceTray {
       );
       die.syncDerived();
     }
+    readout.release();
     world.wake();
   }
 
@@ -197,10 +218,27 @@ class DiceTray {
       world.wake();
     }
 
+    // Anything at all that wakes the world takes the dice back off the
+    // readout: the shake and gyroscope thresholds just above, a throw, a key,
+    // a finger on the glass. Catching it here rather than at each of those
+    // means there is one place it can be got wrong instead of five.
+    readout.advance(
+      dt,
+      atRest: world.asleep,
+      reading: () => <int>[for (final RigidBody die in dice) readFace(die, up)],
+    );
+
     // Real time goes to the sensors — angular acceleration is a physical rate
     // and has no business being scaled. Only the simulation is slowed.
     world.advance(dt * Tuning.timeScale);
   }
+
+  /// Which way the sky is, inside the tray. Opposite the effective field, which
+  /// is where "up" has to come from in a box that is only ever accelerating.
+  Vector3 get up =>
+      world.gravity.length2 > 1e-6
+          ? -world.gravity.normalized()
+          : Vector3(0, 0, 1);
 
   /// The number showing on top, where "up" is opposite the current field.
   ///
@@ -212,25 +250,13 @@ class DiceTray {
   /// pointing at the sky and no face at all, so the number it rolled is the one
   /// on the face it is sitting on — which is why a real D4 prints that number
   /// along the bottom edge of the three faces you can see.
-  int faceUp(RigidBody die) {
-    final Vector3 up =
-        world.gravity.length2 > 1e-6
-            ? -world.gravity.normalized()
-            : Vector3(0, 0, 1);
-    final Vector3 towards = die.shape.readsDownFace ? -up : up;
-
-    int best = 1;
-    double bestDot = double.negativeInfinity;
-    for (int f = 0; f < die.shape.faces.length; f++) {
-      final double d = die.faceNormal(f).dot(towards);
-      if (d > bestDot) {
-        bestDot = d;
-        best = die.shape.faces[f].value;
-      }
-    }
-    return best;
-  }
+  int faceUp(RigidBody die) => die.shape.faces[readFace(die, up)].value;
 
   /// What every die is showing, in tray order.
-  List<int> get faces => <int>[for (final RigidBody die in dice) faceUp(die)];
+  ///
+  /// Once the readout has laid the dice out these are the numbers it captured,
+  /// not what the dice would read now. It has turned them since, and it turned
+  /// them to show exactly these.
+  List<int> get faces =>
+      readout.values ?? <int>[for (final RigidBody die in dice) faceUp(die)];
 }

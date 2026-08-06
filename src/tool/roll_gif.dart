@@ -28,6 +28,7 @@ void main() {
     final DiceTray tray = DiceTray(
       width: kScreen.width / Tuning.logicalPixelsPerMetre,
       height: kScreen.height / Tuning.logicalPixelsPerMetre,
+      readout: true,
       random: math.Random(11),
     );
     final ManualMotionSource motion = ManualMotionSource();
@@ -37,7 +38,10 @@ void main() {
     final img.GifEncoder encoder = img.GifEncoder(repeat: 0);
 
     const double dt = 1 / 120;
-    const double duration = 4.6;
+    // Long enough to run past the settle and through the readout: the dice
+    // tidying themselves up is part of what a roll looks like now, and a gif
+    // that stops before it is a gif of the old app.
+    const double duration = 6.6;
     const double shakeAt = 1.3;
     bool shaken = false;
 

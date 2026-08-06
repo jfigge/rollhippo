@@ -46,6 +46,24 @@ void main() {
     expect(Tuning.wallFriction, 0.5);
     expect(Tuning.glassRestitution, 0.4);
     expect(Tuning.glassFriction, 0.08);
+
+    // The readout: what the dice do once they have stopped.
+    expect(
+      Tuning.readoutDelay,
+      0.25,
+      reason: 'a beat where they landed before they tidy up',
+    );
+    expect(Tuning.readoutDuration, 0.55);
+    expect(
+      Tuning.readoutTilt,
+      0.26,
+      reason: '15 degrees back — readable, but still a solid',
+    );
+    expect(
+      Tuning.readoutTopClearance,
+      0.022,
+      reason: 'clear of the Close and Throw buttons',
+    );
   });
 
   test('a 16 mm acrylic die still weighs what one weighs', () {

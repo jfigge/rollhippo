@@ -120,11 +120,29 @@ void main() {
         final Quaternion q = previewOrientation(shape);
         final Matrix3 rotation = q.asRotationMatrix();
 
-        int front = 0;
+        int highest = 0;
         for (int f = 1; f < shape.faces.length; f++) {
-          if (shape.faces[f].value > shape.faces[front].value) front = f;
+          if (shape.faces[f].value > shape.faces[highest].value) highest = f;
         }
-        expect(shape.faces[front].value, kind.sides);
+        expect(shape.faces[highest].value, kind.sides);
+
+        // Which face actually has that number written on it, which is the one
+        // carrying it everywhere but the D4 — a D4 prints its numbers along
+        // the edges of the three faces *around* the one they name, so the face
+        // to show is a neighbour and the number is on the edge they share.
+        final DieMarking marking = readMarking(shape, highest);
+        final int front = marking.face;
+        final ConvexFace face = shape.faces[front];
+        final int corners = face.vertices.length;
+        expect(
+          shape.readsDownFace
+              ? shape.faces[face.neighbours[marking.edge]].value
+              : face.value,
+          kind.sides,
+          reason:
+              '${kind.label} is not introducing itself with a ${kind.sides} '
+              'anywhere you can see',
+        );
 
         // No face leans further out of the screen than the one being shown.
         final List<Vector3> normals = <Vector3>[
@@ -147,12 +165,14 @@ void main() {
           reason: '${kind.label} reads as a flat shape, not a solid',
         );
 
-        // Text on that face runs along its first edge and stands up towards
-        // `normal × along` — see [paintDie] — so on screen, where x is right
-        // and y is up, that direction has to come out plumb.
-        final ConvexFace face = shape.faces[front];
+        // Text runs along the edge the number is written on and stands up
+        // towards `normal × along` — see [paintDie] — so on screen, where x is
+        // right and y is up, that direction has to come out plumb. Plumb and
+        // *upwards* also puts the edge below the middle of the face, which is
+        // where a D4 wears its numbers.
         final Vector3 along = rotation.transformed(
-          shape.vertices[face.vertices[1]] - shape.vertices[face.vertices[0]],
+          shape.vertices[face.vertices[(marking.edge + 1) % corners]] -
+              shape.vertices[face.vertices[marking.edge]],
         )..normalize();
         final Vector3 up = normals[front].cross(along);
         expect(

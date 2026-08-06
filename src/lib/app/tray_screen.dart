@@ -26,9 +26,12 @@ const Size kHarnessScreen = Size(393, 852);
 
 /// The tray itself: the dice you chose, thrown in and left to settle.
 class TrayScreen extends StatefulWidget {
-  const TrayScreen({super.key, required this.dice});
+  const TrayScreen({super.key, required this.dice, this.readout = true});
 
   final List<DieSpec> dice;
+
+  /// Whether settled dice turn themselves towards you to be read.
+  final bool readout;
 
   @override
   State<TrayScreen> createState() => _TrayScreenState();
@@ -99,6 +102,7 @@ class _TrayScreenState extends State<TrayScreen>
       width: size.width / Tuning.logicalPixelsPerMetre,
       height: size.height / Tuning.logicalPixelsPerMetre,
       dice: widget.dice,
+      readout: widget.readout,
     );
   }
 
@@ -164,6 +168,14 @@ class _TrayScreenState extends State<TrayScreen>
                   _manual?.pointerTo(_toMetres(d.localPosition));
                 },
                 onPanEnd: (_) => _manual?.pointerUp(),
+                // Somewhere to put the dice back down without shaking them: the
+                // formation is a fine place to leave a roll, but not if you
+                // wanted to look at where it actually landed.
+                onTap: () {
+                  if (!tray.readout.active) return;
+                  tray.readout.release();
+                  tray.world.wake();
+                },
                 onDoubleTap: tray.throwDice,
                 child: Stack(
                   fit: StackFit.expand,
