@@ -152,6 +152,46 @@ Quaternion previewOrientation(ConvexShape shape) {
   return (Quaternion.axisAngle(Vector3(0, 0, 1), spin) * align)..normalize();
 }
 
+/// How far round the hippopotamus is turned in the rack, and how far you are
+/// looking down on it.
+///
+/// Enough of a turn to bring its eye and the end of its muzzle round, and not
+/// so much that the number on its flank starts to foreshorten or the one on
+/// its nose comes into view beside it. The look down is what puts the line of
+/// its back on screen and stops it reading as a cardboard cut-out; much more
+/// and it loses its legs.
+const double _hippoYaw = 0.32;
+const double _hippoPitch = 0.16;
+
+/// The angle a kind of die is introduced at in the rack.
+///
+/// [previewOrientation] for a die, and one exception — which is not the rule
+/// being wrong. The second half of that rule exists so a polyhedron reads as a
+/// solid rather than as a polygon, and an animal reads as one already; what a
+/// hippopotamus needs from a portrait is its head. So it is turned the way you
+/// would photograph one, three quarters on with the eye and the muzzle in
+/// view, rather than to whichever corner brings the most faces round.
+///
+/// Both keep the promise the rack is making: the face carrying the highest
+/// number is the face you are being shown, and its number is upright and
+/// plumb. `picker_test.dart` holds every kind to that, this one included.
+Quaternion previewFor(DieKind kind) {
+  final ConvexShape shape = shapeFor(kind);
+  if (kind != DieKind.hippo) return previewOrientation(shape);
+
+  int highest = 0;
+  for (int f = 1; f < shape.faces.length; f++) {
+    if (shape.faces[f].value > shape.faces[highest].value) highest = f;
+  }
+  // Turned about the screen's own axes, in that order, so the yaw cannot tip
+  // the numeral off the vertical and the look down cannot lean it sideways —
+  // which is the one thing the rack may not do to a die.
+  return (Quaternion.axisAngle(Vector3(1, 0, 0), _hippoPitch) *
+        Quaternion.axisAngle(Vector3(0, 1, 0), _hippoYaw) *
+        markingToScreen(shape, readMarking(shape, highest)))
+    ..normalize();
+}
+
 /// One body per kind, shared by every preview of that kind.
 ///
 /// Nothing ever moves them — the picker is a still life — so a die at the
@@ -163,7 +203,7 @@ RigidBody _body(DieKind kind) =>
     _bodies[kind] ??= RigidBody(
       shape: shapeFor(kind),
       mass: 1.0,
-      orientation: previewOrientation(shapeFor(kind)),
+      orientation: previewFor(kind),
     );
 
 class _DiePainter extends CustomPainter {
@@ -187,7 +227,7 @@ class _DiePainter extends CustomPainter {
         centre: Offset(size.width / 2, size.height / 2),
       ),
       die,
-      DieStyle.of(spec.colour),
+      DieStyle.ofSpec(spec),
     );
   }
 

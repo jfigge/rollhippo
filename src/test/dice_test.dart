@@ -119,9 +119,15 @@ void main() {
   });
 
   test('a full tray of assorted dice starts apart and stays inside', () {
+    // The six solids, and not the hippopotamus: it is a cube with an animal
+    // drawn on it, so it would put a seventh die in the mixture without
+    // putting a seventh shape in it.
+    final List<DieKind> shapes = <DieKind>[
+      for (final DieKind kind in DieKind.values)
+        if (!kind.secret) kind,
+    ];
     final List<DieSpec> set = <DieSpec>[
-      for (int i = 0; i < 10; i++)
-        spec(DieKind.values[i % DieKind.values.length]),
+      for (int i = 0; i < 10; i++) spec(shapes[i % shapes.length]),
     ];
     final DiceTray tray = trayOf(set, seed: 5);
 

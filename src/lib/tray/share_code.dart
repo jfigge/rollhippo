@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'config.dart';
+import 'profile.dart';
 import 'dice.dart';
 
 /// What every Roll Hippo share code starts with.
@@ -30,8 +30,8 @@ const String kShareCodePrefix = 'RH1:';
 /// nothing else. A colour from anywhere else has no index, and is written out
 /// as the first one — see [_paletteIndex].
 ///
-/// This is not what a QR code carries any more — see [encodeConfig], which
-/// wraps these same bytes in the rest of a configuration. It is still what a
+/// This is not what a QR code carries any more — see [encodeProfile], which
+/// wraps these same bytes in the rest of a profile. It is still what a
 /// save's dice are written as inside the preferences file, where the sets are
 /// the only part of it that is not already a plain JSON field.
 String encodeGroups(List<List<DieSpec>> groups) {
@@ -46,12 +46,12 @@ String encodeGroups(List<List<DieSpec>> groups) {
 /// caller: someone pointed the camera at a QR code that was not ours. Wrong
 /// prefix, not base64, truncated, a kind or a colour this build has never heard
 /// of, or trailing bytes that mean the reader and the writer disagree about the
-/// format — none of them is a config, and a half-decoded config would be worse
+/// format — none of them is a profile, and a half-decoded profile would be worse
 /// than none.
 ///
 /// What comes back is exactly what was encoded, groups and all, *without* being
 /// held to the picker's own limits. Those belong to the picker: this knows the
-/// wire format, and `ConfigScreen` knows how many sets it has room for.
+/// wire format, and `PickerScreen` knows how many sets it has room for.
 List<List<DieSpec>>? decodeGroups(String text) {
   final String trimmed = text.trim();
   if (!trimmed.startsWith(kShareCodePrefix)) return null;
@@ -70,29 +70,29 @@ List<List<DieSpec>>? decodeGroups(String text) {
   return read.groups;
 }
 
-/// What every Roll Hippo *configuration* code starts with.
+/// What every Roll Hippo *profile* code starts with.
 ///
 /// A version on from [kShareCodePrefix], and a different thing: that one is a
 /// set of dice, and this is the whole picker — which mode it is in, what is in
 /// the rack, what the shoe is made of, and what its owner calls it. A build
 /// that only knows how to read the old one will decline this outright rather
 /// than decode two thirds of it, which is what the version is for.
-const String kConfigCodePrefix = 'RH2:';
+const String kProfileCodePrefix = 'RH2:';
 
-/// A configuration read off somebody else's screen.
+/// A profile read off somebody else's screen.
 ///
 /// The [name] is theirs, and is blank when the phone it came from had not
-/// saved that configuration under anything — which is a real answer, and the
+/// saved that profile under anything — which is a real answer, and the
 /// difference between a code that offers to become a save on this phone and
 /// one that is only a set of dice to try.
-class ScannedConfig {
-  const ScannedConfig({required this.name, required this.config});
+class ScannedProfile {
+  const ScannedProfile({required this.name, required this.profile});
 
   final String name;
-  final Config config;
+  final Profile profile;
 }
 
-/// A whole configuration, small enough to put in a QR code.
+/// A whole profile, small enough to put in a QR code.
 ///
 /// Header first, because it is fixed width and every code has one: the mode,
 /// the two numbers the shoe is made of, and the card's own dice as palette
@@ -103,48 +103,48 @@ class ScannedConfig {
 /// A full house — three sets of ten, three cards, a twelve-character name —
 /// comes to 55 bytes, which is 76 characters of base64 and a QR code still
 /// coarse enough to read across a table.
-String encodeConfig(Config config, {String name = ''}) {
+String encodeProfile(Profile profile, {String name = ''}) {
   final List<int> bytes = <int>[
-    config.mode.index,
-    config.decks,
-    config.reshuffleAt,
-    config.colours.length,
-    for (final int colour in config.colours) _paletteIndex(colour),
+    profile.mode.index,
+    profile.decks,
+    profile.reshuffleAt,
+    profile.colours.length,
+    for (final int colour in profile.colours) _paletteIndex(colour),
   ];
-  _writeGroups(bytes, config.groups);
+  _writeGroups(bytes, profile.groups);
   final List<int> label = utf8.encode(name);
   bytes
     ..add(label.length)
     ..addAll(label);
-  return kConfigCodePrefix + base64Url.encode(bytes);
+  return kProfileCodePrefix + base64Url.encode(bytes);
 }
 
-/// The configuration a code describes, or null if [text] is not one.
+/// The profile a code describes, or null if [text] is not one.
 ///
 /// Null covers every way this can fail, for the reason [decodeGroups] gives:
 /// they are all the same answer to the caller, and a half-decoded
-/// configuration would be worse than none.
+/// profile would be worse than none.
 ///
 /// What comes back is what was encoded, *without* being held to the picker's
 /// limits — those belong to the picker, which knows how many sets it has room
-/// for. See `ConfigScreen._apply`.
-ScannedConfig? decodeConfig(String text) {
+/// for. See `PickerScreen._apply`.
+ScannedProfile? decodeProfile(String text) {
   final String trimmed = text.trim();
-  if (!trimmed.startsWith(kConfigCodePrefix)) return null;
+  if (!trimmed.startsWith(kProfileCodePrefix)) return null;
 
   final Uint8List bytes;
   try {
-    bytes = base64Url.decode(trimmed.substring(kConfigCodePrefix.length));
+    bytes = base64Url.decode(trimmed.substring(kProfileCodePrefix.length));
   } on FormatException {
     return null;
   }
   // The header, and at least one colour: a card with no dice on it is not a
-  // configuration this build has ever produced.
+  // profile this build has ever produced.
   if (bytes.length < 5) return null;
 
   int at = 0;
   final int mode = bytes[at++];
-  if (mode >= ConfigMode.values.length) return null;
+  if (mode >= ProfileMode.values.length) return null;
   final int decks = bytes[at++];
   final int reshuffleAt = bytes[at++];
   final int cardDice = bytes[at++];
@@ -172,10 +172,10 @@ ScannedConfig? decodeConfig(String text) {
     return null;
   }
 
-  return ScannedConfig(
+  return ScannedProfile(
     name: name,
-    config: Config(
-      mode: ConfigMode.values[mode],
+    profile: Profile(
+      mode: ProfileMode.values[mode],
       groups: read.groups,
       colours: colours,
       decks: decks,

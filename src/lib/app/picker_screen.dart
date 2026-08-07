@@ -6,8 +6,8 @@ import '../cards/deck.dart';
 import '../render/die_preview.dart';
 import '../tray/tray.dart';
 import 'card_screen.dart';
-import 'config_pills.dart';
-import 'configs.dart';
+import 'profile_row.dart';
+import 'profiles.dart';
 import 'menu.dart';
 import 'open_dialog.dart';
 import 'page_dots.dart';
@@ -82,7 +82,7 @@ const int kMaxReshuffleAt = 20;
 /// The *kind* is not a choice: a deck of every outcome only makes sense for
 /// dice that all have the same faces, and the six-sided one is the die
 /// everybody means. The colour is one, per die — see
-/// [_ConfigScreenState._cardColours] — and this is where every one of them
+/// [_PickerScreenState._cardColours] — and this is where every one of them
 /// starts.
 const DieSpec kCardDie = DieSpec(kind: DieKind.d6, colour: kDiceWhite);
 
@@ -116,6 +116,16 @@ const Key kReshuffleSlider = ValueKey<String>('reshuffle');
 /// page view keeps more than one group built — so anything reaching for it has
 /// to say whose rack it means.
 const Key kAddDie = ValueKey<String>('add-die');
+
+/// The name that lets the hippopotamus out.
+///
+/// Name a profile this and the rack offers a seventh kind of die — see
+/// [DieKind.hippo], which is a D6 with an animal carved out of it. Matched
+/// against the name of the profile you have *open*, trimmed and
+/// case-folded, so it is a thing you keep rather than a thing you type: it
+/// comes back every time you open that save, travels in a share code with it,
+/// and is gone the moment you open something else.
+const String kHippoProfile = 'hippo';
 
 /// What you get before you have chosen anything.
 const List<DieSpec> kDefaultDice = <DieSpec>[
@@ -161,18 +171,18 @@ int rollableIndex(List<List<DieSpec>> groups, int group) {
 /// a whole: you are never choosing between all thirty dice at once, you are
 /// choosing what is in *this* box.
 ///
-/// Under all of it is a row of pills, which is every configuration you have
+/// Under all of it is a row of profiles, which is every profile you have
 /// kept, and one of them is lit: the one you opened. Nothing here writes to it
 /// — an edit is to the picker, not to the save — so keeping a change means
-/// holding a pill down and choosing Save. See [ConfigPills] and [_saveTo].
-class ConfigScreen extends StatefulWidget {
-  const ConfigScreen({super.key});
+/// holding a profile down and choosing Save. See [ProfileRow] and [_saveTo].
+class PickerScreen extends StatefulWidget {
+  const PickerScreen({super.key});
 
   @override
-  State<ConfigScreen> createState() => _ConfigScreenState();
+  State<PickerScreen> createState() => _PickerScreenState();
 }
 
-class _ConfigScreenState extends State<ConfigScreen>
+class _PickerScreenState extends State<PickerScreen>
     with SingleTickerProviderStateMixin {
   /// The three sets. The first is the one the app starts with and always has at
   /// least one die in it; the other two begin with none, and are allowed to go
@@ -202,9 +212,9 @@ class _ConfigScreenState extends State<ConfigScreen>
   /// The mode Roll will act on. Set the moment a swipe is committed to rather
   /// than when it lands, so the button and the dots agree with the box that is
   /// on its way in.
-  ConfigMode _mode = ConfigMode.dice;
+  ProfileMode _mode = ProfileMode.dice;
 
-  bool get _cards => _mode == ConfigMode.cards;
+  bool get _cards => _mode == ProfileMode.cards;
 
   /// What is printed on a card: one colour per die, in the order they are laid
   /// out down the card.
@@ -226,7 +236,7 @@ class _ConfigScreenState extends State<ConfigScreen>
   int _reshuffleAt = 5;
 
   /// Which save the picker was last opened from or saved to, by id, or null
-  /// when what is on screen has come from neither. It lights that pill; it does
+  /// when what is on screen has come from neither. It lights that profile; it does
   /// not promise the screen still matches it, because an edit since then is an
   /// edit nobody has saved. See [_saveTo].
   int? _saved;
@@ -249,7 +259,7 @@ class _ConfigScreenState extends State<ConfigScreen>
   @override
   void initState() {
     super.initState();
-    configs.addListener(_savesChanged);
+    profiles.addListener(_savesChanged);
     // Only if there is something to choose between. A first run has no saves,
     // so there is no question to ask and the picker is simply there — which is
     // what the app has always done.
@@ -257,7 +267,7 @@ class _ConfigScreenState extends State<ConfigScreen>
     // After the first frame rather than during this one: a dialog needs a
     // navigator to put it in, and the screen it is going to sit on top of has
     // to have been built for that to exist.
-    if (configs.isNotEmpty) {
+    if (profiles.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_chooseAtLaunch()),
       );
@@ -266,7 +276,7 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   @override
   void dispose() {
-    configs.removeListener(_savesChanged);
+    profiles.removeListener(_savesChanged);
     _slide.dispose();
     _racks.dispose();
     super.dispose();
@@ -274,15 +284,15 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   /// What is on screen, as something that can be kept.
   ///
-  /// Both modes, deep-copied. A configuration is the whole picker rather than
+  /// Both modes, deep-copied. A profile is the whole picker rather than
   /// the page of it you are looking at — saving in card mode must not throw
   /// away the dice behind it — and the lists are copies because the store holds
   /// what it is given while this screen carries on editing its own.
   ///
   /// The mode goes with it, and is why this is only ever called from the two
-  /// places that write a save — [_newSave] and [_saveTo]. A configuration is
+  /// places that write a save — [_newSave] and [_saveTo]. A profile is
   /// saved *on* a page, and that is the page it opens on.
-  Config _capture() => Config(
+  Profile _capture() => Profile(
     mode: _mode,
     groups: <List<DieSpec>>[
       for (final List<DieSpec> group in _groups) List<DieSpec>.of(group),
@@ -292,50 +302,50 @@ class _ConfigScreenState extends State<ConfigScreen>
     reshuffleAt: _reshuffleAt,
   );
 
-  /// Puts what is on screen into [save] — Save, from a pill's own menu.
+  /// Puts what is on screen into [save] — Save, from a profile's own menu.
   ///
-  /// Whichever pill was held down, which need not be the one that is open:
-  /// saving your dice *onto* another configuration is the same gesture as
+  /// Whichever profile was held down, which need not be the one that is open:
+  /// saving your dice *onto* another profile is the same gesture as
   /// saving them back into this one, and both are things people mean. Either
-  /// way that pill is now what you are looking at, so it is the one that
+  /// way that profile is now what you are looking at, so it is the one that
   /// lights up.
   ///
   /// Nothing else in this screen writes anything. An edit changes the picker
   /// and leaves every save alone until this is called.
-  void _saveTo(SavedConfig save) {
-    configs.write(save.id, _capture());
+  void _saveTo(SavedProfile save) {
+    profiles.write(save.id, _capture());
     setState(() => _saved = save.id);
-    // The only sign anything happened, when the pill was already lit. Saving
-    // over a configuration is silent otherwise, and silence is what a control
+    // The only sign anything happened, when the profile was already lit. Saving
+    // over a profile is silent otherwise, and silence is what a control
     // that has not worked also looks like.
     _say('Saved to "${save.name}".');
   }
 
-  /// Sets the picker to a whole configuration, dropping whatever it was
-  /// showing — which is what opening a save means, and why a pill needs no
-  /// confirmation: what it replaces is either kept in a pill of its own or was
+  /// Sets the picker to a whole profile, dropping whatever it was
+  /// showing — which is what opening a save means, and why a profile needs no
+  /// confirmation: what it replaces is either kept in a profile of its own or was
   /// never named.
   ///
   /// The picker's own limits are applied on the way in, for the reason
-  /// [_applyScanned] gives: a configuration written by some later build with
+  /// [_applyScanned] gives: a profile written by some later build with
   /// four sets, or four dice on a card, loses the excess and opens.
-  void _apply(Config config) {
+  void _apply(Profile profile) {
     setState(() {
-      _takeGroups(config.groups);
+      _takeGroups(profile.groups);
       _cardColours
         ..clear()
-        ..addAll(config.colours.take(kMaxCardDice));
+        ..addAll(profile.colours.take(kMaxCardDice));
       // The last die always stays — a shoe with no dice in it is not a shoe —
-      // so a configuration that says otherwise gets the one card mode starts
+      // so a profile that says otherwise gets the one card mode starts
       // with rather than a panel with nothing to point at.
       if (_cardColours.isEmpty) _cardColours.add(kCardDie.colour);
       _cardSelected = 0;
-      _decks = config.decks.clamp(1, kMaxDecks);
-      _reshuffleAt = config.reshuffleAt.clamp(0, kMaxReshuffleAt);
-      _mode = config.mode;
+      _decks = profile.decks.clamp(1, kMaxDecks);
+      _reshuffleAt = profile.reshuffleAt.clamp(0, kMaxReshuffleAt);
+      _mode = profile.mode;
       _group = 0;
     });
-    // Both of these are where a configuration begins: the first set, and the
+    // Both of these are where a profile begins: the first set, and the
     // mode it was saved in. Jumped to rather than animated — nothing is sliding
     // *from* anywhere, the screen has just become a different one.
     _slide.value = _cards ? 1 : 0;
@@ -356,52 +366,69 @@ class _ConfigScreenState extends State<ConfigScreen>
     if (_groups[0].isEmpty) _groups[0] = List<DieSpec>.of(kDefaultDice);
   }
 
-  /// Which configuration to open, asked once, before anything has been touched.
+  /// Which profile to open, asked once, before anything has been touched.
   Future<void> _chooseAtLaunch() async {
-    final SavedConfig? save = await showOpenConfigDialog(context);
+    final SavedProfile? save = await showOpenProfileDialog(context);
     // Null is New: the picker is already sitting at its defaults, which is
-    // exactly what a new configuration is, so there is nothing to do.
+    // exactly what a new profile is, so there is nothing to do.
     if (save == null || !mounted) return;
     _open(save);
   }
 
-  void _open(SavedConfig save) {
-    _apply(save.config);
-    configs.touch(save.id);
+  void _open(SavedProfile save) {
+    _apply(save.profile);
+    profiles.touch(save.id);
     setState(() => _saved = save.id);
   }
 
   /// Keeps what is on screen, under a name.
   Future<void> _newSave() async {
-    final String? name = await showConfigNameDialog(context);
+    final String? name = await showProfileNameDialog(context);
     if (name == null || !mounted) return;
-    final SavedConfig save = configs.add(name, _capture());
+    final SavedProfile save = profiles.add(name, _capture());
     setState(() => _saved = save.id);
   }
 
   /// Something about the saves has changed — one renamed, one deleted.
   ///
-  /// The row of pills has a listener of its own, but the title above it does
+  /// The row of profiles has a listener of its own, but the title above it does
   /// not: it reads the open save's name, so a rename has to reach up here as
   /// well as down there.
   ///
   /// A deleted save that was the open one leaves the picker with nothing lit
   /// and the plain title back. What is on screen stays where it is — you were
   /// using it a moment ago, and deleting a save is a statement about the row of
-  /// pills rather than about the dice. It is simply not kept, which is what an
-  /// unnamed configuration is.
+  /// profiles rather than about the dice. It is simply not kept, which is what an
+  /// unnamed profile is.
   void _savesChanged() {
     setState(() {
-      if (_saved != null && configs.byId(_saved) == null) _saved = null;
+      if (_saved != null && profiles.byId(_saved) == null) _saved = null;
     });
   }
 
-  /// The app's name, and the configuration you are in, if you are in one.
+  /// Whether the hippopotamus is out — see [kHippoProfile].
+  bool get _hippoLoose {
+    final SavedProfile? save = profiles.byId(_saved);
+    return save != null && save.name.trim().toLowerCase() == kHippoProfile;
+  }
+
+  /// The kinds the chips offer, given the die the editor is pointed at.
+  ///
+  /// A secret kind is in the row once it has been let out — and also whenever
+  /// the die in front of you is already one, which is what a scanned code or a
+  /// save made under another name can leave you holding. A row of chips with
+  /// none of them lit would be the picker declining to say what the die is.
+  List<DieKind> _kinds(DieSpec spec) => <DieKind>[
+    for (final DieKind kind in DieKind.values)
+      if (!kind.secret || _hippoLoose || kind == spec.kind) kind,
+  ];
+
+  /// The app's name, and the profile you are in, if you are in one.
   ///
   /// The name comes from the store rather than from anything held here, so a
   /// rename lands in the title without being carried to it.
   String get _title {
-    final SavedConfig? save = configs.byId(_saved);
+    final SavedProfile? save = profiles.byId(_saved);
     return save == null ? 'Roll Hippo' : 'Roll Hippo - ${save.name}';
   }
 
@@ -444,7 +471,7 @@ class _ConfigScreenState extends State<ConfigScreen>
 
   /// Commits to a mode and lets the block coast the rest of the way there.
   void _goToMode(int index) {
-    setState(() => _mode = index == 0 ? ConfigMode.dice : ConfigMode.cards);
+    setState(() => _mode = index == 0 ? ProfileMode.dice : ProfileMode.cards);
     _slide.animateTo(
       index.toDouble(),
       duration: const Duration(milliseconds: 260),
@@ -514,7 +541,7 @@ class _ConfigScreenState extends State<ConfigScreen>
     setState(() => _dice[_selected] = spec);
   }
 
-  /// Takes on a configuration somebody else's phone described.
+  /// Takes on a profile somebody else's phone described.
   ///
   /// All of it at once, and not a merge. A code is somebody's whole setup —
   /// the sets are alternatives to each other, and the shoe behind them is part
@@ -527,33 +554,33 @@ class _ConfigScreenState extends State<ConfigScreen>
   /// and there are four cases:
   ///
   ///  * No name — the other phone had not saved it either. It goes on screen
-  ///    as an unnamed configuration, which is what it is, and nothing is
+  ///    as an unnamed profile, which is what it is, and nothing is
   ///    written. This is what every code did before names existed.
   ///  * A name you already have, holding exactly this — you have scanned a
-  ///    configuration you already keep. There is nothing to decide and nothing
-  ///    to write, so it simply opens, the way tapping its pill would.
+  ///    profile you already keep. There is nothing to decide and nothing
+  ///    to write, so it simply opens, the way tapping its profile would.
   ///  * A name you already have, holding something else — the interesting one,
   ///    and the only one that can lose you something. Load, Replace or Cancel.
   ///  * A name you do not have — worth offering to keep, since somebody
   ///    bothered to name it. Load, Save or Cancel.
-  Future<void> _scanned(ScannedConfig scanned) async {
+  Future<void> _scanned(ScannedProfile scanned) async {
     final String name = scanned.name.trim();
     if (name.isEmpty) {
-      _take(scanned.config);
+      _take(scanned.profile);
       _say('Set up from a shared code.');
       return;
     }
 
-    final SavedConfig? existing = configs.byName(name);
-    if (existing != null && existing.config == scanned.config) {
-      // Silently: the pill lights up, the title says the name, and there was
+    final SavedProfile? existing = profiles.byName(name);
+    if (existing != null && existing.profile == scanned.profile) {
+      // Silently: the profile lights up, the title says the name, and there was
       // never a question. Asking here would be asking somebody to confirm that
       // two identical things are identical.
       _open(existing);
       return;
     }
 
-    final ScannedChoice choice = await showScannedConfigDialog(
+    final ScannedChoice choice = await showScannedProfileDialog(
       context,
       name: name,
       replaces: existing != null,
@@ -563,27 +590,27 @@ class _ConfigScreenState extends State<ConfigScreen>
       case ScannedChoice.cancel:
         return;
       case ScannedChoice.load:
-        _take(scanned.config);
+        _take(scanned.profile);
         _say('Set up from "$name".');
       case ScannedChoice.keep:
         if (existing != null) {
-          configs.write(existing.id, scanned.config);
-          _open(configs.byId(existing.id)!);
+          profiles.write(existing.id, scanned.profile);
+          _open(profiles.byId(existing.id)!);
         } else {
-          final SavedConfig made = configs.add(name, scanned.config);
-          _apply(scanned.config);
+          final SavedProfile made = profiles.add(name, scanned.profile);
+          _apply(scanned.profile);
           setState(() => _saved = made.id);
         }
     }
   }
 
-  /// Puts a scanned configuration on screen without keeping it.
+  /// Puts a scanned profile on screen without keeping it.
   ///
   /// Nothing is lit afterwards. What is on screen came from a code rather than
-  /// from a pill, and a pill that lit up here would be claiming to hold
+  /// from a profile, and a profile that lit up here would be claiming to hold
   /// something it does not.
-  void _take(Config config) {
-    _apply(config);
+  void _take(Profile profile) {
+    _apply(profile);
     setState(() => _saved = null);
   }
 
@@ -649,17 +676,21 @@ class _ConfigScreenState extends State<ConfigScreen>
                 // shoe of cards and what it is made of.
                 _block(),
                 _modeDots(),
-                // Under everything the two modes have, because a save is about
-                // both of them at once — and above the [Spacer], so the row
-                // belongs to the picker it describes rather than floating on
-                // top of the Roll button.
-                ConfigPills(
-                  open: _saved,
-                  onOpen: _open,
-                  onSave: _saveTo,
-                  onNew: () => unawaited(_newSave()),
+                // Under everything the two modes have, because a save is
+                // about both of them at once — and given every point between
+                // there and the Roll button, which is what it wraps into and,
+                // once it has filled it, scrolls inside. There is no [Spacer]:
+                // the slack under the profiles *is* the profiles' space, and a block
+                // of them that grew past it would push the button off the
+                // bottom of the screen.
+                Expanded(
+                  child: ProfileRow(
+                    open: _saved,
+                    onOpen: _open,
+                    onSave: _saveTo,
+                    onNew: () => unawaited(_newSave()),
+                  ),
                 ),
-                const Spacer(),
                 _rollButton(),
               ],
             ),
@@ -690,10 +721,10 @@ class _ConfigScreenState extends State<ConfigScreen>
             children: <Widget>[
               const SizedBox(width: _kMenuEdge),
               AppMenuButton(
-                config: _capture(),
-                name: configs.byId(_saved)?.name ?? '',
+                profile: _capture(),
+                name: profiles.byId(_saved)?.name ?? '',
                 onScanned:
-                    (ScannedConfig scanned) => unawaited(_scanned(scanned)),
+                    (ScannedProfile scanned) => unawaited(_scanned(scanned)),
               ),
               // Shrunk to fit rather than cut off. The longest name allowed
               // takes the title past the width of a phone, and an ellipsis
@@ -1253,7 +1284,7 @@ class _ConfigScreenState extends State<ConfigScreen>
                   const SizedBox(height: 12),
                   Row(
                     children: <Widget>[
-                      for (final DieKind kind in DieKind.values)
+                      for (final DieKind kind in _kinds(spec))
                         Expanded(
                           child: _Chip(
                             label: kind.label,
@@ -1495,12 +1526,21 @@ class _Chip extends StatelessWidget {
           color: selected ? const Color(0xFF3F6FA8) : const Color(0x14FFFFFF),
           borderRadius: BorderRadius.circular(9),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? const Color(0xFFF2F7FF) : const Color(0xAABFD0E4),
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        // Shrunk to fit rather than cut off, the same bargain the title makes.
+        // Six chips of two or three characters fit any phone with room to
+        // spare; a seventh, with a word on it, does not — and a chip whose
+        // label had been ellipsed would be a chip you could not read.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: TextStyle(
+              color:
+                  selected ? const Color(0xFFF2F7FF) : const Color(0xAABFD0E4),
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
         ),
       ),

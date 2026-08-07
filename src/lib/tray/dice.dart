@@ -12,13 +12,32 @@ enum DieKind {
   d8(8),
   d10(10),
   d12(12),
-  d20(20);
+  d20(20),
 
-  const DieKind(this.sides);
+  /// A hippopotamus, sixteen millimetres of one, which rolls like a D6 because
+  /// underneath the animal it *is* a D6 — see [_build] and `paintHippo`.
+  ///
+  /// Not offered until it is asked for by name: see [secret], and
+  /// `kHippoProfile` for what the name is.
+  hippo(6, marked: 'Hippo');
+
+  const DieKind(this.sides, {String? marked}) : _marked = marked;
 
   final int sides;
 
-  String get label => 'D$sides';
+  /// What this kind is called, when counting its faces does not say it.
+  final String? _marked;
+
+  String get label => _marked ?? 'D$sides';
+
+  /// True of the kinds the picker keeps back until you have named a
+  /// profile after them. The hippopotamus, and nothing else.
+  ///
+  /// Kept here rather than in the picker because it is a fact about the die —
+  /// a share code carrying one still decodes, a save holding one still opens,
+  /// and a tray full of them still rolls. All that is withheld is the chip
+  /// that puts one in the rack.
+  bool get secret => this == DieKind.hippo;
 }
 
 /// One die in the tray: what shape it is and what colour it is.
@@ -35,7 +54,7 @@ class DieSpec {
       DieSpec(kind: kind ?? this.kind, colour: colour ?? this.colour);
 
   /// A die is two choices and nothing else, so two of them with the same
-  /// answers are the same die. [Config] compares whole sets this way, which is
+  /// answers are the same die. [Profile] compares whole sets this way, which is
   /// how a scanned code can tell whether it is the save you already have.
   @override
   bool operator ==(Object other) =>
@@ -104,19 +123,7 @@ ConvexShape _build(DieKind kind) {
     case DieKind.d4:
       return _shape(_tetrahedron(), readsDownFace: true);
     case DieKind.d6:
-      return _shape(
-        _cube(),
-        usesPips: true,
-        // The D6 keeps the numbering the pip painter and the tests were written
-        // against, rather than taking whatever the generic pairing hands out.
-        valueFor: (Vector3 n) {
-          for (int axis = 0; axis < 3; axis++) {
-            if (n[axis] > 0.5) return faceValue(axis, 1);
-            if (n[axis] < -0.5) return faceValue(axis, -1);
-          }
-          return 1;
-        },
-      );
+      return _shape(_cube(), usesPips: true, valueFor: _cubeValue);
     case DieKind.d8:
       return _shape(_octahedron());
     case DieKind.d10:
@@ -125,7 +132,32 @@ ConvexShape _build(DieKind kind) {
       return _shape(_dodecahedron());
     case DieKind.d20:
       return _shape(_icosahedron());
+    case DieKind.hippo:
+      // The same cube as the D6, numbered the same way, and a separate shape
+      // only so that the painter can tell the two apart.
+      //
+      // A hippopotamus is not convex — it has four legs with gaps between them
+      // — and this app's collision is convex-polyhedron SAT. Simulating one
+      // honestly would mean either a hull that is a lumpy stone with none of
+      // the animal left in it, or a compound body and a fairness argument
+      // nobody could make. So the hippo is *carved out of* a 16 mm die rather
+      // than replacing it: the cube is what the tray collides with and what
+      // decides the number, and `paintHippo` draws the animal inside it. It
+      // rolls exactly as fairly as the D6 does, because it is one.
+      return _shape(_cube(), valueFor: _cubeValue);
   }
+}
+
+/// The D6's numbering, which the hippo carved out of one keeps.
+///
+/// Stated rather than taken from the generic pairing because the pip painter
+/// and the tests were written against it — see [faceValue].
+int _cubeValue(Vector3 n) {
+  for (int axis = 0; axis < 3; axis++) {
+    if (n[axis] > 0.5) return faceValue(axis, 1);
+    if (n[axis] < -0.5) return faceValue(axis, -1);
+  }
+  return 1;
 }
 
 ConvexShape _shape(

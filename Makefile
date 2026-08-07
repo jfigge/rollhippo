@@ -7,7 +7,7 @@ DEVICE   ?= 00008110-000414C63A51401E   # Jason's iPhone
 SCRATCH  ?= /tmp/rollhippo
 
 .DEFAULT_GOAL := help
-.PHONY: help all format analyze test desktop ios gif filmstrip picker cards icon clean
+.PHONY: help all format analyze test desktop ios gif filmstrip picker cards hippo icon clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -44,7 +44,7 @@ filmstrip:  ## Render a scripted roll to a contact sheet
 	cd $(SRC) && FILMSTRIP_OUT=$(SCRATCH)/filmstrip.png flutter test tool/filmstrip.dart
 	@echo "→ $(SCRATCH)/filmstrip.png"
 
-picker:  ## Render the picker in both modes, and the six kinds at rack size
+picker:  ## Render the picker in both modes, and every kind at rack size
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && PICKER_OUT=$(SCRATCH) flutter test tool/picker.dart
 	@echo "→ $(SCRATCH)/picker*.png, $(SCRATCH)/kinds.png"
@@ -53,6 +53,11 @@ cards:  ## Render the card table, and a gif of a card being dealt
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && CARDS_OUT=$(SCRATCH) flutter test tool/cards.dart
 	@echo "→ $(SCRATCH)/cards-*.png, $(SCRATCH)/cards-deal.gif"
+
+hippo:  ## Render the hippopotamus — every pose a roll can present it in
+	@mkdir -p $(SCRATCH)
+	cd $(SRC) && HIPPO_OUT=$(SCRATCH)/hippo.png flutter test tool/hippo.dart
+	@echo "→ $(SCRATCH)/hippo.png"
 
 icon:  ## Draw the app icon into the iOS and macOS asset catalogues
 	@# Writes into the project, not /tmp: the files it makes are the icon.

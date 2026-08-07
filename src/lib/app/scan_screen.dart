@@ -10,8 +10,8 @@ const double _kWindowFraction = 0.68;
 
 /// Point the camera at somebody else's Roll Hippo code.
 ///
-/// Pops with the configuration the code described, or with null if you closed
-/// it — see [ScannedConfig], which carries the name its owner gave it. It
+/// Pops with the profile the code described, or with null if you closed
+/// it — see [ScannedProfile], which carries the name its owner gave it. It
 /// never pops with a code it could not read — see [_onDetect]. The one thing
 /// this screen must not do is come back with *something*: a scanner that
 /// half-understands a QR code off a cereal box and replaces your dice with it
@@ -48,7 +48,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   /// A frame the detector found codes in.
   ///
-  /// Every code in it is offered to [decodeConfig], and the first one that is a
+  /// Every code in it is offered to [decodeProfile], and the first one that is a
   /// Roll Hippo code wins. Anything else only earns a line of text — a camera
   /// pointed at the world finds QR codes constantly, and a scanner that
   /// complained about each one would be unusable in a room with a poster in it.
@@ -57,7 +57,7 @@ class _ScanScreenState extends State<ScanScreen> {
     for (final Barcode code in capture.barcodes) {
       final String? raw = code.rawValue;
       if (raw == null) continue;
-      final ScannedConfig? scanned = decodeConfig(raw);
+      final ScannedProfile? scanned = decodeProfile(raw);
       if (scanned == null) continue;
       _taken = true;
       Navigator.of(context).pop(scanned);

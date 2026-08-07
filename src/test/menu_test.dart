@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/settings.dart';
@@ -73,7 +73,7 @@ Future<void> pumpPicker(WidgetTester tester) async {
   // against the screen.
   await tester.binding.setSurfaceSize(kHarnessScreen);
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+  await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 }
 
 void main() {
@@ -86,7 +86,7 @@ void main() {
       final Offset menu = tester.getCenter(find.byType(AppMenuButton));
       expect(
         menu.dy,
-        lessThan(tester.getSize(find.byType(ConfigScreen)).height / 2),
+        lessThan(tester.getSize(find.byType(PickerScreen)).height / 2),
       );
 
       await openMenu(tester);
@@ -163,7 +163,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: AppMenuButton(
-              config: scanned(<List<DieSpec>>[<DieSpec>[]]).config,
+              profile: scanned(<List<DieSpec>>[<DieSpec>[]]).profile,
               name: '',
               onScanned: (_) {},
               onExit: () async => asked++,
@@ -352,10 +352,10 @@ void main() {
       );
       // What the picker starts with: one set of two white D6s, on the dice
       // page, and no name — nothing has been saved.
-      final ScannedConfig read = decodeConfig(qr.code)!;
+      final ScannedProfile read = decodeProfile(qr.code)!;
       expect(read.name, isEmpty);
-      expect(read.config.mode, ConfigMode.dice);
-      expectSame(read.config.groups, <List<DieSpec>>[
+      expect(read.profile.mode, ProfileMode.dice);
+      expectSame(read.profile.groups, <List<DieSpec>>[
         List<DieSpec>.of(kDefaultDice),
         <DieSpec>[],
         <DieSpec>[],
@@ -379,7 +379,7 @@ void main() {
       final ShareCodeView qr = tester.widget<ShareCodeView>(
         find.byType(ShareCodeView),
       );
-      final List<List<DieSpec>> coded = decodeConfig(qr.code)!.config.groups;
+      final List<List<DieSpec>> coded = decodeProfile(qr.code)!.profile.groups;
       expect(coded[0].length, 3);
       expect(coded[0].last.kind, DieKind.d20);
       expect(find.text('3 dice'), findsOneWidget);
@@ -484,11 +484,11 @@ void main() {
 
 /// A code carrying [groups] and nothing else worth saying: the dice page, the
 /// shoe at its defaults, and no name on it.
-ScannedConfig scanned(List<List<DieSpec>> groups, {String name = ''}) =>
-    ScannedConfig(
+ScannedProfile scanned(List<List<DieSpec>> groups, {String name = ''}) =>
+    ScannedProfile(
       name: name,
-      config: Config(
-        mode: ConfigMode.dice,
+      profile: Profile(
+        mode: ProfileMode.dice,
         groups: groups,
         colours: const <int>[kDiceWhite, kDiceWhite],
         decks: 2,

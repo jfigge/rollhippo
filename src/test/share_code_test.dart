@@ -129,14 +129,14 @@ void main() {
     });
   });
 
-  group('a configuration code', () {
-    Config config({
-      ConfigMode mode = ConfigMode.dice,
+  group('a profile code', () {
+    Profile profile({
+      ProfileMode mode = ProfileMode.dice,
       List<List<DieSpec>>? groups,
       List<int> colours = const <int>[kDiceWhite, kDiceWhite],
       int decks = 2,
       int cut = 5,
-    }) => Config(
+    }) => Profile(
       mode: mode,
       groups:
           groups ??
@@ -151,8 +151,8 @@ void main() {
     );
 
     test('carries the whole picker, both modes of it', () {
-      final Config sent = config(
-        mode: ConfigMode.cards,
+      final Profile sent = profile(
+        mode: ProfileMode.cards,
         groups: <List<DieSpec>>[
           <DieSpec>[
             spec(DieKind.d20, kDicePalette[6]),
@@ -166,42 +166,42 @@ void main() {
         cut: 17,
       );
 
-      final ScannedConfig back =
-          decodeConfig(encodeConfig(sent, name: 'Catan'))!;
+      final ScannedProfile back =
+          decodeProfile(encodeProfile(sent, name: 'Catan'))!;
 
       expect(back.name, 'Catan');
       expect(
-        back.config,
+        back.profile,
         sent,
-        reason: 'the same configuration, not a copy of half of it',
+        reason: 'the same profile, not a copy of half of it',
       );
-      expect(back.config.mode, ConfigMode.cards);
-      expect(back.config.decks, 3);
-      expect(back.config.reshuffleAt, 17);
-      expect(back.config.colours, <int>[
+      expect(back.profile.mode, ProfileMode.cards);
+      expect(back.profile.decks, 3);
+      expect(back.profile.reshuffleAt, 17);
+      expect(back.profile.colours, <int>[
         kDicePalette[2],
         kDicePalette[5],
         kDiceWhite,
       ]);
-      expectSame(back.config.groups, sent.groups);
+      expectSame(back.profile.groups, sent.groups);
     });
 
-    test('a configuration nobody has saved has a blank name', () {
-      final ScannedConfig back = decodeConfig(encodeConfig(config()))!;
+    test('a profile nobody has saved has a blank name', () {
+      final ScannedProfile back = decodeProfile(encodeProfile(profile()))!;
       expect(back.name, isEmpty);
-      expect(back.config, config());
+      expect(back.profile, profile());
     });
 
     test('a name is whatever somebody typed, to the character', () {
       for (final String name in <String>['A', 'Poker Night', 'Ünïcødé ✦']) {
-        expect(decodeConfig(encodeConfig(config(), name: name))!.name, name);
+        expect(decodeProfile(encodeProfile(profile(), name: name))!.name, name);
       }
     });
 
     test('stays small enough to scan across a table', () {
-      final String code = encodeConfig(
-        Config(
-          mode: ConfigMode.cards,
+      final String code = encodeProfile(
+        Profile(
+          mode: ProfileMode.cards,
           groups: <List<DieSpec>>[
             for (int g = 0; g < 3; g++)
               <DieSpec>[
@@ -225,50 +225,55 @@ void main() {
       final String sets = encodeGroups(<List<DieSpec>>[
         <DieSpec>[spec(DieKind.d6, kDiceWhite)],
       ]);
-      expect(decodeConfig(sets), isNull);
-      expect(decodeGroups(encodeConfig(config())), isNull);
+      expect(decodeProfile(sets), isNull);
+      expect(decodeGroups(encodeProfile(profile())), isNull);
 
-      expect(decodeConfig(''), isNull);
-      expect(decodeConfig('https://example.com/'), isNull);
-      expect(decodeConfig('${kConfigCodePrefix}not base64 at all!'), isNull);
+      expect(decodeProfile(''), isNull);
+      expect(decodeProfile('https://example.com/'), isNull);
+      expect(decodeProfile('${kProfileCodePrefix}not base64 at all!'), isNull);
     });
 
     test('refuses anything it cannot read the whole of', () {
-      final String code = encodeConfig(config(), name: 'Yahtzee');
-      final String body = code.substring(kConfigCodePrefix.length);
+      final String code = encodeProfile(profile(), name: 'Yahtzee');
+      final String body = code.substring(kProfileCodePrefix.length);
       final Uint8List bytes = base64Url.decode(body);
 
       // A byte short of the name, and a byte too many.
       expect(
-        decodeConfig(
-          kConfigCodePrefix +
+        decodeProfile(
+          kProfileCodePrefix +
               base64Url.encode(bytes.sublist(0, bytes.length - 1)),
         ),
         isNull,
       );
       expect(
-        decodeConfig(kConfigCodePrefix + base64Url.encode(<int>[...bytes, 0])),
+        decodeProfile(
+          kProfileCodePrefix + base64Url.encode(<int>[...bytes, 0]),
+        ),
         isNull,
       );
 
       // A header and nothing else.
       expect(
-        decodeConfig(kConfigCodePrefix + base64Url.encode(<int>[0, 2, 5])),
+        decodeProfile(kProfileCodePrefix + base64Url.encode(<int>[0, 2, 5])),
         isNull,
       );
 
       // A mode this build has never heard of, and a colour it has not either.
       final List<int> odd = <int>[...bytes];
       odd[0] = 7;
-      expect(decodeConfig(kConfigCodePrefix + base64Url.encode(odd)), isNull);
+      expect(decodeProfile(kProfileCodePrefix + base64Url.encode(odd)), isNull);
       final List<int> wrong = <int>[...bytes];
       wrong[4] = 0x0F;
-      expect(decodeConfig(kConfigCodePrefix + base64Url.encode(wrong)), isNull);
+      expect(
+        decodeProfile(kProfileCodePrefix + base64Url.encode(wrong)),
+        isNull,
+      );
     });
 
     test('surrounding whitespace is not a reason to refuse', () {
-      final String code = encodeConfig(config(), name: 'D&D');
-      expect(decodeConfig('  $code\n')!.name, 'D&D');
+      final String code = encodeProfile(profile(), name: 'D&D');
+      expect(decodeProfile('  $code\n')!.name, 'D&D');
     });
   });
 }

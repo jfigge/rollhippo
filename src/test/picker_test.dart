@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/physics/shape.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
@@ -78,7 +78,7 @@ void main() {
     testWidgets('shows one die per die, and starts on the first', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       expect(rack(tester).length, kDefaultDice.length);
       expect(find.text('Die 1 — D6'), findsOneWidget);
@@ -87,7 +87,7 @@ void main() {
     testWidgets('a colour lands on the selected die and nowhere else', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapDie(tester, 1);
       expect(find.text('Die 2 — D6'), findsOneWidget);
 
@@ -102,7 +102,7 @@ void main() {
     testWidgets('selecting another die drops the first', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapDie(tester, 1);
       await tapText(tester, 'D20');
       await tapDie(tester, 0);
@@ -116,7 +116,7 @@ void main() {
     testWidgets('a new die arrives selected, matching the one before it', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapDie(tester, 1);
       await tapText(tester, 'D12');
       await tapAdd(tester);
@@ -132,7 +132,7 @@ void main() {
     });
 
     testWidgets('the rack fills to ten and stops', (WidgetTester tester) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       for (int i = kDefaultDice.length; i < kMaxDice; i++) {
         await tapAdd(tester);
       }
@@ -145,7 +145,7 @@ void main() {
     testWidgets('removing selects a die that still exists', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapDie(tester, 1);
       await tapRemove(tester);
 
@@ -162,9 +162,14 @@ void main() {
     test('turns the highest number towards you, the right way up', () {
       for (final DieKind kind in DieKind.values) {
         final ConvexShape shape = shapeFor(kind);
+        // Through [previewFor] rather than [previewOrientation], because the
+        // hippopotamus is introduced at an angle of its own and what is being
+        // held here is the promise the rack makes, not the search that
+        // usually keeps it.
+        //
         // The matrix, not `Quaternion.rotated`: the two run opposite ways
         // round in vector_math, and the matrix is what the painter sees.
-        final Quaternion q = previewOrientation(shape);
+        final Quaternion q = previewFor(kind);
         final Matrix3 rotation = q.asRotationMatrix();
 
         int highest = 0;

@@ -8,6 +8,7 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../physics/body.dart';
 import '../physics/shape.dart';
 import '../tray/tray.dart';
+import 'hippo.dart';
 
 /// Maps tray space to the screen.
 ///
@@ -35,13 +36,14 @@ class TrayCamera {
   }
 }
 
-/// How one die is painted: its body colour, and the ink its numbers are in.
+/// How one die is painted: its body colour, the ink its numbers are in, and
+/// whether what gets painted is a hippopotamus.
 class DieStyle {
-  const DieStyle({required this.body, required this.ink});
+  const DieStyle({required this.body, required this.ink, this.hippo = false});
 
   /// Derives the ink from the body, because a die is only ever printed in
   /// whichever of the two you can read against the other.
-  factory DieStyle.of(int colour) {
+  factory DieStyle.of(int colour, {bool hippo = false}) {
     final double r = ((colour >> 16) & 0xFF) / 255.0;
     final double g = ((colour >> 8) & 0xFF) / 255.0;
     final double b = (colour & 0xFF) / 255.0;
@@ -49,11 +51,22 @@ class DieStyle {
     return DieStyle(
       body: Color(colour),
       ink: luminance > 0.42 ? const Color(0xFF20242B) : const Color(0xFFF6EFE4),
+      hippo: hippo,
     );
   }
 
+  /// How a whole die is painted, which is the only place the animal comes
+  /// from: everything below this line draws a [DieStyle], and only the two
+  /// screens that know what is in the rack decide whether it is one.
+  factory DieStyle.ofSpec(DieSpec spec) =>
+      DieStyle.of(spec.colour, hippo: spec.kind == DieKind.hippo);
+
   final Color body;
   final Color ink;
+
+  /// Drawn as the animal rather than as the solid — see [paintHippo]. The one
+  /// die in the app whose picture is not its own polyhedron.
+  final bool hippo;
 }
 
 /// Direction from a surface *towards* the light — front, above, and a little to
@@ -131,11 +144,32 @@ const double _glyphFontSize = 100.0;
 const double _glyphLayoutWidth = 400.0;
 final Map<int, ui.Paragraph> _glyphs = <int, ui.Paragraph>{};
 
+String? _dieGlyphFont;
+
+/// The face the numbers on the dice are laid out in, or null for the
+/// platform's own — which is what the app uses, and what a phone should.
+///
+/// A seam for the tools, and the only reason it exists: `flutter test`
+/// substitutes a font with no glyphs in it, so a rendered sheet comes out with
+/// a solid box wherever a number should be. That is tolerable for a die, whose
+/// shape is the thing being looked at, and not for the hippopotamus, whose
+/// numbers are printed on an animal and have to be judged against it. A tool
+/// names a real face here before it draws anything.
+String? get dieGlyphFont => _dieGlyphFont;
+
+set dieGlyphFont(String? family) {
+  if (family == _dieGlyphFont) return;
+  _dieGlyphFont = family;
+  // The laid-out paragraphs are the old face's.
+  _glyphs.clear();
+}
+
 ui.Paragraph _glyph(int value, Color ink) {
   final int key = value * 0x100000000 + ink.toARGB32();
   return _glyphs[key] ??=
       (ui.ParagraphBuilder(
               ui.ParagraphStyle(
+                fontFamily: _dieGlyphFont,
                 textAlign: TextAlign.center,
                 fontSize: _glyphFontSize,
                 fontWeight: FontWeight.w600,
@@ -203,7 +237,7 @@ void paintTrayScene(Canvas canvas, Size size, DiceTray tray) {
     // Behind the die, and inside the same back-to-front pass, so a die in
     // front of a held one covers its halo exactly as it covers the die.
     if (die.held) _paintHold(canvas, camera, die);
-    paintDie(canvas, camera, die, DieStyle.of(tray.specs[i].colour));
+    paintDie(canvas, camera, die, DieStyle.ofSpec(tray.specs[i]));
   }
 }
 
@@ -430,12 +464,17 @@ void _paintShadow(
 /// Paints one die: every face of it you can see, with its numbers on.
 ///
 /// A free function rather than a method on [TrayPainter], because the picker
-/// draws dice too. The rack on the config screen is the same solid, lit by the
+/// draws dice too. The rack on the profile screen is the same solid, lit by the
 /// same lamp and printed with the same numerals as the one that lands in the
 /// tray — held still instead of thrown. Two code paths would drift, and the
 /// picker would end up quietly showing you a different die from the one you
 /// were choosing.
 void paintDie(Canvas canvas, TrayCamera camera, RigidBody die, DieStyle style) {
+  if (style.hippo) {
+    paintHippo(canvas, camera, die, style);
+    return;
+  }
+
   final ConvexShape shape = die.shape;
   final Vector3 eye = Vector3(0, 0, camera.eyeDistance);
 
@@ -514,6 +553,232 @@ void paintDie(Canvas canvas, TrayCamera camera, RigidBody die, DieStyle style) {
         1.75,
       );
     }
+  }
+}
+
+/// How far the animal's ink stands off its hide, in inradii — a hair, enough
+/// that a numeral cannot z-fight the flank it is printed on.
+const double _hippoInkLift = 0.02;
+
+/// How tall the numbers are printed on a hippopotamus, against the 1.75 a flat
+/// face gets. Well under it, because a flank is not flat: a numeral given the
+/// whole of one would wrap round the shoulder at either end.
+const double _hippoNumber = 1.0;
+
+/// How far the animal reaches along each of the die's own six face normals.
+///
+/// Worked out once. Neither the mesh nor the cube it is carved from changes,
+/// and this is asked six times per hippo per frame.
+final List<double> _hippoReach = <double>[
+  for (final ConvexFace face in shapeFor(DieKind.hippo).faces)
+    hippoReach(face.normal),
+];
+
+/// One quad of the animal, projected and ready to draw.
+class _Facet {
+  const _Facet(this.corners, this.normal, this.depth, this.ink);
+
+  final List<Offset> corners;
+  final Vector3 normal;
+
+  /// How far back it is, which is the only thing that decides what covers
+  /// what.
+  final double depth;
+
+  final bool ink;
+}
+
+/// Paints the die that is a hippopotamus.
+///
+/// The animal is drawn inside the cube it was carved from — see [kHippo] — and
+/// the cube is never drawn at all. What takes the place of six faces is a
+/// dozen convex lumps that grow out of each other, and that is the one real
+/// difference in how this is painted: a convex solid needs no sorting, because
+/// culling the faces that point away leaves exactly the ones you can see, and
+/// a pile of lumps needs sorting every frame because which of them is in front
+/// depends on which way up it has landed.
+///
+/// The numbers are the part of it that is still a die. Each is printed on
+/// whatever part of the animal reaches furthest along the face it belongs to —
+/// the flank, the back, the end of its nose — so it reads exactly as the other
+/// dice do: the number you can see is the face the physics landed on.
+///
+/// One thing to know before it looks like a bug. The readout turns the face a
+/// die landed on square to the glass and spends the last degree of freedom on
+/// standing its numeral up. On a cube, "up" for a numeral is not the same
+/// direction on every face — [ConvexShape.fromVertices] finds the faces and
+/// orders each one from its own first vertex, and the six answers that gives
+/// run in a cycle that no re-ordering of the eight corners can undo, as one
+/// afternoon establishes. So a hippopotamus that keeps its numbers upright
+/// cannot also keep its feet down in all six poses. Four of them present it
+/// the way you would photograph one; the other two show it lying on its side
+/// and rearing up on its tail, which are both things a hippopotamus does.
+void paintHippo(
+  Canvas canvas,
+  TrayCamera camera,
+  RigidBody die,
+  DieStyle style,
+) {
+  final ConvexShape shape = die.shape;
+  final double unit = shape.inradius;
+  final Vector3 eye = Vector3(0, 0, camera.eyeDistance);
+
+  final List<_Facet> facets = <_Facet>[];
+  for (final HippoLump lump in kHippo) {
+    // Every corner turned and projected once rather than once per face: three
+    // of the six faces meet at each of them.
+    final List<Vector3> world = <Vector3>[
+      for (final Vector3 v in lump.vertices)
+        die.position + die.rotation.transformed(v * unit),
+    ];
+    final List<Offset> screen = <Offset>[
+      for (final Vector3 p in world) camera.project(p),
+    ];
+
+    for (int f = 0; f < kLumpFaces.length; f++) {
+      final List<int> loop = kLumpFaces[f];
+      final Vector3 normal = die.rotation.transformed(lump.normals[f]);
+      final Vector3 centre = Vector3.zero();
+      for (final int v in loop) {
+        centre.add(world[v]);
+      }
+      centre.scale(1.0 / loop.length);
+      if (normal.dot(eye - centre) <= 0) continue;
+
+      facets.add(
+        _Facet(
+          <Offset>[for (final int v in loop) screen[v]],
+          normal,
+          centre.z,
+          lump.ink,
+        ),
+      );
+    }
+  }
+
+  // Back to front. Sorting by the middle of a quad is not exact where two
+  // lumps interpenetrate, and it does not have to be: they interpenetrate
+  // where they are the same colour and lit at nearly the same angle, which is
+  // where getting the order wrong cannot be seen.
+  facets.sort((_Facet a, _Facet b) => a.depth.compareTo(b.depth));
+  for (final _Facet facet in facets) {
+    final Path path = Path()..moveTo(facet.corners[0].dx, facet.corners[0].dy);
+    for (int i = 1; i < facet.corners.length; i++) {
+      path.lineTo(facet.corners[i].dx, facet.corners[i].dy);
+    }
+    path.close();
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = _shade(facet.ink ? style.ink : style.body, facet.normal),
+    );
+    // The same hairline a die's faces get, and needed more here: two lumps
+    // meeting along a fold can be within a shade of each other, and without it
+    // a leg disappears into the body it is standing under.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8
+        ..color = Colors.black.withValues(alpha: 0.18),
+    );
+  }
+
+  // Below this the animal is a thumbnail: the ink on it would be a smudge, and
+  // laying out a numeral costs the same whether or not it can be read.
+  final double pixels =
+      die.circumradius * camera.scaleAt(die.position.z) * camera.pixelsPerMetre;
+  if (pixels < 12) return;
+
+  _paintNostrils(canvas, camera, die, style, eye, unit);
+
+  for (int f = 0; f < shape.faces.length; f++) {
+    final ConvexFace face = shape.faces[f];
+    final Vector3 normal = die.faceNormal(f);
+    final Vector3 anchor =
+        die.position +
+        die.rotation.transformed(
+          face.normal * ((_hippoReach[f] + _hippoInkLift) * unit),
+        );
+    // Steeper than this and the digit is a smear along the edge of the animal
+    // — the same call [paintDie] makes by projected area, which there is no
+    // face here to measure. It matters more here than on a die: what a numeral
+    // at a grazing angle lands on is not empty space but the far side of the
+    // hippopotamus, and the one it lands on hardest is its face.
+    final Vector3 view = (eye - anchor)..normalize();
+    if (normal.dot(view) < 0.4) continue;
+
+    // The basis a flat face would have printed its number in — along the
+    // face's first edge, standing towards `normal × along`. It has to be that
+    // one and not a prettier one: it is the basis the readout stands a die up
+    // by, and a number laid out in any other would arrive on screen at an
+    // angle to the one that was asked for.
+    final Vector3 p0 = die.outerVertex(face.vertices[0]);
+    final Vector3 p1 = die.outerVertex(face.vertices[1]);
+    final Vector3 along = (p1 - p0)..normalize();
+
+    _paintNumber(
+      canvas,
+      camera,
+      anchor,
+      along,
+      normal.cross(along),
+      face.inradius,
+      face.value,
+      style.ink,
+      _hippoNumber,
+    );
+  }
+}
+
+/// Two dark spots on top of the muzzle.
+///
+/// Ink on a surface rather than part of the solid, so they are drawn after the
+/// animal is — the same bargain the pips make — and culled by the direction
+/// the muzzle faces rather than by anything of their own.
+void _paintNostrils(
+  Canvas canvas,
+  TrayCamera camera,
+  RigidBody die,
+  DieStyle style,
+  Vector3 eye,
+  double unit,
+) {
+  final Vector3 up = die.rotation.transformed(kHippoUp);
+  final Vector3 along = die.rotation.transformed(kHippoRight);
+  final Vector3 across = die.rotation.transformed(kHippoNose);
+  final Paint paint =
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = _shade(style.ink, up);
+
+  for (final HippoSpot spot in kHippoNostrils) {
+    final Vector3 centre =
+        die.position +
+        die.rotation.transformed(spot.centre * unit) +
+        up * (_hippoInkLift * unit);
+    if (up.dot(eye - centre) <= 0) continue;
+
+    final double radius = spot.radius * unit;
+    final Path path = Path();
+    const int segments = 10;
+    for (int i = 0; i < segments; i++) {
+      final double a = i * 2 * math.pi / segments;
+      final Offset o = camera.project(
+        centre +
+            along * (math.cos(a) * radius) +
+            across * (math.sin(a) * radius),
+      );
+      if (i == 0) {
+        path.moveTo(o.dx, o.dy);
+      } else {
+        path.lineTo(o.dx, o.dy);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, paint);
   }
 }
 

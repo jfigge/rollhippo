@@ -87,7 +87,7 @@ Future<void> quitApp() async {
 class AppMenuButton extends StatefulWidget {
   const AppMenuButton({
     super.key,
-    required this.config,
+    required this.profile,
     required this.name,
     required this.onScanned,
     this.onExit = quitApp,
@@ -95,16 +95,16 @@ class AppMenuButton extends StatefulWidget {
 
   /// The picker as it stands — both modes of it — for the Share sheet to turn
   /// into a code.
-  final Config config;
+  final Profile profile;
 
-  /// What the open configuration is called, or blank if it is not a save. It
+  /// What the open profile is called, or blank if it is not a save. It
   /// goes into the code, so that the phone reading it can offer to keep it
   /// under the same name.
   final String name;
 
-  /// Handed the configuration a scanned code described, and the name that came
+  /// Handed the profile a scanned code described, and the name that came
   /// with it. Not called if the scanner was closed without finding one.
-  final ValueChanged<ScannedConfig> onScanned;
+  final ValueChanged<ScannedProfile> onScanned;
 
   /// What Exit does.
   ///
@@ -126,15 +126,15 @@ class _AppMenuButtonState extends State<AppMenuButton> {
       case _MenuItem.scan:
         await _scan();
       case _MenuItem.share:
-        await showShareSheet(context, widget.config, widget.name);
+        await showShareSheet(context, widget.profile, widget.name);
       case _MenuItem.exit:
         await widget.onExit();
     }
   }
 
   Future<void> _scan() async {
-    final ScannedConfig? scanned = await Navigator.of(context).push(
-      MaterialPageRoute<ScannedConfig>(
+    final ScannedProfile? scanned = await Navigator.of(context).push(
+      MaterialPageRoute<ScannedProfile>(
         builder: (BuildContext context) => const ScanScreen(),
       ),
     );
@@ -388,23 +388,25 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 }
 
-/// The Share sheet: this configuration, as a square somebody else can point a
+/// The Share sheet: this profile, as a square somebody else can point a
 /// phone at.
-Future<void> showShareSheet(BuildContext context, Config config, String name) =>
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: const Color(0xB3000000),
-      constraints: const BoxConstraints(maxWidth: _kSheetWidth),
-      isScrollControlled: true,
-      builder:
-          (BuildContext context) => _ShareSheet(config: config, name: name),
-    );
+Future<void> showShareSheet(
+  BuildContext context,
+  Profile profile,
+  String name,
+) => showModalBottomSheet<void>(
+  context: context,
+  backgroundColor: Colors.transparent,
+  barrierColor: const Color(0xB3000000),
+  constraints: const BoxConstraints(maxWidth: _kSheetWidth),
+  isScrollControlled: true,
+  builder: (BuildContext context) => _ShareSheet(profile: profile, name: name),
+);
 
 class _ShareSheet extends StatelessWidget {
-  const _ShareSheet({required this.config, required this.name});
+  const _ShareSheet({required this.profile, required this.name});
 
-  final Config config;
+  final Profile profile;
   final String name;
 
   @override
@@ -414,10 +416,12 @@ class _ShareSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Center(child: ShareCodeView(code: encodeConfig(config, name: name))),
+          Center(
+            child: ShareCodeView(code: encodeProfile(profile, name: name)),
+          ),
           const SizedBox(height: 16),
           Text(
-            name.isEmpty ? config.summary : '$name · ${config.summary}',
+            name.isEmpty ? profile.summary : '$name · ${profile.summary}',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0xFFE8EEF6),
@@ -456,7 +460,7 @@ class _ShareSheet extends StatelessWidget {
 class ShareCodeView extends StatelessWidget {
   const ShareCodeView({super.key, required this.code});
 
-  /// The payload, from [encodeConfig].
+  /// The payload, from [encodeProfile].
   final String code;
 
   @override

@@ -101,7 +101,7 @@ rollhippo/
 ├── Makefile
 └── src/
     ├── lib/physics/   body · shape · contact · collision · solver · world   (no Flutter)
-    ├── lib/tray/      tray geometry · dice · tuning constants · a configuration · the share codes
+    ├── lib/tray/      tray geometry · dice · tuning constants · a profile · the share codes
     ├── lib/motion/    sensor source, and a synthetic one for the harness
     ├── lib/render/    perspective camera and painter
     ├── lib/app/       the two screens, the app menu, and the haptics
@@ -136,11 +136,11 @@ the only way to roll or deal. **Impact strength** is how hard the phone taps
 back when a die hits the side of the box, which is keyed on the impulse the wall
 actually delivered, so a heavy die landing hard feels different from a light one
 nudging a wall. Drag the slider and it plays each notch back at you, because a
-multiplier is not a sensation and nobody can set one by reading it. **Share** turns the whole configuration into a QR code —
+multiplier is not a sensation and nobody can set one by reading it. **Share** turns the whole profile into a QR code —
 which page you are on, every die, its kind and its colour, the shoe if you are
 in card mode, and the name you saved it under — and **Scan** reads one back off
 another phone. A code that arrives with a name offers to become a save on this
-phone too; one that names a configuration you already have, and matches it,
+phone too; one that names a profile you already have, and matches it,
 simply opens it. **Exit** quits.
 
 The desktop harness letterboxes to 393 × 852 points whatever size its window is,

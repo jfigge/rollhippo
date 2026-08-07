@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
@@ -95,7 +95,7 @@ void main() {
     testWidgets('start as one set of dice and two empty ones', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       expect(dotsOf(tester).filled, <bool>[true, false, false]);
       expect(dotsOf(tester).current, 0);
@@ -105,7 +105,7 @@ void main() {
     testWidgets('swiping reaches a group with nothing in it', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipeLeft(tester);
 
       expect(dotsOf(tester).current, 1);
@@ -119,7 +119,7 @@ void main() {
     testWidgets('a group with a die in it lights its dot, and can be emptied', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipeLeft(tester);
 
       await tapAdd(tester, 1);
@@ -140,7 +140,7 @@ void main() {
     testWidgets('the first group always keeps a die', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapRemove(tester);
 
       expect(rackOf(tester, 0).length, 1);
@@ -151,7 +151,7 @@ void main() {
     testWidgets('the editor of an empty group cannot be worked', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipeLeft(tester);
 
       // Faded and behind an IgnorePointer, so this lands on nothing at all.
@@ -165,7 +165,7 @@ void main() {
     testWidgets('tapping a dot goes to that group', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       await tester.tap(
         find
@@ -184,7 +184,7 @@ void main() {
     testWidgets('each group remembers which die you were working on', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tester.tap(find.byType(DiePreview).at(1));
       await tester.pump();
       expect(find.text('Die 2 — D6'), findsOneWidget);

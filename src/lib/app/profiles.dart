@@ -6,41 +6,41 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../tray/tray.dart';
 
-/// The longest a saved configuration's name is allowed to be.
+/// The longest a saved profile's name is allowed to be.
 ///
-/// The name is worn as a pill in a row of them, and the row is the width of a
+/// A profile wears its name in a row of them, and the row is the width of a
 /// phone: a name long enough to need scrolling to read is a name that stops the
-/// pills doing the one thing they are for, which is telling you at a glance
-/// what is saved. Twelve rather than ten because "Poker Night" is eleven, and a
+/// row doing the one thing it is for, which is telling you at a glance what is
+/// saved. Twelve rather than ten because "Poker Night" is eleven, and a
 /// limit that cannot spell the example everybody reaches for first is a limit
 /// that reads as a bug.
-const int kMaxConfigName = 12;
+const int kMaxProfileName = 12;
 
-/// A configuration, as it goes into the preferences file.
+/// A profile, as it goes into the preferences file.
 ///
-/// JSON with named fields rather than [encodeConfig]'s bytes, because this one
+/// JSON with named fields rather than [encodeProfile]'s bytes, because this one
 /// is read by a person as often as by the app — a preferences file you can look
 /// at is a preferences file you can debug — and there is no size to fight for.
 /// The dice are the exception: they go out as a share code, which is the same
 /// data in a format that already exists and is already tested.
 ///
-/// Not the name. That belongs to the save, not to the configuration inside it,
-/// and is written a level up by [SavedConfig.toJson].
-Map<String, Object?> configToJson(Config config) => <String, Object?>{
-  'mode': config.mode.name,
-  'dice': encodeGroups(config.groups),
-  'colours': config.colours,
-  'decks': config.decks,
-  'cut': config.reshuffleAt,
+/// Not the name. That belongs to the save, not to the profile inside it,
+/// and is written a level up by [SavedProfile.toJson].
+Map<String, Object?> profileToJson(Profile profile) => <String, Object?>{
+  'mode': profile.mode.name,
+  'dice': encodeGroups(profile.groups),
+  'colours': profile.colours,
+  'decks': profile.decks,
+  'cut': profile.reshuffleAt,
 };
 
-/// What [configToJson] wrote, or null for anything this build cannot read.
+/// What [profileToJson] wrote, or null for anything this build cannot read.
 ///
-/// Null rather than a throw or a patched-up half configuration: the only
-/// caller is [ConfigStore.load], which drops what it cannot read and carries
+/// Null rather than a throw or a patched-up half profile: the only
+/// caller is [ProfileStore.load], which drops what it cannot read and carries
 /// on. A save written by some later build, or a preferences file somebody has
 /// been editing, must not be able to stop the app starting.
-Config? configFromJson(Object? source) {
+Profile? profileFromJson(Object? source) {
   if (source is! Map<String, Object?>) return null;
   final Object? dice = source['dice'];
   if (dice is! String) return null;
@@ -53,13 +53,13 @@ Config? configFromJson(Object? source) {
   final Object? decks = source['decks'];
   final Object? cut = source['cut'];
   if (decks is! int || cut is! int) return null;
-  return Config(
+  return Profile(
     // Anything that is not the card page is the dice page. A mode this build
-    // has never heard of is not worth refusing the whole configuration over.
+    // has never heard of is not worth refusing the whole profile over.
     mode:
-        source['mode'] == ConfigMode.cards.name
-            ? ConfigMode.cards
-            : ConfigMode.dice,
+        source['mode'] == ProfileMode.cards.name
+            ? ProfileMode.cards
+            : ProfileMode.dice,
     groups: groups,
     colours: colours,
     decks: decks,
@@ -67,61 +67,65 @@ Config? configFromJson(Object? source) {
   );
 }
 
-/// One configuration, named and kept.
+/// One profile, named and kept.
 ///
 /// The [id] is what everything else holds it by. Names are not unique — nothing
 /// stops two saves being called Yahtzee — and a position in the list is not
 /// stable, because deleting the one above moves it. An id survives both.
 @immutable
-class SavedConfig {
-  const SavedConfig({
+class SavedProfile {
+  const SavedProfile({
     required this.id,
     required this.name,
-    required this.config,
+    required this.profile,
     required this.usedAt,
   });
 
   final int id;
   final String name;
-  final Config config;
+  final Profile profile;
 
   /// When it was last opened. What the chooser at launch sorts nothing by and
   /// says out loud — "used 2h ago" is how you tell two saves apart when their
   /// names have stopped meaning much.
   final DateTime usedAt;
 
-  SavedConfig copyWith({String? name, Config? config, DateTime? usedAt}) =>
-      SavedConfig(
+  SavedProfile copyWith({String? name, Profile? profile, DateTime? usedAt}) =>
+      SavedProfile(
         id: id,
         name: name ?? this.name,
-        config: config ?? this.config,
+        profile: profile ?? this.profile,
         usedAt: usedAt ?? this.usedAt,
       );
 
   /// The line under the name in the launch chooser: what it holds, and when you
   /// last had it open.
   String subtitle(DateTime now) =>
-      '${config.summary} · used ${agoLabel(usedAt, now)}';
+      '${profile.summary} · used ${agoLabel(usedAt, now)}';
 
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'name': name,
     'used': usedAt.millisecondsSinceEpoch,
-    'config': configToJson(config),
+    // `config`, not `profile`. The word changed in the code; this one is a
+    // field name in a file that is already on people's phones, and changing
+    // it would not rename anything — it would lose every save written before
+    // the rename. [profileFromJson] reads the same field for the same reason.
+    'config': profileToJson(profile),
   };
 
-  static SavedConfig? fromJson(Object? source) {
+  static SavedProfile? fromJson(Object? source) {
     if (source is! Map<String, Object?>) return null;
     final Object? id = source['id'];
     final Object? name = source['name'];
     final Object? used = source['used'];
     if (id is! int || name is! String || used is! int) return null;
-    final Config? config = configFromJson(source['config']);
-    if (config == null) return null;
-    return SavedConfig(
+    final Profile? profile = profileFromJson(source['config']);
+    if (profile == null) return null;
+    return SavedProfile(
       id: id,
       name: name,
-      config: config,
+      profile: profile,
       usedAt: DateTime.fromMillisecondsSinceEpoch(used),
     );
   }
@@ -151,31 +155,35 @@ String agoLabel(DateTime then, DateTime now) {
   return 'over a year ago';
 }
 
-/// The saved configurations, and the file they live in.
+/// The saved profiles, and the file they live in.
 ///
-/// One instance, [configs], reached directly rather than handed down the widget
+/// One instance, [profiles], reached directly rather than handed down the widget
 /// tree — the same bargain `Settings` makes and for the same reason: the picker
-/// owns the configuration, the pills under it list the saves, and the chooser
+/// owns the profile, the row under it lists the saves, and the chooser
 /// at launch opens one, and threading a store through all three to be read in
 /// two of them would be more machinery than the thing it carries.
 ///
 /// Newest first. A save is made *from* what is on screen, so the one you just
 /// made is the one you are looking at, and it belongs where your eye already
 /// is rather than at the end of a row that may have scrolled off.
-class ConfigStore extends ChangeNotifier {
+class ProfileStore extends ChangeNotifier {
+  /// Where the saves live, under the word they were written with. Same bargain
+  /// as the `config` field inside each of them: a key is not a name anybody
+  /// reads, and a new one would find an empty preferences file rather than the
+  /// saves sitting next to it under the old one.
   static const String _key = 'configs.saved';
 
-  final List<SavedConfig> _saves = <SavedConfig>[];
+  final List<SavedProfile> _saves = <SavedProfile>[];
 
   /// The saves, newest first. A copy: the list is edited through this class so
-  /// that nothing changes without the pills being told about it.
-  List<SavedConfig> get saves => List<SavedConfig>.unmodifiable(_saves);
+  /// that nothing changes without the row being told about it.
+  List<SavedProfile> get saves => List<SavedProfile>.unmodifiable(_saves);
 
   bool get isEmpty => _saves.isEmpty;
   bool get isNotEmpty => _saves.isNotEmpty;
 
-  SavedConfig? byId(int? id) {
-    for (final SavedConfig save in _saves) {
+  SavedProfile? byId(int? id) {
+    for (final SavedProfile save in _saves) {
       if (save.id == id) return save;
     }
     return null;
@@ -183,12 +191,12 @@ class ConfigStore extends ChangeNotifier {
 
   /// The first save called [name], or null if nothing here is.
   ///
-  /// The first, because names are not unique — nothing stops two pills being
+  /// The first, because names are not unique — nothing stops two profiles being
   /// called Yahtzee. This is only asked by a scanned code, which arrives with
   /// a name and no id and has to decide whether it is one you already have;
   /// the first match is the one your eye would land on too.
-  SavedConfig? byName(String name) {
-    for (final SavedConfig save in _saves) {
+  SavedProfile? byName(String name) {
+    for (final SavedProfile save in _saves) {
       if (save.name == name) return save;
     }
     return null;
@@ -214,7 +222,7 @@ class ConfigStore extends ChangeNotifier {
       final Object? decoded = _decode(stored);
       if (decoded is List) {
         for (final Object? entry in decoded) {
-          final SavedConfig? save = SavedConfig.fromJson(entry);
+          final SavedProfile? save = SavedProfile.fromJson(entry);
           if (save != null) _saves.add(save);
         }
       }
@@ -222,15 +230,21 @@ class ConfigStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Keeps [config] under [name], at the front of the row.
-  SavedConfig add(String name, Config config) {
+  /// Keeps [profile] under [name], at the front of the row.
+  SavedProfile add(String name, Profile profile) {
     final DateTime now = DateTime.now();
-    final SavedConfig save = SavedConfig(
-      // The clock, in microseconds, which is unique enough for something a
-      // thumb creates one of at a time and needs no counter kept anywhere.
-      id: now.microsecondsSinceEpoch,
+    // The clock, in microseconds, which is unique enough for something a thumb
+    // creates one of at a time and needs no counter kept anywhere — except
+    // against itself. A loop can make two in the same microsecond, and two
+    // saves with one id would be two profiles with one key.
+    int id = now.microsecondsSinceEpoch;
+    for (final SavedProfile save in _saves) {
+      if (save.id >= id) id = save.id + 1;
+    }
+    final SavedProfile save = SavedProfile(
+      id: id,
       name: name,
-      config: config,
+      profile: profile,
       usedAt: now,
     );
     _saves.insert(0, save);
@@ -240,17 +254,17 @@ class ConfigStore extends ChangeNotifier {
 
   /// Puts what is on screen into an existing save.
   ///
-  /// Only ever from Save, on the menu a pill gives you when you hold it down.
+  /// Only ever from Save, on the menu a profile gives you when you hold it down.
   /// Nothing here happens on its own: a save is a photograph of the picker
-  /// taken when you asked for one, and editing the dice under an open pill
-  /// leaves that pill exactly as it was until you say otherwise.
+  /// taken when you asked for one, and editing the dice under an open profile
+  /// leaves that profile exactly as it was until you say otherwise.
   ///
   /// An id that is not here — the save was deleted a moment ago — writes
   /// nothing. What is on screen stays on screen; it is simply not kept.
-  void write(int? id, Config config) {
+  void write(int? id, Profile profile) {
     final int at = _indexOf(id);
     if (at < 0) return;
-    _saves[at] = _saves[at].copyWith(config: config);
+    _saves[at] = _saves[at].copyWith(profile: profile);
     _changed();
   }
 
@@ -308,7 +322,7 @@ class ConfigStore extends ChangeNotifier {
     do {
       _again = false;
       final String payload = jsonEncode(<Object?>[
-        for (final SavedConfig save in _saves) save.toJson(),
+        for (final SavedProfile save in _saves) save.toJson(),
       ]);
       await _guard<void>(() async {
         final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -335,11 +349,11 @@ class ConfigStore extends ChangeNotifier {
     try {
       return await body();
     } on Exception catch (error) {
-      debugPrint('Roll Hippo: saved configurations unavailable ($error)');
+      debugPrint('Roll Hippo: saved profiles unavailable ($error)');
       return null;
     }
   }
 }
 
 /// The saves.
-final ConfigStore configs = ConfigStore();
+final ProfileStore profiles = ProfileStore();

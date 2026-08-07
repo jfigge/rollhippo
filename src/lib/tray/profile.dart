@@ -6,20 +6,20 @@ import 'dice.dart';
 /// They are pages of the same screen rather than two screens, because they are
 /// alternatives: whichever one you are looking at is what Roll will do, and a
 /// mode you have to go somewhere else to find is a mode nobody finds.
-enum ConfigMode { dice, cards }
+enum ProfileMode { dice, cards }
 
 /// Everything the picker is set to, in both of its modes at once.
 ///
-/// Both modes, always — a configuration is the whole screen rather than the
+/// Both modes, always — a profile is the whole screen rather than the
 /// page of it you happen to be on, so saving one in card mode does not throw
 /// away the dice you had set up behind it.
 ///
 /// Down here rather than in `app/` because two quite different things need it
 /// and neither is a widget: the store writes it into the preferences file, and
-/// [encodeConfig] puts it in a QR code. It knows nothing about Flutter, which
+/// [encodeProfile] puts it in a QR code. It knows nothing about Flutter, which
 /// is what lets both of those be tested without a frame.
-class Config {
-  const Config({
+class Profile {
+  const Profile({
     required this.mode,
     required this.groups,
     required this.colours,
@@ -27,9 +27,9 @@ class Config {
     required this.reshuffleAt,
   });
 
-  /// Which page this configuration is about: the mode the picker was on when
+  /// Which page this profile is about: the mode the picker was on when
   /// it was saved, and so the mode opening it puts you back on.
-  final ConfigMode mode;
+  final ProfileMode mode;
 
   /// The three sets of dice, empties and all. An empty group is a set you never
   /// started rather than one you forgot to fill in, and it is worth keeping:
@@ -37,20 +37,20 @@ class Config {
   final List<List<DieSpec>> groups;
 
   /// One colour per die printed on a card, in the order they are laid down it.
-  /// The list *is* the dice — see `ConfigScreen._cardColours`.
+  /// The list *is* the dice — see `PickerScreen._cardColours`.
   final List<int> colours;
 
   final int decks;
   final int reshuffleAt;
 
-  /// What this configuration comes to, in the fewest words that are still true.
+  /// What this profile comes to, in the fewest words that are still true.
   ///
-  /// One line for a list row to hang under a name — see `SavedConfig.subtitle`
+  /// One line for a list row to hang under a name — see `SavedProfile.subtitle`
   /// — and for the Share sheet to print under its code. It describes the mode
-  /// the configuration was saved in, because that is the half of it that would
+  /// the profile was saved in, because that is the half of it that would
   /// happen if you opened it and pressed the button.
   String get summary {
-    if (mode == ConfigMode.cards) {
+    if (mode == ProfileMode.cards) {
       final int size = Deck.sizeOf(colours.length, decks);
       return '$decks ${decks == 1 ? 'deck' : 'decks'}, $size cards';
     }
@@ -64,13 +64,13 @@ class Config {
     return counts.length > 1 ? '${counts.length} sets, $dice' : dice;
   }
 
-  /// Two configurations are the same when they would put the same thing on
+  /// Two profiles are the same when they would put the same thing on
   /// screen — which is the question a scanned code asks about a save you
   /// already have, and the difference between opening it silently and stopping
   /// to ask what you meant.
   @override
   bool operator ==(Object other) =>
-      other is Config &&
+      other is Profile &&
       other.mode == mode &&
       other.decks == decks &&
       other.reshuffleAt == reshuffleAt &&

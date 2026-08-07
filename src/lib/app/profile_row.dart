@@ -3,35 +3,42 @@ import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
 
-import 'configs.dart';
+import 'profiles.dart';
 
-/// How tall the row of pills is, and how tall one pill is inside it.
+/// How tall one profile is, and the air between one and the next.
 ///
-/// The band is the pill plus the air above and below it. Named because the
-/// picker hangs it under the mode dots and a row that changed height as saves
-/// came and went would move the Roll button while a thumb was on its way to it.
-const double kPillBand = 46;
-const double kPillHeight = 32;
+/// The gap is the same across and down, so a block of them reads as a block
+/// rather than as rows.
+const double kProfileHeight = 32;
+const double kProfileGap = 8;
 
-/// The row itself, and the pill that makes another — named so a thumb, or a
+/// The row itself, and the profile that makes another — named so a thumb, or a
 /// test, can say which one it means.
-const Key kConfigPills = ValueKey<String>('config-pills');
-const Key kNewConfigPill = ValueKey<String>('new-config');
+const Key kProfileRow = ValueKey<String>('profile-row');
+const Key kNewProfile = ValueKey<String>('new-profile');
 
-/// The saved configurations, worn as pills, with the way to make another at the
-/// end of the row.
+/// The saved profiles, with the way to make another at the end of them.
 ///
-/// A pill is the whole of a save's interface. A tap opens it; a long press —
+/// They wrap rather than run off the side. A row that scrolled sideways would
+/// hide saves behind an edge with nothing to say they were there, and the one
+/// it hides first is the oldest — which is exactly the one whose name you have
+/// stopped remembering. Wrapped, every profile you have is on the screen at once.
+///
+/// What they are not allowed to do is push the Roll button off the bottom, so
+/// the block is given the space between the mode dots and that button and no
+/// more: it grows downwards into it, and once it has filled it, it scrolls.
+///
+/// A profile is the whole of a save's interface. A tap opens it; a long press —
 /// or a right click, which is what the desktop harness has instead — asks what
 /// else you meant by it, and that menu is where saving is done.
 ///
-/// Nothing is written on its own. Editing the dice under an open pill changes
-/// the screen and not the save, until you hold a pill down and choose Save —
-/// which puts what is on screen into *that* pill, whichever one it is. So the
+/// Nothing is written on its own. Editing the dice under an open profile changes
+/// the screen and not the save, until you hold a profile down and choose Save —
+/// which puts what is on screen into *that* profile, whichever one it is. So the
 /// way to keep a change is the same gesture as the way to keep it somewhere
 /// else, and neither of them can happen by accident.
-class ConfigPills extends StatelessWidget {
-  const ConfigPills({
+class ProfileRow extends StatelessWidget {
+  const ProfileRow({
     super.key,
     required this.open,
     required this.onOpen,
@@ -44,52 +51,61 @@ class ConfigPills extends StatelessWidget {
   /// truth: none of these is what you are looking at.
   final int? open;
 
-  final ValueChanged<SavedConfig> onOpen;
+  final ValueChanged<SavedProfile> onOpen;
 
-  /// Save, from a pill's own menu: put what is on screen into this save. The
+  /// Save, from a profile's own menu: put what is on screen into this save. The
   /// screen handles it, because it is the screen being asked for.
-  final ValueChanged<SavedConfig> onSave;
+  final ValueChanged<SavedProfile> onSave;
 
-  /// The + New pill. The screen handles it rather than this widget, because
+  /// The + New profile. The screen handles it rather than this widget, because
   /// making a save means capturing what the screen is set to.
   final VoidCallback onNew;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      key: kConfigPills,
-      height: kPillBand,
-      child: ListenableBuilder(
-        listenable: configs,
-        builder: (BuildContext context, _) {
-          return ListView(
-            scrollDirection: Axis.horizontal,
-            // Enough saves and the row runs off the side, which is the one
-            // place in the app that scrolls. The padding is the rack's, so the
-            // first pill starts where the dice above it do.
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-            children: <Widget>[
-              for (final SavedConfig save in configs.saves)
-                _Pill(
-                  key: ValueKey<int>(save.id),
-                  label: save.name,
-                  selected: save.id == open,
-                  onTap: () => onOpen(save),
-                  onSave: () => onSave(save),
-                  save: save,
-                ),
-              _NewPill(key: kNewConfigPill, onTap: onNew),
-            ],
-          );
-        },
+    // The scroll view fills the space the picker gives it and lays the block
+    // out at the top of that, which is what puts the profiles under the mode dots
+    // with the slack below them. Too many to fit and it scrolls, which is the
+    // only thing in this app that does.
+    return SingleChildScrollView(
+      key: kProfileRow,
+      // The padding is the rack's, so the first profile starts where the dice
+      // above it do.
+      padding: const EdgeInsets.fromLTRB(16, 7, 16, 7),
+      child: SizedBox(
+        // A [Wrap] is as wide as its widest run, and the column above centres
+        // what it is given. Without this the block would drift left and right
+        // as profiles were added, instead of starting where the rack starts.
+        width: double.infinity,
+        child: ListenableBuilder(
+          listenable: profiles,
+          builder: (BuildContext context, _) {
+            return Wrap(
+              spacing: kProfileGap,
+              runSpacing: kProfileGap,
+              children: <Widget>[
+                for (final SavedProfile save in profiles.saves)
+                  _Profile(
+                    key: ValueKey<int>(save.id),
+                    label: save.name,
+                    selected: save.id == open,
+                    onTap: () => onOpen(save),
+                    onSave: () => onSave(save),
+                    save: save,
+                  ),
+                _NewProfile(key: kNewProfile, onTap: onNew),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
 /// One save.
-class _Pill extends StatefulWidget {
-  const _Pill({
+class _Profile extends StatefulWidget {
+  const _Profile({
     super.key,
     required this.label,
     required this.selected,
@@ -102,13 +118,13 @@ class _Pill extends StatefulWidget {
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onSave;
-  final SavedConfig save;
+  final SavedProfile save;
 
   @override
-  State<_Pill> createState() => _PillState();
+  State<_Profile> createState() => _ProfileState();
 }
 
-class _PillState extends State<_Pill> {
+class _ProfileState extends State<_Profile> {
   @override
   void initState() {
     super.initState();
@@ -116,19 +132,19 @@ class _PillState extends State<_Pill> {
   }
 
   @override
-  void didUpdateWidget(covariant _Pill oldWidget) {
+  void didUpdateWidget(covariant _Profile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selected && !oldWidget.selected) _reveal();
   }
 
-  /// Brings the open save into the row.
+  /// Brings the open save into view.
   ///
-  /// Because a save is not always opened from the row. The chooser at launch
-  /// opens one by name, and with a few saves the pill that lights up as a
-  /// result can be off the end of a row nobody has scrolled — a highlight you
-  /// cannot see is the same as no highlight at all.
+  /// Because a save is not always opened from the block. The chooser at launch
+  /// opens one by name, and with enough saves the profile that lights up as a
+  /// result can be below the fold of a block nobody has scrolled — a highlight
+  /// you cannot see is the same as no highlight at all.
   ///
-  /// After the frame, because it is the frame this pill is being laid out in
+  /// After the frame, because it is the frame this profile is being laid out in
   /// that decides where it has ended up.
   void _reveal() {
     if (!widget.selected) return;
@@ -146,25 +162,30 @@ class _PillState extends State<_Pill> {
   @override
   Widget build(BuildContext context) {
     final bool selected = widget.selected;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        // Both, because both mean "what else can I do with this one". A phone
-        // has the long press; the desktop harness has the second button, and a
-        // right click that did nothing would read as a bug rather than as a
-        // gesture this app has never heard of.
-        onLongPress: () => unawaited(_menu(context)),
-        onSecondaryTap: () => unawaited(_menu(context)),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          height: kPillHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFF3F6FA8) : const Color(0x14FFFFFF),
-            borderRadius: BorderRadius.circular(kPillHeight / 2),
-          ),
+    return GestureDetector(
+      onTap: widget.onTap,
+      // Both, because both mean "what else can I do with this one". A phone
+      // has the long press; the desktop harness has the second button, and a
+      // right click that did nothing would read as a bug rather than as a
+      // gesture this app has never heard of.
+      onLongPress: () => unawaited(_menu(context)),
+      onSecondaryTap: () => unawaited(_menu(context)),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: kProfileHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF3F6FA8) : const Color(0x14FFFFFF),
+          borderRadius: BorderRadius.circular(kProfileHeight / 2),
+        ),
+        // A [Center] with both factors, rather than the container's own
+        // `alignment`: that one is an [Align] with no factors, which fills
+        // whatever width it is offered. In a row that scrolled sideways it was
+        // offered no width at all and hugged its label; in a [Wrap] it is
+        // offered the whole line, and every profile would be a full-width bar.
+        child: Center(
+          widthFactor: 1,
+          heightFactor: 1,
           child: Text(
             widget.label,
             maxLines: 1,
@@ -182,33 +203,33 @@ class _PillState extends State<_Pill> {
   }
 
   Future<void> _menu(BuildContext context) async {
-    final _PillAction? action = await _showPillMenu(context);
+    final _ProfileAction? action = await _showProfileMenu(context);
     if (action == null || !context.mounted) return;
-    final SavedConfig save = widget.save;
+    final SavedProfile save = widget.save;
     switch (action) {
-      case _PillAction.save:
+      case _ProfileAction.save:
         widget.onSave();
-      case _PillAction.rename:
-        final String? name = await showConfigNameDialog(
+      case _ProfileAction.rename:
+        final String? name = await showProfileNameDialog(
           context,
           name: save.name,
         );
-        if (name != null) configs.rename(save.id, name);
-      case _PillAction.delete:
-        final bool go = await showDeleteConfigDialog(context, save.name);
-        if (go) configs.remove(save.id);
+        if (name != null) profiles.rename(save.id, name);
+      case _ProfileAction.delete:
+        final bool go = await showDeleteProfileDialog(context, save.name);
+        if (go) profiles.remove(save.id);
     }
   }
 }
 
-/// The one that is not a save: a dashed outline where the next pill would go.
+/// The one that is not a save: a dashed outline where the next profile would go.
 ///
 /// Dashed rather than filled, and it is the whole of the distinction. Every
-/// other pill in the row is a thing that exists and can be opened; this one is
+/// other profile in the row is a thing that exists and can be opened; this one is
 /// the space for one that does not exist yet, drawn the way the rack draws the
 /// slot the next die lands in.
-class _NewPill extends StatelessWidget {
-  const _NewPill({super.key, required this.onTap});
+class _NewProfile extends StatelessWidget {
+  const _NewProfile({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
@@ -216,22 +237,26 @@ class _NewPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Save this configuration',
+      label: 'Save this profile',
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: CustomPaint(
-          painter: const _DashedPill(),
+          painter: const _DashedProfile(),
           child: Container(
-            height: kPillHeight,
+            height: kProfileHeight,
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            child: const Text(
-              '+ New',
-              style: TextStyle(
-                color: Color(0xFF6E9AD0),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+            // Hugs its own label, for the reason the profile beside it does.
+            child: const Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Text(
+                '+ New',
+                style: TextStyle(
+                  color: Color(0xFF6E9AD0),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -244,11 +269,11 @@ class _NewPill extends StatelessWidget {
 /// The dashed outline. Flutter draws borders solid and nothing else, so the
 /// only way to a dashed one is to walk the rounded rectangle's own path and
 /// draw every other stretch of it.
-class _DashedPill extends CustomPainter {
-  const _DashedPill();
+class _DashedProfile extends CustomPainter {
+  const _DashedProfile();
 
   /// The mark, and the gap after it. Both a little under three points, which is
-  /// dense enough to read as an outline at pill size rather than as a row of
+  /// dense enough to read as an outline at profile size rather than as a row of
   /// ticks — and it divides into the perimeter closely enough that the seam at
   /// the top left is not worth chasing.
   static const double _dash = 4;
@@ -259,7 +284,7 @@ class _DashedPill extends CustomPainter {
     final Path outline =
         Path()..addRRect(
           RRect.fromRectAndRadius(
-            // Half a stroke in, so the dashes sit inside the pill's box rather
+            // Half a stroke in, so the dashes sit inside the profile's box rather
             // than half outside it and clipped by the scrolling row.
             Rect.fromLTWH(0.75, 0.75, size.width - 1.5, size.height - 1.5),
             Radius.circular(size.height / 2),
@@ -281,10 +306,10 @@ class _DashedPill extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedPill oldDelegate) => false;
+  bool shouldRepaint(_DashedProfile oldDelegate) => false;
 }
 
-/// What a long press on a pill can lead to.
+/// What a long press on a profile can lead to.
 ///
 /// Save first, because it is the one of the three anybody does twice in an
 /// evening — and because it is the only way anything is ever written, so a
@@ -292,20 +317,20 @@ class _DashedPill extends CustomPainter {
 ///
 /// Not opening it, though. A tap does that, and a menu whose first entry
 /// repeats the gesture that opened it has misunderstood what it is for.
-enum _PillAction { save, rename, delete }
+enum _ProfileAction { save, rename, delete }
 
-/// Puts the menu over the pill it was asked from.
-Future<_PillAction?> _showPillMenu(BuildContext context) {
-  final RenderBox pill = context.findRenderObject()! as RenderBox;
+/// Puts the menu over the profile it was asked from.
+Future<_ProfileAction?> _showProfileMenu(BuildContext context) {
+  final RenderBox profile = context.findRenderObject()! as RenderBox;
   final RenderBox overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-  return showMenu<_PillAction>(
+  return showMenu<_ProfileAction>(
     context: context,
     position: RelativeRect.fromRect(
       Rect.fromPoints(
-        pill.localToGlobal(Offset.zero, ancestor: overlay),
-        pill.localToGlobal(
-          pill.size.bottomRight(Offset.zero),
+        profile.localToGlobal(Offset.zero, ancestor: overlay),
+        profile.localToGlobal(
+          profile.size.bottomRight(Offset.zero),
           ancestor: overlay,
         ),
       ),
@@ -320,21 +345,21 @@ Future<_PillAction?> _showPillMenu(BuildContext context) {
       borderRadius: BorderRadius.circular(14),
       side: const BorderSide(color: Color(0x14FFFFFF)),
     ),
-    items: <PopupMenuEntry<_PillAction>>[
-      _entry(_PillAction.save, Icons.save_outlined, 'Save'),
-      _entry(_PillAction.rename, Icons.edit_outlined, 'Rename'),
-      _entry(_PillAction.delete, Icons.delete_outline, 'Delete'),
+    items: <PopupMenuEntry<_ProfileAction>>[
+      _entry(_ProfileAction.save, Icons.save_outlined, 'Save'),
+      _entry(_ProfileAction.rename, Icons.edit_outlined, 'Rename'),
+      _entry(_ProfileAction.delete, Icons.delete_outline, 'Delete'),
     ],
   );
 }
 
-PopupMenuItem<_PillAction> _entry(
-  _PillAction action,
+PopupMenuItem<_ProfileAction> _entry(
+  _ProfileAction action,
   IconData icon,
   String label,
 ) {
-  final bool destructive = action == _PillAction.delete;
-  return PopupMenuItem<_PillAction>(
+  final bool destructive = action == _ProfileAction.delete;
+  return PopupMenuItem<_ProfileAction>(
     value: action,
     height: 46,
     child: Row(
@@ -364,7 +389,7 @@ PopupMenuItem<_PillAction> _entry(
 ///
 /// Comes back with a name, or null if it was cancelled. Never with an empty
 /// one — the button is dead until there is something to press it about.
-Future<String?> showConfigNameDialog(BuildContext context, {String? name}) {
+Future<String?> showProfileNameDialog(BuildContext context, {String? name}) {
   return showDialog<String>(
     context: context,
     barrierColor: const Color(0xB3000000),
@@ -404,12 +429,12 @@ class _NameDialogState extends State<_NameDialog> {
   Widget build(BuildContext context) {
     final bool renaming = widget.name != null;
     return _Dialog(
-      title: renaming ? 'Rename configuration' : 'New configuration',
+      title: renaming ? 'Rename profile' : 'New profile',
       children: <Widget>[
         TextField(
           controller: _field,
           autofocus: true,
-          maxLength: kMaxConfigName,
+          maxLength: kMaxProfileName,
           textCapitalization: TextCapitalization.words,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
@@ -446,7 +471,7 @@ class _NameDialogState extends State<_NameDialog> {
 /// Are you sure. Asked because a save is the only thing in this app that took
 /// any setting up, and deleting one is the only action here that cannot be
 /// undone by doing it again.
-Future<bool> showDeleteConfigDialog(BuildContext context, String name) async {
+Future<bool> showDeleteProfileDialog(BuildContext context, String name) async {
   final bool? go = await showDialog<bool>(
     context: context,
     barrierColor: const Color(0xB3000000),
@@ -475,26 +500,26 @@ Future<bool> showDeleteConfigDialog(BuildContext context, String name) async {
   return go ?? false;
 }
 
-/// What to do with a configuration somebody else's code arrived with.
+/// What to do with a profile somebody else's code arrived with.
 ///
 /// [ScannedChoice.load] is the answer that changes nothing you have kept: the
-/// configuration goes on screen as an unnamed one, the way a code with no name
-/// on it always has. [ScannedChoice.keep] is the one that writes — a new pill,
-/// or the contents of the pill that already has this name.
+/// profile goes on screen as an unnamed one, the way a code with no name
+/// on it always has. [ScannedChoice.keep] is the one that writes — a new profile,
+/// or the contents of the profile that already has this name.
 enum ScannedChoice { cancel, load, keep }
 
 /// Asks what was meant by a code with a name on it.
 ///
 /// Two questions, one dialog, because they are the same question with a
-/// different thing at stake: whether to keep a configuration you have not seen
+/// different thing at stake: whether to keep a profile you have not seen
 /// before, and whether to let one you *have* seen overwrite the one you have.
 /// [replaces] says which — it is true when a save of this name already exists,
 /// in which case keeping means losing what is there now, and the button says
 /// so.
 ///
 /// A code whose name you already have and whose contents match is never asked
-/// about at all. See `ConfigScreen._scanned`: there is nothing to decide.
-Future<ScannedChoice> showScannedConfigDialog(
+/// about at all. See `PickerScreen._scanned`: there is nothing to decide.
+Future<ScannedChoice> showScannedProfileDialog(
   BuildContext context, {
   required String name,
   required bool replaces,
@@ -508,12 +533,11 @@ Future<ScannedChoice> showScannedConfigDialog(
           children: <Widget>[
             Text(
               replaces
-                  ? 'You already have a configuration called "$name", and this '
+                  ? 'You already have a profile called "$name", and this '
                       'code is not it. Load it to use it now and keep yours as '
                       'it is, or replace yours with what was scanned.'
-                  : 'This code came from a configuration called "$name". Load '
-                      'it to use it now, or save it to keep it as a pill of '
-                      'your own.',
+                  : 'This code came from a profile called "$name". Load '
+                      'it to use it now, or save it to keep it as one of your own.',
               style: const TextStyle(
                 color: Color(0x99BFD0E4),
                 fontSize: 14,
@@ -599,7 +623,7 @@ class _Actions extends StatelessWidget {
 
   /// A second thing you might have meant, between Cancel and the button that
   /// does the thing. Only the scanned-code dialogs have one: taking somebody
-  /// else's configuration and *keeping* it are different answers, and a dialog
+  /// else's profile and *keeping* it are different answers, and a dialog
   /// that made you choose between keeping it and losing it would get the wrong
   /// one pressed.
   final String? middle;

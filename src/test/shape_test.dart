@@ -17,6 +17,10 @@ const Map<DieKind, double> _knownInertia = <DieKind, double>{
   DieKind.d4: 2.0 / 15.0, // a² = 8R²/3 → I = m (8R²/3)/20
   // Regular octahedron: I = m a²/10 with R = a/√2.
   DieKind.d8: 1.0 / 5.0, // a² = 2R² → I = m 2R²/10
+  // The hippopotamus is a cube — the animal is a picture drawn inside one, and
+  // this is where that claim is worth stating: it rolls as fairly as the D6
+  // because it has the D6's inertia to nine digits.
+  DieKind.hippo: 2.0 / 9.0,
 };
 
 void main() {
@@ -28,6 +32,7 @@ void main() {
       DieKind.d10: 12,
       DieKind.d12: 20,
       DieKind.d20: 12,
+      DieKind.hippo: 8, // The cube it is carved out of.
     };
 
     for (final DieKind kind in DieKind.values) {

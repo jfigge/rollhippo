@@ -1,35 +1,35 @@
 import 'package:flutter/material.dart';
 
-import 'configs.dart';
+import 'profiles.dart';
 
-/// Which configuration to open, asked once, before anything has been drawn.
+/// Which profile to open, asked once, before anything has been drawn.
 ///
 /// Only when there is something to ask about. A first run has no saves, so
-/// there is no question and no dialog: you arrive at a fresh configuration,
+/// there is no question and no dialog: you arrive at a fresh profile,
 /// which is what the app has always started with.
 ///
-/// Comes back with the save that was chosen, or null for a new configuration —
+/// Comes back with the save that was chosen, or null for a new profile —
 /// which is also what a dismissed dialog means, because the picker underneath
 /// is already sitting at its defaults and that is exactly what "new" is.
-Future<SavedConfig?> showOpenConfigDialog(BuildContext context) {
-  return showDialog<SavedConfig>(
+Future<SavedProfile?> showOpenProfileDialog(BuildContext context) {
+  return showDialog<SavedProfile>(
     context: context,
     // Darker than a sheet's barrier. There is a whole picker behind this that
     // is not to be used yet, where a sheet is drawn over a screen you have
     // already been working on and can go back to by tapping past it.
     barrierColor: const Color(0xCC000000),
     // The way out is the button. A stray tap on the way to a save should not
-    // land you in a configuration you did not ask for — the back gesture still
+    // land you in a profile you did not ask for — the back gesture still
     // works, and means the same thing the button does.
     barrierDismissible: false,
-    builder: (BuildContext context) => const _OpenDialog(key: kOpenConfig),
+    builder: (BuildContext context) => const _OpenDialog(key: kOpenProfile),
   );
 }
 
 /// The chooser itself. Named because the saves are listed in two places at
-/// once while it is up — here, and in the row of pills on the picker behind it
+/// once while it is up — here, and in the row of profiles on the picker behind it
 /// — so anything reaching for one has to say which list it means.
-const Key kOpenConfig = ValueKey<String>('open-config');
+const Key kOpenProfile = ValueKey<String>('open-profile');
 
 class _OpenDialog extends StatelessWidget {
   const _OpenDialog({super.key});
@@ -67,7 +67,7 @@ class _OpenDialog extends StatelessWidget {
               const Padding(
                 padding: EdgeInsets.fromLTRB(4, 4, 4, 0),
                 child: Text(
-                  'Choose a configuration to open.',
+                  'Choose a profile to open.',
                   style: TextStyle(color: Color(0x99BFD0E4), fontSize: 14),
                 ),
               ),
@@ -79,7 +79,7 @@ class _OpenDialog extends StatelessWidget {
                 child: ListView(
                   shrinkWrap: true,
                   children: <Widget>[
-                    for (final SavedConfig save in configs.saves)
+                    for (final SavedProfile save in profiles.saves)
                       _Row(
                         save: save,
                         now: now,
@@ -100,7 +100,7 @@ class _OpenDialog extends StatelessWidget {
                   ),
                 ),
                 child: const Text(
-                  '+ New Configuration',
+                  '+ New Profile',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -116,7 +116,7 @@ class _OpenDialog extends StatelessWidget {
 class _Row extends StatelessWidget {
   const _Row({required this.save, required this.now, required this.onTap});
 
-  final SavedConfig save;
+  final SavedProfile save;
 
   /// Passed in rather than read here, so every row in one dialog is measured
   /// against the same instant — otherwise two saves used seconds apart could

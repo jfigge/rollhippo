@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/physics/body.dart';
 import 'package:rollhippo/physics/shape.dart';
@@ -434,7 +434,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(393, 852));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       // Every roll is presented now, so there is nothing left to ask about.
       expect(find.text('Tidy up to read'), findsNothing);

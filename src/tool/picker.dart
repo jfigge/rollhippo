@@ -5,9 +5,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/config_pills.dart';
-import 'package:rollhippo/app/config_screen.dart';
-import 'package:rollhippo/app/configs.dart';
+import 'package:rollhippo/app/profile_row.dart';
+import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
@@ -18,9 +18,11 @@ import 'package:rollhippo/tray/tray.dart';
 ///     flutter test tool/picker.dart
 ///
 /// Two images: the whole screen with a full rack of assorted dice, and a strip
-/// of the six kinds at rack size, which is what to check after touching
+/// of every kind at rack size, which is what to check after touching
 /// [previewOrientation] — the angle is chosen by a search, and the only way to
-/// know a change to it helped is to look at all six.
+/// know a change to it helped is to look at all of them. The hippopotamus is
+/// in that strip and not in the rack, because the rack is the picker and the
+/// picker only offers it to somebody who has asked for it by name.
 ///
 /// The labels come out as blank boxes: `flutter test` substitutes a font with
 /// no glyphs in it, and that goes for the numbers on the dice too. Everything
@@ -36,7 +38,7 @@ void main() {
     tester.view.devicePixelRatio = 2.0;
 
     await tester.pumpWidget(
-      const RepaintBoundary(child: MaterialApp(home: ConfigScreen())),
+      const RepaintBoundary(child: MaterialApp(home: PickerScreen())),
     );
 
     // Fill the rack by driving the picker the way a thumb would, one die at a
@@ -49,9 +51,7 @@ void main() {
         await tester.tap(_dice(find.byType(DiePreview)).at(i));
         await tester.pump();
       }
-      await tester.tap(
-        _dice(find.text(DieKind.values[i % DieKind.values.length].label)),
-      );
+      await tester.tap(_dice(find.text(_offered[i % _offered.length].label)));
       await tester.pump();
       await tester.tap(_dice(_swatch(kDicePalette[i % kDicePalette.length])));
       await tester.pump();
@@ -76,7 +76,7 @@ void main() {
     tester.view.devicePixelRatio = 2.0;
 
     await tester.pumpWidget(
-      const RepaintBoundary(child: MaterialApp(home: ConfigScreen())),
+      const RepaintBoundary(child: MaterialApp(home: PickerScreen())),
     );
 
     // The second mode dot, which is the same place a swipe on the panel gets
@@ -115,19 +115,22 @@ void main() {
     // dialog: what these pictures are for is the row and the chooser, and
     // typing three names in through a keyboard that is not there would only
     // be a slower way to arrive at the same screen.
-    configs.add('Yahtzee', _saved(5));
-    configs.add('D&D', _saved(7));
-    configs.add('Poker Night', _saved(3));
+    profiles.add('Yahtzee', _saved(5));
+    profiles.add('D&D', _saved(7));
+    profiles.add('Craps', _saved(2));
+    profiles.add('Backgammon', _saved(2));
+    profiles.add('Farkle', _saved(6));
+    profiles.add('Poker Night', _saved(3));
 
     await tester.pumpWidget(
-      const RepaintBoundary(child: MaterialApp(home: ConfigScreen())),
+      const RepaintBoundary(child: MaterialApp(home: PickerScreen())),
     );
     await tester.pumpAndSettle();
 
     // The first thing the app does when there is anything to open.
     await _write(tester, '$dir/picker-open.png');
 
-    await tester.tap(find.text('+ New Configuration'));
+    await tester.tap(find.text('+ New Profile'));
     await tester.pumpAndSettle();
 
     // And the row underneath it, with one of them open.
@@ -135,20 +138,12 @@ void main() {
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-saves.png');
 
-    // Three names and the dashed pill are wider than a phone, so the way to
-    // the last of them is the way a thumb would take: sideways.
-    await tester.dragUntilVisible(
-      find.byKey(kNewConfigPill),
-      find.byKey(kConfigPills),
-      const Offset(-60, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(kNewConfigPill));
+    await tester.tap(find.byKey(kNewProfile));
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-name.png');
   });
 
-  testWidgets('the six kinds at rack size', (WidgetTester tester) async {
+  testWidgets('every kind at rack size', (WidgetTester tester) async {
     const double slot = 72;
     await tester.binding.setSurfaceSize(
       Size(slot * DieKind.values.length, slot),
@@ -186,10 +181,10 @@ void main() {
   });
 }
 
-/// A configuration with [dice] dice in its first set, which is enough for the
+/// A profile with [dice] dice in its first set, which is enough for the
 /// chooser to have something to say under each name.
-Config _saved(int dice) => Config(
-  mode: ConfigMode.dice,
+Profile _saved(int dice) => Profile(
+  mode: ProfileMode.dice,
   groups: <List<DieSpec>>[
     <DieSpec>[
       for (int i = 0; i < dice; i++)
@@ -202,6 +197,14 @@ Config _saved(int dice) => Config(
   decks: 2,
   reshuffleAt: 5,
 );
+
+/// The kinds the picker will let you choose without being asked by name — see
+/// [DieKind.secret], which is what keeps the hippopotamus out of a sheet that
+/// is meant to show the rack rather than the easter egg.
+final List<DieKind> _offered = <DieKind>[
+  for (final DieKind kind in DieKind.values)
+    if (!kind.secret) kind,
+];
 
 /// Whichever of [finder]'s widgets is in one mode's panel. Both modes are built
 /// at once, one screen apart, and both have a rack and a palette — so anything

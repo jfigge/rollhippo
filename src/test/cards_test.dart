@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/card_screen.dart';
 import 'package:rollhippo/app/chrome.dart';
-import 'package:rollhippo/app/config_screen.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
@@ -316,7 +316,7 @@ void main() {
     testWidgets('starts on dice, with both modes there to swipe to', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       expect(dotsOf(tester, kModeDots).current, 0);
       expect(dotsOf(tester, kModeDots).filled, <bool>[true, true]);
@@ -327,7 +327,7 @@ void main() {
     testWidgets('a swipe on the panel changes mode', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
       expect(dotsOf(tester, kModeDots).current, 1);
@@ -344,7 +344,7 @@ void main() {
     testWidgets('a swipe on the rack changes set, not mode', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tester.drag(find.byType(PageView), const Offset(-300, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -356,7 +356,7 @@ void main() {
     testWidgets('card mode counts dice between one and three', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
       await tester.tap(addOf(kCardPage));
@@ -400,7 +400,7 @@ void main() {
     testWidgets('the deck count is a choice of three', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
       expect(find.text('(72 in the shoe)'), findsOneWidget);
@@ -412,7 +412,7 @@ void main() {
     testWidgets('a colour lands on the selected die and nowhere else', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
       // DieSpec is compared field by field: it has no `==` of its own, and a
@@ -436,7 +436,7 @@ void main() {
     testWidgets('a die takes its colour with it when it goes', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
       await tester.tap(dieOf(kCardPage).at(1));
@@ -467,7 +467,7 @@ void main() {
     testWidgets('the colours chosen are the colours the cards are printed in', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
 
       await tester.tap(swatchOf(kCardPage, violet));
@@ -493,7 +493,7 @@ void main() {
     testWidgets('the big button shuffles rather than rolls', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       expect(find.text('Roll'), findsOneWidget);
       expect(find.text('Shuffle'), findsNothing);
 

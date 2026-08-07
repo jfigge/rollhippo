@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/config_pills.dart';
-import 'package:rollhippo/app/config_screen.dart';
-import 'package:rollhippo/app/configs.dart';
+import 'package:rollhippo/app/chrome.dart';
+import 'package:rollhippo/app/profile_row.dart';
+import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/open_dialog.dart';
 import 'package:rollhippo/app/page_dots.dart';
@@ -10,10 +11,10 @@ import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// A configuration with [dice] six-sided dice in its first set and nothing in
+/// A profile with [dice] six-sided dice in its first set and nothing in
 /// the other two, which is the shape of nearly every save anybody makes.
-Config diceConfig(int dice, {int decks = 2, int cut = 5}) => Config(
-  mode: ConfigMode.dice,
+Profile diceProfile(int dice, {int decks = 2, int cut = 5}) => Profile(
+  mode: ProfileMode.dice,
   groups: <List<DieSpec>>[
     <DieSpec>[
       for (int i = 0; i < dice; i++)
@@ -39,14 +40,14 @@ List<DieSpec> rack(WidgetTester tester) => <DieSpec>[
     preview.spec,
 ];
 
-/// One of the pills under the picker, by name. Scoped, because the chooser at
+/// One of the profiles under the picker, by name. Scoped, because the chooser at
 /// launch lists the same names one layer up.
-Finder pill(String name) =>
-    find.descendant(of: find.byKey(kConfigPills), matching: find.text(name));
+Finder profile(String name) =>
+    find.descendant(of: find.byKey(kProfileRow), matching: find.text(name));
 
 /// A row of the launch chooser, by name.
 Finder chooserRow(String name) =>
-    find.descendant(of: find.byKey(kOpenConfig), matching: find.text(name));
+    find.descendant(of: find.byKey(kOpenProfile), matching: find.text(name));
 
 /// Which mode the picker is in, straight off the dots that say so.
 int modeOf(WidgetTester tester) =>
@@ -71,18 +72,32 @@ Future<void> tapText(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
-/// Hands the picker a configuration off somebody else's screen.
+/// The picker, on a phone-shaped screen.
+///
+/// Not the 800 × 600 a widget test starts with. The picker is a phone screen —
+/// the rack, the panel and the profiles are laid out against its height, and the
+/// row of saves is given whatever is left between the mode dots and the Roll
+/// button. On a window two thirds as tall as a phone there is barely any, and
+/// every test here would be measuring that rather than what it came to look at.
+Future<void> pumpPicker(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(kHarnessScreen);
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+  await tester.pumpAndSettle();
+}
+
+/// Hands the picker a profile off somebody else's screen.
 ///
 /// The scanner itself needs a camera, so what is driven here is the seam it
 /// pops back through — which is where every decision about the name is made.
 Future<void> scan(
   WidgetTester tester,
-  Config config, {
+  Profile profile, {
   String name = '',
 }) async {
   tester
       .widget<AppMenuButton>(find.byType(AppMenuButton))
-      .onScanned(ScannedConfig(name: name, config: config));
+      .onScanned(ScannedProfile(name: name, profile: profile));
   await tester.pumpAndSettle();
 }
 
@@ -98,18 +113,18 @@ Future<void> addDie(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Puts what is on screen into the pill called [name], the way a thumb would:
+/// Puts what is on screen into the profile called [name], the way a thumb would:
 /// hold it down, and take the first thing the menu offers.
-Future<void> savePill(WidgetTester tester, String name) async {
-  await tester.longPress(pill(name));
+Future<void> saveProfile(WidgetTester tester, String name) async {
+  await tester.longPress(profile(name));
   await tester.pumpAndSettle();
   await tapText(tester, 'Save');
 }
 
 /// Makes a save called [name] out of whatever is on screen, the way a thumb
-/// would: the dashed pill, the dialog, the name, Create.
+/// would: the dashed profile, the dialog, the name, Create.
 Future<void> createSave(WidgetTester tester, String name) async {
-  await tester.tap(find.byKey(kNewConfigPill));
+  await tester.tap(find.byKey(kNewProfile));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField), name);
   await tester.pumpAndSettle();
@@ -124,13 +139,13 @@ void main() {
     // putting an empty preferences file behind it and reading that back —
     // which is also the only way to clear what the last test left in it.
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    await configs.load();
+    await profiles.load();
   });
 
-  group('a configuration', () {
+  group('a profile', () {
     test('goes out and comes back exactly as it was', () {
-      final Config config = Config(
-        mode: ConfigMode.cards,
+      final Profile profile = Profile(
+        mode: ProfileMode.cards,
         groups: <List<DieSpec>>[
           <DieSpec>[
             const DieSpec(kind: DieKind.d20, colour: 0xFFB3453F),
@@ -144,12 +159,12 @@ void main() {
         reshuffleAt: 17,
       );
 
-      final Config back = configFromJson(configToJson(config))!;
+      final Profile back = profileFromJson(profileToJson(profile))!;
 
-      expect(back.mode, ConfigMode.cards);
+      expect(back.mode, ProfileMode.cards);
       expect(back.decks, 3);
       expect(back.reshuffleAt, 17);
-      expect(back.colours, config.colours);
+      expect(back.colours, profile.colours);
       // The empty set in the middle survives: it is a set nobody started, not
       // a gap to be closed up.
       expect(back.groups.length, 3);
@@ -160,27 +175,27 @@ void main() {
     });
 
     test('is dropped rather than repaired when it cannot be read', () {
-      expect(configFromJson(null), isNull);
-      expect(configFromJson('RH1:AwIAAA=='), isNull);
-      final Map<String, Object?> good = configToJson(diceConfig(2));
+      expect(profileFromJson(null), isNull);
+      expect(profileFromJson('RH1:AwIAAA=='), isNull);
+      final Map<String, Object?> good = profileToJson(diceProfile(2));
       for (final String key in <String>['dice', 'colours', 'decks', 'cut']) {
         final Map<String, Object?> broken = Map<String, Object?>.of(good)
           ..remove(key);
-        expect(configFromJson(broken), isNull, reason: 'without $key');
+        expect(profileFromJson(broken), isNull, reason: 'without $key');
       }
-      // A code that is not one of ours is not a configuration either.
+      // A code that is not one of ours is not a profile either.
       expect(
-        configFromJson(Map<String, Object?>.of(good)..['dice'] = 'hello'),
+        profileFromJson(Map<String, Object?>.of(good)..['dice'] = 'hello'),
         isNull,
       );
     });
 
     test('says what it comes to in as few words as are true', () {
-      expect(diceConfig(5).summary, '5 dice');
-      expect(diceConfig(1).summary, '1 die');
+      expect(diceProfile(5).summary, '5 dice');
+      expect(diceProfile(1).summary, '1 die');
 
-      final Config sets = Config(
-        mode: ConfigMode.dice,
+      final Profile sets = Profile(
+        mode: ProfileMode.dice,
         groups: <List<DieSpec>>[
           <DieSpec>[for (int i = 0; i < 5; i++) kCardDie],
           <DieSpec>[for (int i = 0; i < 2; i++) kCardDie],
@@ -194,8 +209,8 @@ void main() {
 
       // Card mode counts the shoe, which is what it would deal from.
       expect(
-        Config(
-          mode: ConfigMode.cards,
+        Profile(
+          mode: ProfileMode.cards,
           groups: const <List<DieSpec>>[],
           colours: const <int>[kDiceWhite, kDiceWhite],
           decks: 2,
@@ -204,8 +219,8 @@ void main() {
         '2 decks, 72 cards',
       );
       expect(
-        Config(
-          mode: ConfigMode.cards,
+        Profile(
+          mode: ProfileMode.cards,
           groups: const <List<DieSpec>>[],
           colours: const <int>[kDiceWhite],
           decks: 1,
@@ -239,56 +254,56 @@ void main() {
 
   group('the store', () {
     test('puts the newest save at the front', () {
-      configs.add('First', diceConfig(1));
-      configs.add('Second', diceConfig(2));
+      profiles.add('First', diceProfile(1));
+      profiles.add('Second', diceProfile(2));
       expect(
-        <String>[for (final SavedConfig s in configs.saves) s.name],
+        <String>[for (final SavedProfile s in profiles.saves) s.name],
         <String>['Second', 'First'],
       );
     });
 
-    test('writes a changed configuration back under the same name', () {
-      final SavedConfig save = configs.add('Yahtzee', diceConfig(5));
-      configs.write(save.id, diceConfig(6));
+    test('writes a changed profile back under the same name', () {
+      final SavedProfile save = profiles.add('Yahtzee', diceProfile(5));
+      profiles.write(save.id, diceProfile(6));
 
-      expect(configs.saves.single.name, 'Yahtzee');
-      expect(configs.saves.single.id, save.id);
-      expect(configs.saves.single.config.groups[0].length, 6);
+      expect(profiles.saves.single.name, 'Yahtzee');
+      expect(profiles.saves.single.id, save.id);
+      expect(profiles.saves.single.profile.groups[0].length, 6);
     });
 
     test('writes nothing for a save that is no longer there', () {
-      final SavedConfig save = configs.add('Yahtzee', diceConfig(5));
-      configs.remove(save.id);
-      configs.write(save.id, diceConfig(6));
-      expect(configs.saves, isEmpty);
+      final SavedProfile save = profiles.add('Yahtzee', diceProfile(5));
+      profiles.remove(save.id);
+      profiles.write(save.id, diceProfile(6));
+      expect(profiles.saves, isEmpty);
     });
 
     test('renames, deletes and marks as used', () {
-      final SavedConfig save = configs.add('Yahtzee', diceConfig(5));
+      final SavedProfile save = profiles.add('Yahtzee', diceProfile(5));
       final DateTime made = save.usedAt;
 
-      configs.rename(save.id, 'D&D');
-      expect(configs.byId(save.id)!.name, 'D&D');
-      expect(configs.byId(save.id)!.config.groups[0].length, 5);
+      profiles.rename(save.id, 'D&D');
+      expect(profiles.byId(save.id)!.name, 'D&D');
+      expect(profiles.byId(save.id)!.profile.groups[0].length, 5);
 
-      configs.touch(save.id);
+      profiles.touch(save.id);
       expect(
-        configs.byId(save.id)!.usedAt.isBefore(made),
+        profiles.byId(save.id)!.usedAt.isBefore(made),
         isFalse,
         reason: 'opening a save moves it forwards, not back',
       );
 
-      configs.remove(save.id);
-      expect(configs.byId(save.id), isNull);
-      expect(configs.isEmpty, isTrue);
+      profiles.remove(save.id);
+      expect(profiles.byId(save.id), isNull);
+      expect(profiles.isEmpty, isTrue);
     });
 
     test('is still there after the app has been put down', () async {
-      configs.add('Yahtzee', diceConfig(5));
-      configs.add(
+      profiles.add('Yahtzee', diceProfile(5));
+      profiles.add(
         'Cards',
-        Config(
-          mode: ConfigMode.cards,
+        Profile(
+          mode: ProfileMode.cards,
           groups: const <List<DieSpec>>[],
           colours: const <int>[0xFFB3453F],
           decks: 3,
@@ -298,16 +313,16 @@ void main() {
       await pumpEventQueue();
 
       // Which is all a fresh launch does.
-      await configs.load();
+      await profiles.load();
 
-      expect(configs.saves.length, 2);
-      expect(configs.saves[0].name, 'Cards');
-      expect(configs.saves[0].config.mode, ConfigMode.cards);
-      expect(configs.saves[0].config.decks, 3);
-      expect(configs.saves[0].config.reshuffleAt, 12);
-      expect(configs.saves[0].config.colours, <int>[0xFFB3453F]);
-      expect(configs.saves[1].name, 'Yahtzee');
-      expect(configs.saves[1].config.groups[0].length, 5);
+      expect(profiles.saves.length, 2);
+      expect(profiles.saves[0].name, 'Cards');
+      expect(profiles.saves[0].profile.mode, ProfileMode.cards);
+      expect(profiles.saves[0].profile.decks, 3);
+      expect(profiles.saves[0].profile.reshuffleAt, 12);
+      expect(profiles.saves[0].profile.colours, <int>[0xFFB3453F]);
+      expect(profiles.saves[1].name, 'Yahtzee');
+      expect(profiles.saves[1].profile.groups[0].length, 5);
     });
 
     test('drops a save it cannot read and keeps the rest', () async {
@@ -318,9 +333,9 @@ void main() {
             '"decks":1,"cut":0}},'
             '{"id":2,"name":"Broken","used":0,"config":{"mode":"dice"}}]',
       });
-      await configs.load();
+      await profiles.load();
       expect(
-        <String>[for (final SavedConfig s in configs.saves) s.name],
+        <String>[for (final SavedProfile s in profiles.saves) s.name],
         <String>['Fine'],
       );
     });
@@ -331,34 +346,32 @@ void main() {
         SharedPreferences.setMockInitialValues(<String, Object>{
           'configs.saved': 'not json at all',
         });
-        await configs.load();
-        expect(configs.isEmpty, isTrue);
+        await profiles.load();
+        expect(profiles.isEmpty, isTrue);
       },
     );
   });
 
-  group('the pills', () {
+  group('the profiles', () {
     testWidgets('are just the one, until something is saved', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
       // Nothing to choose between, so nothing was asked.
-      expect(find.byKey(kOpenConfig), findsNothing);
-      expect(find.byKey(kNewConfigPill), findsOneWidget);
+      expect(find.byKey(kOpenProfile), findsNothing);
+      expect(find.byKey(kNewProfile), findsOneWidget);
       expect(find.text('+ New'), findsOneWidget);
     });
 
     testWidgets('keep what is on screen, under a name', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(kNewConfigPill));
+      await pumpPicker(tester);
+      await tester.tap(find.byKey(kNewProfile));
       await tester.pumpAndSettle();
 
-      expect(find.text('New configuration'), findsOneWidget);
+      expect(find.text('New profile'), findsOneWidget);
       // Nothing to create until there is something to call it.
       expect(
         tester
@@ -371,42 +384,105 @@ void main() {
       await tester.pumpAndSettle();
       await tapText(tester, 'Create');
 
-      expect(pill('Yahtzee'), findsOneWidget);
-      expect(configs.saves.single.name, 'Yahtzee');
-      expect(configs.saves.single.config.groups[0].length, kDefaultDice.length);
+      expect(profile('Yahtzee'), findsOneWidget);
+      expect(profiles.saves.single.name, 'Yahtzee');
+      expect(
+        profiles.saves.single.profile.groups[0].length,
+        kDefaultDice.length,
+      );
     });
 
     testWidgets('cancelling keeps nothing', (WidgetTester tester) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(kNewConfigPill));
+      await pumpPicker(tester);
+      await tester.tap(find.byKey(kNewProfile));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Yahtzee');
       await tapText(tester, 'Cancel');
 
-      expect(configs.isEmpty, isTrue);
-      expect(pill('Yahtzee'), findsNothing);
+      expect(profiles.isEmpty, isTrue);
+      expect(profile('Yahtzee'), findsNothing);
+    });
+
+    testWidgets('wrap rather than run off the side', (
+      WidgetTester tester,
+    ) async {
+      for (int i = 0; i < 6; i++) {
+        profiles.add('Game ${i + 1}', diceProfile(2));
+      }
+      await pumpPicker(tester);
+      await tapText(tester, '+ New Profile');
+
+      final Set<double> rows = <double>{};
+      for (final SavedProfile save in profiles.saves) {
+        final Rect box = tester.getRect(profile(save.name));
+        expect(
+          box.left,
+          greaterThanOrEqualTo(0),
+          reason: '${save.name} has run off the left',
+        );
+        expect(
+          box.right,
+          lessThanOrEqualTo(kHarnessScreen.width),
+          reason: '${save.name} has run off the right',
+        );
+        rows.add(box.top);
+      }
+      expect(rows.length, greaterThan(1), reason: 'they never wrapped');
+    });
+
+    testWidgets('scroll rather than push the Roll button off the bottom', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      final double button = tester.getTopLeft(find.text('Roll')).dy;
+
+      // Far more than anybody would keep, which is the point: the block has
+      // to stop growing somewhere, and where it stops is the button.
+      for (int i = 0; i < 40; i++) {
+        profiles.add('Game ${i + 1}', diceProfile(2));
+      }
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(find.text('Roll')).dy,
+        button,
+        reason: 'the profiles pushed the button down the screen',
+      );
+      final ScrollableState scroll = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(kProfileRow),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(
+        scroll.position.maxScrollExtent,
+        greaterThan(0),
+        reason: 'they filled the space without becoming scrollable',
+      );
+      // And the bottom of the block is still above the button.
+      expect(
+        tester.getRect(find.byKey(kProfileRow)).bottom,
+        lessThanOrEqualTo(button),
+      );
     });
 
     testWidgets('take a name of no more than the limit', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(kNewConfigPill));
+      await pumpPicker(tester);
+      await tester.tap(find.byKey(kNewProfile));
       await tester.pumpAndSettle();
 
       expect(
         tester.widget<TextField>(find.byType(TextField)).maxLength,
-        kMaxConfigName,
+        kMaxProfileName,
       );
     });
 
     testWidgets('do not follow the screen until they are told to', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
       await tester.tap(
@@ -420,18 +496,21 @@ void main() {
       // The die is on the rack and nowhere else. A save is a photograph, and
       // this one was taken before the die arrived.
       expect(rack(tester).length, kDefaultDice.length + 1);
-      expect(configs.saves.single.config.groups[0].length, kDefaultDice.length);
+      expect(
+        profiles.saves.single.profile.groups[0].length,
+        kDefaultDice.length,
+      );
 
-      await savePill(tester, 'Yahtzee');
+      await saveProfile(tester, 'Yahtzee');
 
       expect(
-        configs.saves.single.config.groups[0].length,
+        profiles.saves.single.profile.groups[0].length,
         kDefaultDice.length + 1,
       );
       // And it stays put across a reload, which is the whole point of asking.
-      await configs.load();
+      await profiles.load();
       expect(
-        configs.saves.single.config.groups[0].length,
+        profiles.saves.single.profile.groups[0].length,
         kDefaultDice.length + 1,
       );
     });
@@ -439,13 +518,12 @@ void main() {
     testWidgets('take what is on screen onto whichever one is held down', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
       await createSave(tester, 'D&D');
 
       // Open the first one, change it, and put the change on the other.
-      await tester.tap(pill('Yahtzee'));
+      await tester.tap(profile('Yahtzee'));
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
@@ -454,13 +532,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await savePill(tester, 'D&D');
+      await saveProfile(tester, 'D&D');
 
       expect(find.text('Saved to "D&D".'), findsOneWidget);
       expect(
-        configs.saves
-            .firstWhere((SavedConfig save) => save.name == 'D&D')
-            .config
+        profiles.saves
+            .firstWhere((SavedProfile save) => save.name == 'D&D')
+            .profile
             .groups[0]
             .length,
         kDefaultDice.length + 1,
@@ -468,9 +546,9 @@ void main() {
 
       // Yahtzee, which was open a moment ago, is untouched.
       expect(
-        configs.saves
-            .firstWhere((SavedConfig s) => s.name == 'Yahtzee')
-            .config
+        profiles.saves
+            .firstWhere((SavedProfile s) => s.name == 'Yahtzee')
+            .profile
             .groups[0]
             .length,
         kDefaultDice.length,
@@ -480,8 +558,7 @@ void main() {
     testWidgets('keep both modes, whichever one you are looking at', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
       // Over to cards, and change something only that mode has.
       await tester.tap(
@@ -499,8 +576,8 @@ void main() {
       await tester.pumpAndSettle();
       await createSave(tester, 'Poker Night');
 
-      final Config kept = configs.saves.single.config;
-      expect(kept.mode, ConfigMode.cards);
+      final Profile kept = profiles.saves.single.profile;
+      expect(kept.mode, ProfileMode.cards);
       expect(kept.decks, 3);
       // And the dice behind it went along too, untouched.
       expect(kept.groups[0].length, kDefaultDice.length);
@@ -509,10 +586,10 @@ void main() {
     testWidgets('open one, and it replaces what was there', (
       WidgetTester tester,
     ) async {
-      configs.add(
+      profiles.add(
         'Twenty',
-        Config(
-          mode: ConfigMode.dice,
+        Profile(
+          mode: ProfileMode.dice,
           groups: <List<DieSpec>>[
             <DieSpec>[const DieSpec(kind: DieKind.d20, colour: 0xFFB3453F)],
             <DieSpec>[],
@@ -523,14 +600,13 @@ void main() {
           reshuffleAt: 0,
         ),
       );
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       // The chooser is up, because there is a save. Take the new one.
-      await tapText(tester, '+ New Configuration');
+      await tapText(tester, '+ New Profile');
 
       expect(rack(tester).length, kDefaultDice.length);
 
-      await tester.tap(pill('Twenty'));
+      await tester.tap(profile('Twenty'));
       await tester.pumpAndSettle();
 
       expect(rack(tester).length, 1);
@@ -541,19 +617,18 @@ void main() {
     testWidgets('come back to the mode they were made in', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
       await goToMode(tester, 1);
       await createSave(tester, 'Poker');
-      expect(configs.saves.single.config.mode, ConfigMode.cards);
+      expect(profiles.saves.single.profile.mode, ProfileMode.cards);
 
       // Going to look at the dice is not a change to the save — nothing is,
       // until Save. The mode is the page it was saved on.
       await goToMode(tester, 0);
-      expect(configs.saves.single.config.mode, ConfigMode.cards);
+      expect(profiles.saves.single.profile.mode, ProfileMode.cards);
 
-      await tester.tap(pill('Poker'));
+      await tester.tap(profile('Poker'));
       await tester.pumpAndSettle();
       expect(modeOf(tester), 1);
       expect(find.text('Shuffle'), findsOneWidget);
@@ -562,15 +637,14 @@ void main() {
     testWidgets('a dice save opened from card mode lands on the dice', (
       WidgetTester tester,
     ) async {
-      configs.add('Yahtzee', diceConfig(5));
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
-      await tapText(tester, '+ New Configuration');
+      profiles.add('Yahtzee', diceProfile(5));
+      await pumpPicker(tester);
+      await tapText(tester, '+ New Profile');
 
       await goToMode(tester, 1);
       expect(modeOf(tester), 1);
 
-      await tester.tap(pill('Yahtzee'));
+      await tester.tap(profile('Yahtzee'));
       await tester.pumpAndSettle();
 
       expect(modeOf(tester), 0);
@@ -578,11 +652,10 @@ void main() {
       expect(rack(tester).length, 5);
     });
 
-    testWidgets('put the open configuration in the title', (
+    testWidgets('put the open profile in the title', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       expect(find.text('Roll Hippo'), findsOneWidget);
 
       await createSave(tester, 'Yahtzee');
@@ -590,7 +663,7 @@ void main() {
       expect(find.text('Roll Hippo'), findsNothing);
 
       // A rename is a rename of the thing you are in, so it lands up here too.
-      await tester.longPress(pill('Yahtzee'));
+      await tester.longPress(profile('Yahtzee'));
       await tester.pumpAndSettle();
       await tapText(tester, 'Rename');
       await tester.enterText(find.byType(TextField), 'D&D');
@@ -599,7 +672,7 @@ void main() {
       expect(find.text('Roll Hippo - D&D'), findsOneWidget);
 
       // Deleting it leaves the dice where they are and the plain title back.
-      await tester.longPress(pill('D&D'));
+      await tester.longPress(profile('D&D'));
       await tester.pumpAndSettle();
       await tapText(tester, 'Delete');
       await tapText(tester, 'Delete');
@@ -609,9 +682,8 @@ void main() {
     testWidgets('title one opened from the chooser, before it is touched', (
       WidgetTester tester,
     ) async {
-      configs.add('Yahtzee', diceConfig(5));
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      profiles.add('Yahtzee', diceProfile(5));
+      await pumpPicker(tester);
 
       // The chooser has a title of its own, and it is not this one.
       expect(find.text('Roll Hippo - Yahtzee'), findsNothing);
@@ -624,11 +696,10 @@ void main() {
     testWidgets('a long press asks what else you meant', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
-      await tester.longPress(pill('Yahtzee'));
+      await tester.longPress(profile('Yahtzee'));
       await tester.pumpAndSettle();
       expect(find.text('Save'), findsOneWidget);
       expect(find.text('Rename'), findsOneWidget);
@@ -640,7 +711,7 @@ void main() {
       );
 
       await tapText(tester, 'Rename');
-      expect(find.text('Rename configuration'), findsOneWidget);
+      expect(find.text('Rename profile'), findsOneWidget);
       // The same dialog, with the other word on it.
       expect(find.text('Update'), findsOneWidget);
       expect(find.text('Create'), findsNothing);
@@ -649,36 +720,38 @@ void main() {
       await tester.pumpAndSettle();
       await tapText(tester, 'Update');
 
-      expect(pill('D&D'), findsOneWidget);
-      expect(pill('Yahtzee'), findsNothing);
+      expect(profile('D&D'), findsOneWidget);
+      expect(profile('Yahtzee'), findsNothing);
       // Renaming is about the name and nothing else.
-      expect(configs.saves.single.config.groups[0].length, kDefaultDice.length);
+      expect(
+        profiles.saves.single.profile.groups[0].length,
+        kDefaultDice.length,
+      );
     });
 
     testWidgets('deleting is asked about first, and can be called off', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
-      await tester.longPress(pill('Yahtzee'));
+      await tester.longPress(profile('Yahtzee'));
       await tester.pumpAndSettle();
       await tapText(tester, 'Delete');
       expect(find.text('Delete "Yahtzee"?'), findsOneWidget);
 
       await tapText(tester, 'Cancel');
-      expect(pill('Yahtzee'), findsOneWidget);
+      expect(profile('Yahtzee'), findsOneWidget);
 
-      await tester.longPress(pill('Yahtzee'));
+      await tester.longPress(profile('Yahtzee'));
       await tester.pumpAndSettle();
       await tapText(tester, 'Delete');
       await tapText(tester, 'Delete');
 
-      expect(pill('Yahtzee'), findsNothing);
-      expect(configs.isEmpty, isTrue);
+      expect(profile('Yahtzee'), findsNothing);
+      expect(profiles.isEmpty, isTrue);
       // What was on screen is still on screen — deleting a save is a statement
-      // about the row of pills, not about the dice.
+      // about the row of profiles, not about the dice.
       expect(rack(tester).length, kDefaultDice.length);
     });
   });
@@ -687,19 +760,18 @@ void main() {
     testWidgets('lists what there is, and opens the one you pick', (
       WidgetTester tester,
     ) async {
-      configs.add('Yahtzee', diceConfig(5));
-      configs.add('D&D', diceConfig(7));
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      profiles.add('Yahtzee', diceProfile(5));
+      profiles.add('D&D', diceProfile(7));
+      await pumpPicker(tester);
 
-      expect(find.byKey(kOpenConfig), findsOneWidget);
-      expect(find.text('Choose a configuration to open.'), findsOneWidget);
+      expect(find.byKey(kOpenProfile), findsOneWidget);
+      expect(find.text('Choose a profile to open.'), findsOneWidget);
       expect(chooserRow('D&D'), findsOneWidget);
       expect(chooserRow('Yahtzee'), findsOneWidget);
       // What each one holds, and when it was last open.
       expect(
         find.descendant(
-          of: find.byKey(kOpenConfig),
+          of: find.byKey(kOpenProfile),
           matching: find.text('5 dice · used just now'),
         ),
         findsOneWidget,
@@ -708,17 +780,17 @@ void main() {
       await tester.tap(chooserRow('Yahtzee'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(kOpenConfig), findsNothing);
+      expect(find.byKey(kOpenProfile), findsNothing);
       expect(rack(tester).length, 5);
     });
 
-    testWidgets('opens a card configuration on the card page', (
+    testWidgets('opens a card profile on the card page', (
       WidgetTester tester,
     ) async {
-      configs.add(
+      profiles.add(
         'Catan',
-        Config(
-          mode: ConfigMode.cards,
+        Profile(
+          mode: ProfileMode.cards,
           groups: <List<DieSpec>>[
             <DieSpec>[for (int i = 0; i < 2; i++) kCardDie],
             <DieSpec>[],
@@ -729,13 +801,12 @@ void main() {
           reshuffleAt: 10,
         ),
       );
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
       // What it holds is the shoe, because that is the page it was made on.
       expect(
         find.descendant(
-          of: find.byKey(kOpenConfig),
+          of: find.byKey(kOpenProfile),
           matching: find.textContaining('3 decks, 108 cards'),
         ),
         findsOneWidget,
@@ -752,8 +823,7 @@ void main() {
     testWidgets('and does it again the next time the app is started', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await goToMode(tester, 1);
       await tester.tap(
         find.descendant(of: find.byKey(kCardPage), matching: find.text('3')),
@@ -764,11 +834,10 @@ void main() {
       // Put the app down, and read the file back the way `main` does.
       await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
       await tester.pumpAndSettle();
-      await configs.load();
-      expect(configs.saves.single.config.mode, ConfigMode.cards);
+      await profiles.load();
+      expect(profiles.saves.single.profile.mode, ProfileMode.cards);
 
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await tester.tap(chooserRow('Catan'));
       await tester.pumpAndSettle();
 
@@ -777,42 +846,39 @@ void main() {
       expect(find.text('(108 in the shoe)'), findsOneWidget);
     });
 
-    testWidgets(
-      'a new configuration is the one the app has always started at',
-      (WidgetTester tester) async {
-        configs.add('Yahtzee', diceConfig(5));
-        await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-        await tester.pumpAndSettle();
+    testWidgets('a new profile is the one the app has always started at', (
+      WidgetTester tester,
+    ) async {
+      profiles.add('Yahtzee', diceProfile(5));
+      await pumpPicker(tester);
 
-        await tapText(tester, '+ New Configuration');
+      await tapText(tester, '+ New Profile');
 
-        expect(find.byKey(kOpenConfig), findsNothing);
-        expect(rack(tester).length, kDefaultDice.length);
-        // And it is nobody's save, so editing it changes none of them.
-        await tester.tap(
-          find.descendant(
-            of: find.byKey(const ValueKey<int>(0)),
-            matching: find.byKey(kAddDie),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(configs.saves.single.config.groups[0].length, 5);
-      },
-    );
+      expect(find.byKey(kOpenProfile), findsNothing);
+      expect(rack(tester).length, kDefaultDice.length);
+      // And it is nobody's save, so editing it changes none of them.
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<int>(0)),
+          matching: find.byKey(kAddDie),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(profiles.saves.single.profile.groups[0].length, 5);
+    });
   });
 
   group('a scanned code', () {
     testWidgets('with no name on it changes the screen and keeps nothing', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
-      await scan(tester, diceConfig(4));
+      await scan(tester, diceProfile(4));
 
       expect(rack(tester).length, 4);
       expect(
-        configs.isEmpty,
+        profiles.isEmpty,
         isTrue,
         reason: 'nothing was named, so nothing is kept',
       );
@@ -823,13 +889,12 @@ void main() {
     testWidgets('carries the mode, and the shoe with it', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
       await scan(
         tester,
-        Config(
-          mode: ConfigMode.cards,
+        Profile(
+          mode: ProfileMode.cards,
           groups: <List<DieSpec>>[
             <DieSpec>[kCardDie],
             <DieSpec>[],
@@ -851,10 +916,9 @@ void main() {
     testWidgets('you already have, to the die, opens without a word', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
-      final Config kept = configs.saves.single.config;
+      final Profile kept = profiles.saves.single.profile;
       // Something on screen that is not what was saved, so that opening it is
       // a change you can see.
       await addDie(tester);
@@ -871,18 +935,17 @@ void main() {
     testWidgets('you already have but is different asks, and Load keeps yours', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
-      await scan(tester, diceConfig(5), name: 'Yahtzee');
+      await scan(tester, diceProfile(5), name: 'Yahtzee');
       expect(find.text('Replace "Yahtzee"?'), findsOneWidget);
 
       await tapText(tester, 'Load');
 
       expect(rack(tester).length, 5, reason: 'the scanned one is on screen');
       expect(
-        configs.saves.single.config.groups[0].length,
+        profiles.saves.single.profile.groups[0].length,
         kDefaultDice.length,
         reason: 'and the save it is not is untouched',
       );
@@ -894,50 +957,50 @@ void main() {
     testWidgets('replaces the one you have when you say so', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
-      await scan(tester, diceConfig(5), name: 'Yahtzee');
+      await scan(tester, diceProfile(5), name: 'Yahtzee');
       await tapText(tester, 'Replace');
 
       expect(rack(tester).length, 5);
-      expect(configs.saves.length, 1, reason: 'replaced, not added beside');
-      expect(configs.saves.single.config.groups[0].length, 5);
+      expect(profiles.saves.length, 1, reason: 'replaced, not added beside');
+      expect(profiles.saves.single.profile.groups[0].length, 5);
       expect(find.text('Roll Hippo - Yahtzee'), findsOneWidget);
       // And it is on the file, not just in the row.
-      await configs.load();
-      expect(configs.saves.single.config.groups[0].length, 5);
+      await profiles.load();
+      expect(profiles.saves.single.profile.groups[0].length, 5);
     });
 
     testWidgets('cancelled, leaves the screen and the save alone', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
-      await scan(tester, diceConfig(5), name: 'Yahtzee');
+      await scan(tester, diceProfile(5), name: 'Yahtzee');
       await tapText(tester, 'Cancel');
 
       expect(rack(tester).length, kDefaultDice.length);
-      expect(configs.saves.single.config.groups[0].length, kDefaultDice.length);
+      expect(
+        profiles.saves.single.profile.groups[0].length,
+        kDefaultDice.length,
+      );
       expect(find.text('Roll Hippo - Yahtzee'), findsOneWidget);
     });
 
     testWidgets('with a name you have not got offers to keep it', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
-      await scan(tester, diceConfig(7), name: 'Catan');
+      await scan(tester, diceProfile(7), name: 'Catan');
       expect(find.text('Save "Catan"?'), findsOneWidget);
 
       await tapText(tester, 'Save');
 
-      expect(pill('Catan'), findsOneWidget);
-      expect(configs.saves.single.config.groups[0].length, 7);
+      expect(profile('Catan'), findsOneWidget);
+      expect(profiles.saves.single.profile.groups[0].length, 7);
       expect(rack(tester).length, 7);
       expect(find.text('Roll Hippo - Catan'), findsOneWidget);
     });
@@ -945,30 +1008,28 @@ void main() {
     testWidgets('or to be tried without being kept', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
-      await scan(tester, diceConfig(7), name: 'Catan');
+      await scan(tester, diceProfile(7), name: 'Catan');
       await tapText(tester, 'Load');
 
       expect(rack(tester).length, 7);
-      expect(configs.isEmpty, isTrue);
-      expect(pill('Catan'), findsNothing);
+      expect(profiles.isEmpty, isTrue);
+      expect(profile('Catan'), findsNothing);
       expect(find.text('Roll Hippo'), findsOneWidget);
     });
 
     testWidgets('is cut down to what the picker has room for', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
 
       // A code from some later build: four sets, twelve dice in the first, and
       // four dice on the card.
       await scan(
         tester,
-        Config(
-          mode: ConfigMode.dice,
+        Profile(
+          mode: ProfileMode.dice,
           groups: <List<DieSpec>>[
             <DieSpec>[for (int i = 0; i < 12; i++) kCardDie],
             <DieSpec>[],
@@ -991,20 +1052,19 @@ void main() {
     testWidgets('the code the picker offers carries the name it is open as', (
       WidgetTester tester,
     ) async {
-      await tester.pumpWidget(const MaterialApp(home: ConfigScreen()));
-      await tester.pumpAndSettle();
+      await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
       await tester.tap(find.byType(AppMenuButton));
       await tester.pumpAndSettle();
       await tapText(tester, 'Share');
 
-      final ScannedConfig code =
-          decodeConfig(
+      final ScannedProfile code =
+          decodeProfile(
             tester.widget<ShareCodeView>(find.byType(ShareCodeView)).code,
           )!;
       expect(code.name, 'Yahtzee');
-      expect(code.config, configs.saves.single.config);
+      expect(code.profile, profiles.saves.single.profile);
       // And it says as much in words, under the square.
       expect(find.text('Yahtzee · 2 dice'), findsOneWidget);
     });

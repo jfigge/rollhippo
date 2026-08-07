@@ -79,7 +79,7 @@ class Deck {
 
   /// The same count, for a shoe nobody has built yet.
   ///
-  /// The picker draws it under the card panel and the saved-configuration list
+  /// The picker draws it under the card panel and the saved-profile list
   /// says it out loud — "2 decks, 72 cards" — and neither of them wants two
   /// hundred [PlayingCard]s made and thrown away to find out what the number is.
   static int sizeOf(int dice, int decks) => math.pow(6, dice).toInt() * decks;

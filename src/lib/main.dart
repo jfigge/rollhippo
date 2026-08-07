@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'app/config_screen.dart';
-import 'app/configs.dart';
+import 'app/picker_screen.dart';
+import 'app/profiles.dart';
 import 'app/settings.dart';
 
 Future<void> main() async {
@@ -21,10 +21,10 @@ Future<void> main() async {
   // throw the player was paying attention to.
   await settings.load();
   // The same reasoning, harder. The first thing the picker does is decide
-  // whether to ask which configuration to open, and it can only ask once — a
+  // whether to ask which profile to open, and it can only ask once — a
   // chooser that arrived a moment later would be a dialog thrown over a screen
   // the player had already started using.
-  await configs.load();
+  await profiles.load();
   runApp(const RollHippoApp());
 }
 
@@ -37,7 +37,7 @@ class RollHippoApp extends StatelessWidget {
       title: 'Roll Hippo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
-      home: const ConfigScreen(),
+      home: const PickerScreen(),
     );
   }
 }
