@@ -17,6 +17,14 @@ const double kProfileGap = 8;
 const Key kProfileRow = ValueKey<String>('profile-row');
 const Key kNewProfile = ValueKey<String>('new-profile');
 
+/// How far in the block starts, which is [kRackEdge] written out.
+///
+/// Written out because the two cannot see each other: `picker_screen.dart`
+/// imports this file, so this file cannot import it back. Both are 16, and the
+/// point of it is that the heading, the first profile and the leftmost slot of
+/// the rack all start on the same line down the screen.
+const double _kProfileEdge = 16;
+
 /// The saved profiles, with the way to make another at the end of them.
 ///
 /// They wrap rather than run off the side. A row that scrolled sideways would
@@ -63,15 +71,41 @@ class ProfileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The scroll view fills the space the picker gives it and lays the block
-    // out at the top of that, which is what puts the profiles under the mode dots
-    // with the slack below them. Too many to fit and it scrolls, which is the
-    // only thing in this app that does.
-    return SingleChildScrollView(
+    // A heading, and then the block itself. The scroll view fills whatever the
+    // picker gives it that the heading has not taken and lays the profiles out
+    // at the top of that, which is what puts them under the mode dots with the
+    // slack below them. Too many to fit and it scrolls, which is the only thing
+    // in this app that does.
+    return Column(
       key: kProfileRow,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Padding(
+          // The space above it is the space the profiles used to keep over
+          // themselves, moved up here: the heading takes the top of the block
+          // rather than being added to it, so nothing below has moved.
+          padding: EdgeInsets.fromLTRB(_kProfileEdge, 7, _kProfileEdge, 5),
+          child: Text(
+            'Profiles',
+            style: TextStyle(
+              color: Color(0xAABFD0E4),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(child: _block()),
+      ],
+    );
+  }
+
+  /// The saves themselves, wrapped, and scrolling once they have filled the
+  /// space the picker allowed them.
+  Widget _block() {
+    return SingleChildScrollView(
       // The padding is the rack's, so the first profile starts where the dice
-      // above it do.
-      padding: const EdgeInsets.fromLTRB(16, 7, 16, 7),
+      // above it do — and where the heading over them does.
+      padding: const EdgeInsets.fromLTRB(_kProfileEdge, 0, _kProfileEdge, 7),
       child: SizedBox(
         // A [Wrap] is as wide as its widest run, and the column above centres
         // what it is given. Without this the block would drift left and right

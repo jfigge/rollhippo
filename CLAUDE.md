@@ -176,10 +176,12 @@ test exists to make the change deliberate, not to make it hard.
   at, because the card is behind the glass for all but the last instant of the
   journey and would slide in underneath the one it is being dealt onto.
 - **The profiles wrap, and the Roll button does not move.** `ProfileRow` is a
-  `Wrap` inside a `SingleChildScrollView`, and the picker hands it an
-  `Expanded` — every point between the mode dots and the Roll button, and not
-  one more. So the block grows downwards as saves are made, and once it has
-  filled that space it scrolls inside it. Two things follow. A profile has to hug
+  `Wrap` inside a `SingleChildScrollView`, under a "Profiles" heading that is
+  *outside* that scroll view so it stays put while the block scrolls under it,
+  and the picker hands the pair of them an `Expanded` — every point between the
+  mode dots and the Roll button, and not one more. So the block grows downwards
+  as saves are made, and once it has filled that space it scrolls inside it.
+  Two things follow. A profile has to hug
   its own label, which is why it uses a `Center` with both factors rather than
   `Container.alignment` — that one is an `Align` with no factors and fills
   whatever width it is offered, which in a `Wrap` is the whole line. And the
