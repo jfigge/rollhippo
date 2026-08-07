@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
-/// Draws the app icon, at every size the three platforms ask for. Run with:
+/// Draws the app icon, at every size the three platforms ask for — and iOS's
+/// launch image, which is the same mark. Run with:
 ///
 ///     make icon
 ///
@@ -42,6 +43,20 @@ void main() {
           opaque: true,
         );
       }
+      // iOS's launch image, which is the mark again rather than a drawing of
+      // its own: the storyboard puts it on the picker's own background, so
+      // what the first moment shows is the icon the player just tapped,
+      // sitting where it was tapped, until the first Flutter frame replaces
+      // it. Rounded and with its alpha kept, unlike the iOS icon — nothing
+      // masks this one, so the corners are ours to cut, and the dark behind
+      // it has to show through them.
+      for (int scale = 1; scale <= 3; scale++) {
+        await _write(
+          '$_kIosLaunchDir/LaunchImage${scale == 1 ? '' : '@${scale}x'}.png',
+          (_kLaunchPoints * scale).round(),
+          body: 1.0,
+        );
+      }
       for (final int pixels in _kMacIcons) {
         await _write('$_kMacDir/app_icon_$pixels.png', pixels, body: _kMacBody);
       }
@@ -66,6 +81,17 @@ void main() {
           '$dir/ic_launcher_monochrome.png',
           (_kAdaptiveDp * density.value).round(),
           monochrome: true,
+        );
+        // The launch image, the same drawing at the same size as iOS's, for the
+        // same reason. Here it is what `drawable/launch_background.xml` centres
+        // on the picker's colour, which is the window background the system
+        // shows between the tap and Flutter's first frame on API 24 to 30.
+        // Android 12 and up never look at it — `values-v31/styles.xml` is that
+        // path, and it puts the launcher icon on the same colour itself.
+        await _write(
+          '$dir/launch_image.png',
+          (_kLaunchPoints * density.value).round(),
+          body: 1.0,
         );
       }
       // What the Play console asks to be uploaded beside the listing. Square,
@@ -98,6 +124,21 @@ const Map<String, int> _kIosIcons = <String, int>{
   'Icon-App-83.5x83.5@2x.png': 167,
   'Icon-App-1024x1024@1x.png': 1024,
 };
+
+const String _kIosLaunchDir = 'ios/Runner/Assets.xcassets/LaunchImage.imageset';
+
+/// How big the launch image is, at 1x — iOS points, Android dp, which are the
+/// same length.
+///
+/// Both platforms centre it at its natural size — `contentMode="center"` in the
+/// storyboard, `android:gravity="center"` in the layer list, neither of them a
+/// scale mode — so this number is the size on screen, on every phone, on both.
+/// 120 is the 60-point home-screen icon at twice the size: big enough to read
+/// as the mark rather than a favicon, small enough that it is not pretending to
+/// be a splash screen. Change it and change the `width` and `height` on the
+/// `<image>` in `LaunchScreen.storyboard`, which is Interface Builder's note of
+/// what it was told to expect; Android's layer list asks the raster.
+const double _kLaunchPoints = 120;
 
 /// And what macOS does — one file per pixel size, shared between the scales.
 const List<int> _kMacIcons = <int>[16, 32, 64, 128, 256, 512, 1024];

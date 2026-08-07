@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The colour the app starts on, and stays on behind Flutter.
+
+     #0B0E13 is the PickerScreen's own scaffold colour — the literal in
+     lib/app/picker_screen.dart — so what the system paints before Dart has run
+     is what Dart is about to paint. Every launch surface here names this one
+     resource: the pre-Android-12 splash drawable, the Android 12 splash's
+     background, and the window behind the Flutter view once it is up. The same
+     number is in ios/Runner/Base.lproj/LaunchScreen.storyboard, as sRGB
+     fractions, because a storyboard cannot reference this file.
+
+     It is deliberately not @color/ic_launcher_background: that one is the red
+     field the mark sits on and is a property of the drawing, this one is the
+     app's own darkness and is a property of the screen.
+-->
+<resources>
+    <color name="launch_background">#0B0E13</color>
+</resources>

@@ -1,5 +1,7 @@
 # Launch Screen Assets
 
-You can customize the launch screen with your own desired assets by replacing the image files in this directory.
-
-You can also do it by opening your Flutter project's Xcode project with `open ios/Runner.xcworkspace`, selecting `Runner/Assets.xcassets` in the Project Navigator and dropping in the desired images.
+These three rasters are drawn by `make icon`, out of `tool/app_icon.dart`, from
+the same mark as the app icon — don't replace them by hand or through Xcode, or
+the next `make icon` will draw over whatever was dropped in. Their size comes
+from `_kLaunchPoints` in that file, and `LaunchScreen.storyboard` centres them
+at that size on the picker's own background.

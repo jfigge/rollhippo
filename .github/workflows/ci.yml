@@ -1,0 +1,192 @@
+# Roll Hippo — continuous integration.
+#
+# Three questions, asked of every push and every pull request. Does the code
+# still read the way the repo says it should — formatted, analysed clean with
+# infos fatal, and every suite passing? Does it still build for Android? Does
+# it still build for Apple, which is two answers, the phone and the harness?
+#
+# That is the whole remit. Nothing here signs for distribution, uploads to a
+# store or cuts a release. The three build jobs are there for the breakages a
+# headless test run cannot see, because they are not in the Dart: a plugin
+# whose native half stops resolving, a Gradle or AGP bump, an AOT compile of
+# code the JIT was forgiving, a manifest or an Info.plist that has drifted
+# from what the plugins now ask for.
+#
+# The one artefact left behind is an APK signed with the throwaway debug key
+# Gradle generates on the runner. That is enough to sideload onto a test phone
+# and deliberately no further — see `android/app/build.gradle.kts`, where the
+# release build type still points at the debug signing config.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push onto the same branch makes the first one's answer worthless,
+# so stop paying for it. Runs on `main` are exempt: those are the ones whose
+# results get looked up later.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  # Pinned rather than floated, and deliberately: this project's feel was
+  # settled against one toolchain, and a Flutter that arrives on its own is a
+  # variable nobody chose. Bumping it is this one line — do it on purpose,
+  # after `flutter upgrade` locally has been shown to leave `make all` green.
+  FLUTTER_VERSION: 3.44.9
+
+jobs:
+  check:
+    name: format · analyze · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        working-directory: src
+        # `--enforce-lockfile`, so `pubspec.lock` is the answer rather than a
+        # suggestion. Without it a resolve on the runner can quietly pick
+        # different versions from the ones in the repo, and then a green run
+        # is a green run of something nobody has on their machine.
+        run: flutter pub get --enforce-lockfile
+
+      # Each of these is the Makefile target of the same name, so what CI
+      # checks and what `make ci` checks locally cannot drift apart. They are
+      # three steps rather than one `make ci` so that a red run says which of
+      # the three went red without anyone opening the log.
+      - name: Format
+        run: make format-check
+
+      - name: Analyze
+        run: make analyze
+
+      - name: Test
+        run: make test
+
+  android:
+    name: android (apk)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # AGP 9 and the Kotlin toolchain want a JDK of their own; the runner's
+      # default is whatever the image ships this month, which is exactly the
+      # kind of thing that changes underneath you. `compileOptions` in
+      # `android/app/build.gradle.kts` names 17, so name 17 here too.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('src/android/**/*.gradle*', 'src/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Dependencies
+        working-directory: src
+        # `--enforce-lockfile` for the reason the check job gives.
+        run: flutter pub get --enforce-lockfile
+
+      # `--release`, where `make android` is `--profile`. The Makefile's reason
+      # is the feel — the solver runs in Dart every frame and profile is what
+      # ships. CI is not judging the feel, it is judging whether the thing
+      # compiles, and release is the strictest version of that question:
+      # AOT for every ABI, R8 over the Kotlin, the manifest merged for real.
+      #
+      # `flutter build` writes `android/local.properties` on its way past,
+      # which is what `settings.gradle.kts` reads `flutter.sdk` out of — so
+      # this must go through the flutter tool and never straight to Gradle.
+      - name: Build APK
+        working-directory: src
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          # Signed with the debug key, and named so nobody mistakes it for
+          # something that could go to a store.
+          name: rollhippo-apk-debug-signed
+          path: src/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+          if-no-files-found: error
+
+  ios:
+    name: ios (unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        working-directory: src
+        # `--enforce-lockfile` for the reason the check job gives.
+        run: flutter pub get --enforce-lockfile
+
+      # `--no-codesign` is what makes this possible without a certificate, a
+      # provisioning profile or a secret anywhere near the runner: Xcode is
+      # told CODE_SIGNING_ALLOWED=NO and builds a Runner.app it cannot install.
+      # An unsigned .app is not the point — the compile is, and it is the only
+      # place the plugins' native halves get built at all. The project is on
+      # Swift Package Manager (the Runner references a local package that
+      # `flutter build` regenerates into `ios/Flutter/ephemeral/`, which is
+      # ignored and must stay ignored), so this job is also what proves that
+      # generated package still resolves from a clean checkout.
+      #
+      # `macos-latest` moves, and with it Xcode. If a future image breaks this,
+      # pin the image (`runs-on: macos-15`) rather than chasing it.
+      - name: Build iOS
+        working-directory: src
+        run: flutter build ios --release --no-codesign
+
+  macos:
+    name: macos (harness)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        working-directory: src
+        # `--enforce-lockfile` for the reason the check job gives.
+        run: flutter pub get --enforce-lockfile
+
+      # The desktop harness is where the tuning is done, so it breaking costs
+      # real time — worth a job of its own. It needs no certificate either:
+      # `macos/Runner.xcodeproj` signs ad-hoc (CODE_SIGN_IDENTITY = "-"), which
+      # is enough to run on the machine that built it and nowhere else.
+      - name: Build macOS
+        working-directory: src
+        run: flutter build macos --release

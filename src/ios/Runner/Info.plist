@@ -24,6 +24,12 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- No encryption beyond what iOS itself provides: Roll Hippo makes no
+	     network connection at all. Declared here rather than answered by hand in
+	     App Store Connect, because that question is asked of every single build
+	     uploaded and the answer is never going to be a different one. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

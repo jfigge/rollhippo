@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+<!-- The window background the system shows between the tap and Flutter's first
+     frame: the mark, centred on the colour the picker is about to be.
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+     Used on API 24 — the project's minSdk — up to 30. Android 12 and up ignore
+     this file entirely and draw their own splash screen instead, which is what
+     values-v31/styles.xml is for; the two are arranged to look the same.
+
+     There used to be a drawable-v21 copy of this beside it, holding the variant
+     Flutter ships for the theme-coloured window it could assume from API 21.
+     With minSdk 24 that copy shadowed this file on every device that could run
+     the app, so the two have been folded into this one.
+
+     The raster is written by `make icon`, once per density bucket, and is drawn
+     at its natural size — no scale mode — so its 120 dp is 120 dp everywhere.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/launch_background" />
+    <item>
         <bitmap
             android:gravity="center"
             android:src="@mipmap/launch_image" />
-    </item> -->
+    </item>
 </layer-list>

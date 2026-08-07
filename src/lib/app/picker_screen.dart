@@ -1490,13 +1490,21 @@ class _RemoveButton extends StatelessWidget {
   Widget build(BuildContext context) => TextButton.icon(
     onPressed: onPressed,
     icon: const Icon(Icons.close, size: 16),
-    label: const Text('Remove'),
+    // The size rides on the label rather than on the `ButtonStyle`, which is
+    // how [TrayButton] has always done it and is not merely a matter of taste.
+    // A `textStyle` given to `styleFrom` REPLACES the button's resolved text
+    // style outright instead of merging into it, so a style written there for
+    // its size alone also throws the font family away — and a label with no
+    // family asks the engine for whatever the platform's default happens to
+    // be. On a phone that is the system face and nobody notices. Anywhere the
+    // default is not a real font it is six blank boxes, which is what
+    // `tool/appstore.dart` was rendering into the store listing.
+    label: const Text('Remove', style: TextStyle(fontSize: 13)),
     style: TextButton.styleFrom(
       foregroundColor: const Color(0xAABFD0E4),
       disabledForegroundColor: const Color(0x33BFD0E4),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       visualDensity: VisualDensity.compact,
-      textStyle: const TextStyle(fontSize: 13),
     ),
   );
 }

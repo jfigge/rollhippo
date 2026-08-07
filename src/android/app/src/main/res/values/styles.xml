@@ -1,18 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The two themes the window wears before Flutter owns it.
+
+     Both parents are Black, and there is no values-night beside this file on
+     purpose. Flutter ships that pair so a light-mode phone and a dark-mode one
+     can start on different colours, the light one on Theme.Light.NoTitleBar —
+     but main.dart asks for ThemeData.dark and never asks anything else, so there
+     is nothing for Dark Mode to switch and the light variant only meant the
+     status bar and the window flashed white on the way into a dark app. One
+     file, Black, both modes.
+-->
 <resources>
-    <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
-    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <!-- Show a splash screen on the activity. Automatically removed when
-             the Flutter engine draws its first frame -->
+    <!-- While the process is starting. The drawable is the mark on the picker's
+         colour; see drawable/launch_background.xml, and values-v31 for what
+         Android 12 and up do instead. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
-    <!-- Theme applied to the Android Window as soon as the process has started.
-         This theme determines the color of the Android Window while your
-         Flutter UI initializes, as well as behind your Flutter UI while its
-         running.
-
-         This Theme is only used starting with V2 of Flutter's Android embedding. -->
-    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+    <!-- And from the moment the process has started until the app is closed:
+         this is the colour behind the Flutter view, so it shows in the frames
+         after the splash is taken down and before the first frame is up, and
+         anywhere the view does not cover. The colour rather than the drawable —
+         the mark belongs to the splash, and a mark still sitting there behind a
+         half-built UI would be a second, longer splash. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/launch_background</item>
     </style>
 </resources>

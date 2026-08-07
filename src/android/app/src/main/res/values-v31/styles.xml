@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and up, where the splash screen stopped being ours to draw.
+
+     From API 31 the system shows its own splash — the launcher icon, masked and
+     centred on a colour — and a window background holding a picture is ignored,
+     so drawable/launch_background.xml never runs on a phone this new. This is
+     the attribute that replaced it. Only LaunchTheme is redefined here, and it
+     repeats windowBackground because a style named again in a qualified folder
+     replaces its unqualified namesake rather than adding to it; NormalTheme is
+     not affected by any of this and is inherited from values/ unchanged.
+
+     The animated-icon attribute is deliberately not set: left alone, the system
+     uses the launcher icon, which is this app's adaptive icon — the same mark,
+     already drawn for a mask, with a red field the circle crop was designed
+     around. Naming it here would say the same thing in more places. So what an
+     Android 12 launch looks like is the icon that was tapped, on the colour the
+     picker is about to be, which is what the pre-31 drawable arranges by hand
+     and what the iOS storyboard arranges by hand as well.
+-->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/launch_background</item>
+    </style>
+</resources>

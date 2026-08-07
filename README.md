@@ -1,5 +1,7 @@
 # Roll Hippo — dice tray
 
+[![CI](https://github.com/jfigge/rollhippo/actions/workflows/ci.yml/badge.svg)](https://github.com/jfigge/rollhippo/actions/workflows/ci.yml)
+
 Pick a set of dice — up to ten of them, any mixture of D4 through D20, each its
 own colour — throw them into a box the size of the phone screen and 20 cm deep,
 and read what they landed on. They fall under gravity, bounce off the walls and
@@ -99,6 +101,9 @@ volume at acrylic's density, so a D20 really is heavier than a D4.
 ```
 rollhippo/
 ├── Makefile
+├── website/           the whole of hippoherd.com/rollhippo — the product page, the user
+│                      guide, and the pictures both are built from. `make site` copies it
+├── appstore/          the store screenshots, framed at Apple's 1290 × 2796
 └── src/
     ├── lib/physics/   body · shape · contact · collision · solver · world   (no Flutter)
     ├── lib/tray/      tray geometry · dice · tuning constants · a profile · the share codes
@@ -106,7 +111,7 @@ rollhippo/
     ├── lib/render/    perspective camera and painter
     ├── lib/app/       the two screens, the app menu, and the haptics
     ├── test/          119 tests, all headless
-    └── tool/          filmstrip · roll_gif · one_die · picker  (render to image files)
+    └── tool/          filmstrip · roll_gif · one_die · picker · appstore  (render to image files)
 ```
 
 `lib/physics/` imports nothing from Flutter, so the simulation is testable

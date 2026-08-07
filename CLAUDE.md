@@ -27,15 +27,35 @@ Run from the repo root:
 | `make analyze` | `flutter analyze --fatal-infos --fatal-warnings` |
 | `make format` | `dart format lib test tool` |
 | `make all` | format + analyze + test |
+| `make ci` | what CI runs: format-check + analyze + test |
+| `make format-check` | the same files as `format`, but it reports the drift rather than fixing it |
 | `make desktop` | macOS harness. Space shakes, **R** throws, arrows tilt, **G** toggles the rotational pseudo-forces for an A/B |
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
 | `make picker` | render the picker — both modes, its saves, the chooser and the naming dialog — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
-| `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders — writes into the project, not `/tmp`. The adaptive icon's two XML files are structure, not drawing, and are not regenerated |
+| `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders, and both platforms' launch images with it — writes into the project, not `/tmp`. The XML beside the rasters is structure, not drawing, and is not regenerated: the adaptive icon's two files, `LaunchScreen.storyboard`, and Android's `launch_background.xml` and `styles.xml`, which only place the launch image and paint the picker's colour behind it |
 | `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel |
 | `make android` | `--profile` for exactly the same reason. On either platform, `flutter run -d <id>` when hot reload is worth more than the feel |
+| `make ipa` | `--release`, and signed — the build that goes to App Store Connect. Needs the Apple Distribution certificate in the keychain |
+| `make upload` | send that archive to App Store Connect. The key id and issuer come from `release.env`, the `.p8` itself from `keys/`, and both are gitignored — together they are the whole of what a new machine needs before it can ship. `--apiKey` takes the key's *id*, never a path: altool builds `AuthKey_<id>.p8` itself and hunts for it in four fixed directories, which `API_PRIVATE_KEYS_DIR` replaces. Connect refuses a build number it has already seen, so a second upload means bumping the `+N` in `pubspec.yaml` and rebuilding |
+| `make screenshots` | render the store listing and the website's pictures. Writes into the *project*, like `make icon`: `appstore/` is framed and captioned at Apple's exact 1290 × 2796 and is what you upload, `website/images/screens/` is the bare screen at half that and is what the site and the guide are built from, and `website/images/hero.png` and `og.png` are composed from those |
+| `make screenshots-65` | the same six, for Apple's other iPhone slot: `appstore/6.5/` at 1242 × 2688. Rendered at that phone's own 414 × 896 rather than resampled from the 6.9" set — the aspect ratios are close but not equal, and the safe area is genuinely different (44 pt of notch against 59 of Dynamic Island), which moves everything inside a `SafeArea`. Writes no website pictures and no hero: those belong to the 6.9" run, which is what `Slot.web` in `tool/appstore.dart` decides. Optional — Apple requires only the 6.9" set and downscales it itself |
+| `make site` | `rsync` `website/` into hippoherd's `website/rollhippo/`. That page is Roll Hippo's whole website — it is written here and served there — and hippoherd's generator leaves it alone rather than overwriting it. Commit and push in *that* repo to deploy |
 
 Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
+
+## CI
+
+`.github/workflows/ci.yml`, on every push to `main` and every pull request.
+Four jobs: the checks — `make format-check`, `make analyze`, `make test`, on
+Linux, because none of the suites need a device or a display — then a release
+APK, an unsigned iOS build, and the macOS harness. The Apple two need no
+certificate: iOS builds `--no-codesign` and the harness signs ad-hoc, so no
+secret goes near a runner and nothing here ships anywhere. The builds are
+`--release` where the Makefile is `--profile` — CI is not judging the feel, it
+is asking whether AOT, R8, the pods and the merged manifest still work, and
+release asks that hardest. The Flutter version is pinned in the workflow's
+`env` on purpose, and bumping it is that one line.
 
 ## Layout, and the one invariant
 
@@ -57,8 +77,14 @@ src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardSc
 src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at
                    runtime, `tool/app_icon.dart` transcribes it
 src/test/          headless
-src/tool/          filmstrip · roll_gif · one_die · picker · hippo · app_icon — run via `flutter test`,
+src/tool/          filmstrip · roll_gif · one_die · picker · hippo · app_icon · appstore — run via `flutter test`,
                    they write image files
+website/           Roll Hippo's whole website — index.html, docs/index.html (the user guide),
+                   and images/. Hand-written, no build step. `make site` copies it to
+                   hippoherd's website/rollhippo/, which is where it is served from
+appstore/          the six framed 1290 × 2796 screenshots, for App Store Connect and Play
+                   Console. Written by `make screenshots`; an upload, not a source.
+                   6.5/ is the same six at 1242 × 2688, from `make screenshots-65`
 ```
 
 `tray.dart` re-exports `profile.dart`, `dice.dart`, `tuning.dart` and
