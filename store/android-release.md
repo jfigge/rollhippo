@@ -45,9 +45,14 @@ few days. Do it first.
 
 ## What was missing from the repo, and now is not
 
-Four things were wrong or absent when the iOS build shipped. All four are
+Five things were wrong or absent when the iOS build shipped. All five are
 fixed; this section is what they were, so that a future change does not quietly
 undo one.
+
+The first four were found by reading the repo against Play's rules. The fifth
+was found by plugging in a cheap Android phone, and could not have been found
+any other way — which is the argument for owning one, made better than the
+paragraphs above make it.
 
 ### The release build was signed with the debug key
 
@@ -109,6 +114,51 @@ Play requires a **1024 × 500** banner that Apple has no equivalent of.
 `make screenshots-play` writes it to `appstore/play/feature-graphic.png`,
 composed from the 512 icon `make icon` already produces and the first capture,
 so it cannot drift from the listing it sits above.
+
+### The app threw twice on launch on any phone without a gyroscope
+
+`SensorMotionSource` opened three sensor streams and gave none of them an
+`onError`. On iOS that is invisible, because every iPhone has all three. On
+Android it is not: `sensors_plus` does not hand back a stream that stays quiet
+for a sensor the phone lacks, it completes the subscription with a
+`PlatformException(NO_SENSOR)`. An unhandled stream error is an unhandled
+exception, and there were two of them on every cold start:
+
+```
+E/flutter: Unhandled Exception: PlatformException(NO_SENSOR, Sensor not found,
+           It seems that your device has no Gyroscope sensor, null)
+E/flutter: Unhandled Exception: PlatformException(NO_SENSOR, Sensor not found,
+           It seems that your device has no User Accelerometer sensor, null)
+```
+
+Found on a **BLU B1660V** — Android 15, a MediaTek budget handset whose entire
+sensor complement is an accelerometer, a light sensor, a barometer, a proximity
+sensor and a step counter. No gyroscope, no fused linear acceleration, no
+magnetometer. That is not an exotic device; it is a large slice of what a free
+dice app gets installed onto.
+
+`lib/motion/motion.dart` now gives all three `listen` calls an `onError` that
+does nothing, and says at length why doing nothing is right. Verified by
+cold-launching against a cleared `logcat`: two matches before, zero after.
+
+**The degradation was already correct — only the noise was new.** `sample()`
+guards every reader behind a count, so the missing sensors cost exactly what
+they should and nothing crashed even before the fix:
+
+| Missing | Costs |
+|---|---|
+| Gyroscope | The rotational pseudo-forces. A wrist flick no longer adds tumble — the state the harness's **G** key toggles. Tilt and shake are unaffected, because those are the accelerometer. |
+| Fused linear acceleration | The clean split of movement from gravity. "Down" drags around during a hard shake. Android derives this by sensor fusion, so a phone with no gyroscope generally has no linear-acceleration sensor either — the comment in `motion.dart` that assumed "iOS and Android both supply the good one" was wrong, and now says so. |
+
+Two things worth recording from that session, because neither is guessable:
+
+- **The tray held ~90 fps on that phone**, frame times 10.2–12.1 ms against an
+  11.1 ms budget on a 90 Hz panel. The solver runs in Dart on every frame and
+  it keeps up on the low end.
+- **The vibrator reports `capabilities = []` and `supportedPrimitives = []`** —
+  no amplitude control, only canned CLICK/TICK effects. The impulse-keyed
+  haptic, where a D20 registers harder than a D4, cannot be expressed on that
+  class of device at all. It is not broken; it is flat.
 
 ---
 
@@ -212,14 +262,25 @@ code, so a rename fixes both at once.
 
 1. Register, pay the $25, start identity verification.
 2. `make keystore`, write `key.properties`, back the `.jks` up off this machine.
-3. `make aab`.
-4. Upload to a **closed testing** track. Recruit twelve testers. **Clock starts.**
-5. While it runs: `make screenshots` then `make screenshots-play`, the four
-   forms, the listing text, the trademark renames.
-6. Apply for production access.
-7. Promote the build to production.
+3. `make android` onto a real phone, and read `logcat`. Cheap, and it is where
+   the `NO_SENSOR` bug came from — the suites cannot see a sensor that is not
+   there and neither can the emulator.
+4. `make aab`. Confirm it is signed with the upload key rather than the debug
+   one before uploading anything:
 
-Steps 1 and 4 are the only ones with a queue in front of them. Everything
+   ```
+   unzip -p <aab> META-INF/UPLOAD.RSA | keytool -printcert | grep SHA256
+   ```
+
+   That fingerprint is what Play Console → Setup → App signing will show after
+   the first upload. They must match.
+5. Upload to a **closed testing** track. Recruit twelve testers. **Clock starts.**
+6. While it runs: `make screenshots` then `make screenshots-play`, the four
+   forms, the listing text, the trademark renames.
+7. Apply for production access.
+8. Promote the build to production.
+
+Steps 1 and 5 are the only ones with a queue in front of them. Everything
 between them is one evening.
 
 ---
@@ -245,3 +306,16 @@ between them is one evening.
   Play. The Console's web form is the whole path for a first submission;
   automating it via the Play Developer API is worth doing only once the manual
   route has been walked at least once.
+- **Android hardware is not one thing, and the accelerometer is the only part
+  of it you can count on.** Anything reading a sensor has to survive that
+  sensor being absent — not by testing for it, but by handling the stream
+  error, because that is the shape `sensors_plus` reports it in. The emulator
+  will not catch this: it exposes a full sensor suite and no vibration motor at
+  all, so it is the exact inverse of the budget phone it is standing in for.
+- **The emulator cannot answer the only question worth asking about the feel.**
+  It has draggable virtual sensors, which is enough to see the dice slide, and
+  no haptics whatsoever. Between it and a gyro-less budget phone, neither can
+  tell you whether a wrist flick tumbles the dice the way the tuning intends —
+  that needs a mid-range or better Android with a gyroscope. Until one exists,
+  the twelve closed testers are the instrument, and they should be asked about
+  shake and haptics specifically rather than "any bugs?".

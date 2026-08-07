@@ -84,10 +84,9 @@ landed on, not one that was picked.` — is 169 characters and says nothing abou
 card mode. It is the better line if this field is ever needed for the dice
 alone.
 
----
-
+---:q
 ## 5. Description
-
+:
 **Limit 4000 · using 2473**
 
 Only the first two or three lines show before the "more" link, which is why the
