@@ -90,12 +90,7 @@ void main() {
       );
 
       await openMenu(tester);
-      for (final String label in <String>[
-        'Settings',
-        'Scan',
-        'Share',
-        'Exit',
-      ]) {
+      for (final String label in <String>['Settings', 'Scan', 'Share']) {
         expect(find.text(label), findsOneWidget, reason: '$label is missing');
       }
     });
@@ -150,32 +145,6 @@ void main() {
         closeTo(slot.left, 0.01),
         reason: 'the three lines no longer start where the rack does',
       );
-    });
-
-    testWidgets('Exit is asked before anything is done about it', (
-      WidgetTester tester,
-    ) async {
-      // The one entry that cannot be exercised for real: [quitApp] ends the
-      // process and would take the test runner with it. What is checked here
-      // is that the menu asks, and asks once.
-      int asked = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: AppMenuButton(
-              profile: scanned(<List<DieSpec>>[<DieSpec>[]]).profile,
-              name: '',
-              onScanned: (_) {},
-              onExit: () async => asked++,
-            ),
-          ),
-        ),
-      );
-
-      await openMenu(tester);
-      await tester.tap(find.text('Exit'));
-      await tester.pumpAndSettle();
-      expect(asked, 1);
     });
   });
 

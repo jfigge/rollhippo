@@ -58,3 +58,4 @@ coverage/
 .DS_Store
 certs/
 keys/
+keys

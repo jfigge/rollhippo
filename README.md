@@ -117,9 +117,10 @@ know Flutter exists.
 ## Running it
 
 ```
-make test        # 119 headless tests: geometry, integration, resting, containment, fairness
+make test        # 209 headless tests: geometry, integration, resting, containment, fairness
 make desktop     # macOS harness — phone-sized tray, simulated shake
 make ios         # build and install on the iPhone
+make android     # build and install on the Android phone
 make gif         # render a scripted roll to an animated GIF
 ```
 
@@ -141,17 +142,22 @@ which page you are on, every die, its kind and its colour, the shoe if you are
 in card mode, and the name you saved it under — and **Scan** reads one back off
 another phone. A code that arrives with a name offers to become a save on this
 phone too; one that names a profile you already have, and matches it,
-simply opens it. **Exit** quits.
+simply opens it.
 
 The desktop harness letterboxes to 393 × 852 points whatever size its window is,
 so the tray it simulates is the same 64 × 140 mm tray as the phone's. Drag to
 shove the tray around, **space** to shake, **R** to throw, **arrows** to tilt,
 **G** to toggle the rotational pseudo-forces on and off for an A/B.
 
-The device build is `--profile`, not debug: debug mode cannot run on iOS 18.4+
-with the pinned Flutter 3.29.2 (flutter#163984), which is the same constraint
-Roll Hippo 1 hit. That costs hot reload on device — tune on the desktop harness,
-then confirm on the phone.
+The device build is `--profile`, not debug — by choice now rather than by force.
+Debug was once impossible on the phone (flutter#163984, iOS 18.4+ on the pinned
+Flutter 3.29.2), which is the same constraint Roll Hippo 1 hit; since the Flutter
+upgrade it builds, installs and hot-reloads on device perfectly well. It stays
+`--profile` anyway, because the solver runs in Dart on every frame and under
+debug's JIT the tray is not the tray that ships — a feel judged there is judged
+against the wrong thing. Tune on the desktop harness, confirm on the phone, and
+reach for `flutter run -d <id>` when hot reload is worth more than the feel being
+honest.
 
 ## The locked tuning
 

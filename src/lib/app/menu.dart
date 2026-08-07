@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../tray/tray.dart';
@@ -66,19 +64,6 @@ const List<double> _kMenuBarRows = <double>[7 / 24, 12 / 24, 17 / 24];
 const double kAppMenuInset =
     (_kMenuTarget - _kMenuIcon) / 2 + _kMenuIcon * _kMenuBarInset;
 
-/// Quits.
-///
-/// [SystemNavigator.pop] is the polite way out and is what Android wants: it
-/// finishes the activity and lets the framework tidy up first. On iOS it is
-/// deliberately a no-op, because Apple's guidelines say an application should
-/// never terminate itself and App Review has read a visible Quit as grounds
-/// for rejection before now — which leaves [exit] as the only line here that
-/// actually does anything on a phone, and the line to delete if that bites.
-Future<void> quitApp() async {
-  await SystemNavigator.pop();
-  exit(0);
-}
-
 /// The app menu: three lines, top left.
 ///
 /// Everything in it is about the app rather than about the dice in front of
@@ -90,7 +75,6 @@ class AppMenuButton extends StatefulWidget {
     required this.profile,
     required this.name,
     required this.onScanned,
-    this.onExit = quitApp,
   });
 
   /// The picker as it stands — both modes of it — for the Share sheet to turn
@@ -106,17 +90,11 @@ class AppMenuButton extends StatefulWidget {
   /// with it. Not called if the scanner was closed without finding one.
   final ValueChanged<ScannedProfile> onScanned;
 
-  /// What Exit does.
-  ///
-  /// Overridable for exactly one reason: [quitApp] ends the process, and a
-  /// widget test that walked into it would take the test runner with it.
-  final Future<void> Function() onExit;
-
   @override
   State<AppMenuButton> createState() => _AppMenuButtonState();
 }
 
-enum _MenuItem { settings, scan, share, exit }
+enum _MenuItem { settings, scan, share }
 
 class _AppMenuButtonState extends State<AppMenuButton> {
   Future<void> _run(_MenuItem item) async {
@@ -127,8 +105,6 @@ class _AppMenuButtonState extends State<AppMenuButton> {
         await _scan();
       case _MenuItem.share:
         await showShareSheet(context, widget.profile, widget.name);
-      case _MenuItem.exit:
-        await widget.onExit();
     }
   }
 
@@ -165,7 +141,6 @@ class _AppMenuButtonState extends State<AppMenuButton> {
             _entry(_MenuItem.settings, Icons.tune, 'Settings'),
             _entry(_MenuItem.scan, Icons.qr_code_scanner, 'Scan'),
             _entry(_MenuItem.share, Icons.qr_code_2, 'Share'),
-            _entry(_MenuItem.exit, Icons.logout, 'Exit'),
           ],
     );
   }
@@ -293,7 +268,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ),
                   Switch(
                     value: settings.motion,
-                    activeColor: const Color(0xFF6E9AD0),
+                    activeThumbColor: const Color(0xFF6E9AD0),
                     activeTrackColor: const Color(0xFF3F6FA8),
                     inactiveThumbColor: const Color(0xAABFD0E4),
                     inactiveTrackColor: const Color(0x14FFFFFF),

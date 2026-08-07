@@ -6,8 +6,12 @@ SRC      := src
 DEVICE   ?= 00008110-000414C63A51401E   # Jason's iPhone
 SCRATCH  ?= /tmp/rollhippo
 
+# The Android phone, by its `adb devices` id. Blank means "the only one
+# attached", which is the usual case; name one when there are two.
+ANDROID_DEVICE ?=
+
 .DEFAULT_GOAL := help
-.PHONY: help all format analyze test desktop ios gif filmstrip picker cards hippo icon clean
+.PHONY: help all format analyze test desktop ios android gif filmstrip picker cards hippo icon clean
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -28,11 +32,37 @@ desktop:  ## Run the desktop harness — phone-sized tray, simulated shake
 	cd $(SRC) && flutter run -d macos
 
 ios:  ## Build and install on the iPhone
-	@# Debug mode cannot run on iOS 18.4+ with Flutter 3.29.2 (flutter#163984),
-	@# so the device build is --profile. That costs hot reload; changing the
-	@# feel means `make ios` again, or tune on the desktop harness first.
+	@# --profile, and now by choice rather than by force. Debug was once
+	@# impossible here (flutter#163984, iOS 18.4+ on Flutter 3.29.2); since the
+	@# upgrade it builds, installs and hot-reloads on the phone perfectly well.
+	@# It stays --profile anyway because the solver runs in Dart on every frame,
+	@# and under debug's JIT the tray is not the tray that ships — a feel judged
+	@# there is a feel judged against the wrong thing. `flutter run -d $(DEVICE)`
+	@# when hot reload is worth more than the feel being honest.
 	cd $(SRC) && flutter build ios --profile
 	cd $(SRC) && flutter install -d $(DEVICE) --profile
+
+android:  ## Build and install on the Android phone
+	@# --profile for exactly the reason `ios` is: the solver runs in Dart on
+	@# every frame, and under debug's JIT the tray is not the tray that ships.
+	@# `flutter run -d <id>` when hot reload is worth more than the feel.
+	cd $(SRC) && flutter build apk --profile
+	@# The device is looked up rather than left to `flutter install`, which
+	@# picks for itself when it is not told — and what it picks is the only
+	@# mobile device attached, which on this machine is the iPhone. It will
+	@# then cheerfully uninstall Roll Hippo from the phone to make room for a
+	@# build that was never going to run on it. So: ask for an Android one by
+	@# name, and stop if there is not one.
+	@id=$${ANDROID_DEVICE:-$$(cd $(SRC) && flutter devices --machine | python3 -c \
+	    "import json,sys; d=[x for x in json.load(sys.stdin) if str(x.get('targetPlatform','')).startswith('android')]; print(d[0]['id'] if d else '')")}; \
+	  if [ -z "$$id" ]; then \
+	    echo "make android: no Android device attached."; \
+	    echo "  Plug one in, or name it with ANDROID_DEVICE=<id>."; \
+	    echo "  The APK is built and waiting at $(SRC)/build/app/outputs/flutter-apk/."; \
+	    exit 1; \
+	  fi; \
+	  echo "installing to $$id"; \
+	  cd $(SRC) && flutter install -d "$$id" --profile
 
 gif:  ## Render a scripted roll to an animated GIF
 	@mkdir -p $(SCRATCH)
@@ -59,7 +89,7 @@ hippo:  ## Render the hippopotamus — every pose a roll can present it in
 	cd $(SRC) && HIPPO_OUT=$(SCRATCH)/hippo.png flutter test tool/hippo.dart
 	@echo "→ $(SCRATCH)/hippo.png"
 
-icon:  ## Draw the app icon into the iOS and macOS asset catalogues
+icon:  ## Draw the app icon into the iOS, macOS and Android catalogues
 	@# Writes into the project, not /tmp: the files it makes are the icon.
 	cd $(SRC) && flutter test tool/app_icon.dart
 

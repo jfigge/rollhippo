@@ -31,8 +31,9 @@ Run from the repo root:
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
 | `make picker` | render the picker — both modes, its saves, the chooser and the naming dialog — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
-| `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues — writes into the project, not `/tmp` |
-| `make ios` | `--profile`, not debug: debug cannot run on iOS 18.4+ with Flutter 3.29.2 (flutter#163984). That costs hot reload on device — tune on the harness, confirm on the phone |
+| `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders — writes into the project, not `/tmp`. The adaptive icon's two XML files are structure, not drawing, and are not regenerated |
+| `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel |
+| `make android` | `--profile` for exactly the same reason. On either platform, `flutter run -d <id>` when hot reload is worth more than the feel |
 
 Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
 
