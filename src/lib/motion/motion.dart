@@ -85,7 +85,27 @@ MotionSource motionSourceFor({required bool device, required bool motion}) {
   return device ? SensorMotionSource() : ManualMotionSource();
 }
 
-/// The real thing: iPhone accelerometer and gyroscope.
+/// The real thing: the phone's own accelerometer and gyroscope.
+///
+/// **Not every phone has all three of these**, and the ones it lacks are not a
+/// stream that stays quiet — `sensors_plus` completes the subscription with a
+/// `PlatformException(NO_SENSOR)` instead. An unhandled stream error is an
+/// unhandled exception in whatever zone the app is running in, so each `listen`
+/// below carries an `onError`. Found on a BLU B1660V, which has an
+/// accelerometer and nothing else: no gyroscope, no fused linear acceleration,
+/// no magnetometer. That is an entire class of budget Android hardware, and a
+/// dice tray that throws twice on launch there is a dice tray that is broken
+/// there.
+///
+/// What each absence costs is already handled downstream, and deliberately —
+/// see [sample]. Without a gyroscope the angular terms stay zero, which is
+/// exactly the state the desktop harness's **G** key toggles: the dice still
+/// slide and settle under gravity, and a wrist flick no longer adds tumble.
+/// Without the user-acceleration stream the gravity estimate falls back to the
+/// raw reading, which drags "down" around during a hard shake — worse, and
+/// still a working tray. So the errors are swallowed rather than surfaced:
+/// there is nothing to tell the player that they could act on, and the app
+/// they get is the app that hardware can run.
 class SensorMotionSource implements MotionSource {
   SensorMotionSource() {
     // 200 Hz requested. A hand shake has real content up to about 15 Hz, and
@@ -98,23 +118,33 @@ class SensorMotionSource implements MotionSource {
     ) {
       _sum.setValues(_sum.x + e.x, _sum.y + e.y, _sum.z + e.z);
       _count++;
-    });
+    }, onError: _ignoreMissingSensor);
     _gyroscope = gyroscopeEventStream(samplingPeriod: period).listen((
       GyroscopeEvent e,
     ) {
       _gyroSum.setValues(_gyroSum.x + e.x, _gyroSum.y + e.y, _gyroSum.z + e.z);
       _gyroCount++;
-    });
+    }, onError: _ignoreMissingSensor);
     // Movement with gravity already taken out. On iOS this is CoreMotion's
     // sensor-fused figure, which is a far better split than low-pass filtering
     // the raw accelerometer — a low pass cannot tell a slow shake from a tilt.
+    //
+    // On Android it is TYPE_LINEAR_ACCELERATION, which the platform derives by
+    // sensor fusion — so a phone with no gyroscope to fuse with generally has
+    // no such sensor either, and this is the second stream to error rather than
+    // the one that saves the first.
     _userAccelerometer = userAccelerometerEventStream(
       samplingPeriod: period,
     ).listen((UserAccelerometerEvent e) {
       _userSum.setValues(_userSum.x + e.x, _userSum.y + e.y, _userSum.z + e.z);
       _userCount++;
-    });
+    }, onError: _ignoreMissingSensor);
   }
+
+  /// A sensor this phone does not have. There is nothing to do about it and
+  /// nothing to say about it — the counters simply stay at zero, and every
+  /// reader of them in [sample] is already written to expect that.
+  static void _ignoreMissingSensor(Object error, StackTrace stack) {}
 
   StreamSubscription<AccelerometerEvent>? _accelerometer;
   StreamSubscription<GyroscopeEvent>? _gyroscope;

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:rollhippo/app/card_screen.dart';
 import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/profiles.dart';
@@ -19,11 +20,12 @@ import 'package:rollhippo/tray/tray.dart';
 ///
 ///     flutter test tool/appstore.dart
 ///
-/// and again, for the second store slot, with:
+/// and again, for the other two slots, with:
 ///
-///     APPSTORE_SLOT=6.5 flutter test tool/appstore.dart
+///     APPSTORE_SLOT=6.5  flutter test tool/appstore.dart
+///     APPSTORE_SLOT=play flutter test tool/appstore.dart
 ///
-/// Two directories come out of it, from one screen each:
+/// Three directories come out of it, from one screen each:
 ///
 ///   `appstore/`               the capture dropped onto a branded background
 ///                             under a caption, at the exact pixel size Apple
@@ -36,8 +38,14 @@ import 'package:rollhippo/tray/tray.dart';
 ///                             contradicts the paragraph it sits next to.
 ///                             Written by the 6.9" run only — the site wants
 ///                             one set of pictures, not one per slot.
-///
-/// Google Play is far looser than either slot and takes the same files.
+///   `appstore/play/`          Play's own upload, and its own slot. The same
+///                             six captures on a wider frame, because Play
+///                             refuses anything more than twice as long as it
+///                             is wide and a modern phone is 2.167; plus the
+///                             1024 × 500 feature graphic, which is the one
+///                             thing Play asks for that Apple has no
+///                             equivalent of. Everything here is written
+///                             without an alpha channel. See [kSlotPlay].
 ///
 /// WHY THE FONTS ARE LOADED BY HAND. `flutter test` substitutes a font with no
 /// glyphs in it, which is why the sibling tools in this directory all note that
@@ -72,6 +80,8 @@ class Slot {
     required this.safeBottom,
     required this.dir,
     required this.web,
+    this.canvas,
+    this.opaque = false,
   });
 
   /// The phone's screen in logical pixels. At [_kScale] this is [pixels].
@@ -96,8 +106,33 @@ class Slot {
   /// rides along with the slot that is going to be captured anyway.
   final bool web;
 
-  /// The size every file bound for this slot must be, in device pixels.
+  /// The framed file's size, when it is not simply the capture's own.
+  ///
+  /// Null for both Apple slots, because Connect demands a screenshot be
+  /// exactly a real phone's screen and the frame around the capture has to be
+  /// that same size. Play demands the opposite kind of thing — not a size, a
+  /// *shape*: no side may be more than twice the other. A modern phone is
+  /// 19.5:9, which is 2.167, so the very files Apple insists on are the ones
+  /// Play refuses. Since these frames are a composition on a gradient rather
+  /// than a raw capture, the way out is to widen the canvas and leave the
+  /// phone in it alone. See [kSlotPlay].
+  final Size? canvas;
+
+  /// Whether this slot's files must be written without an alpha channel.
+  ///
+  /// Play rejects a screenshot or a feature graphic that merely *has* the
+  /// channel, transparent or not — the same rule, and the same wording, that
+  /// `tool/app_icon.dart` already meets for the iOS icon. Apple asks nothing
+  /// of the sort about screenshots, so its slots leave the engine's own PNG
+  /// alone rather than paying a re-encode for nothing.
+  final bool opaque;
+
+  /// The size every capture bound for this slot must be, in device pixels.
   Size get pixels => Size(screen.width * _kScale, screen.height * _kScale);
+
+  /// The size the framed file comes out at — [canvas] when it is set, and the
+  /// capture's own size when it is not.
+  Size get framed => canvas ?? pixels;
 }
 
 /// The 6.9" slot — iPhone 16 Pro Max, 1290 × 2796.
@@ -128,8 +163,42 @@ const Slot kSlot65 = Slot(
   web: false,
 );
 
+/// Play's slot — the 6.9" capture, framed onto 1400 × 2796 with no alpha.
+///
+/// Play's screenshot rules are two, and Apple's files fail both. **No side may
+/// be more than twice the other**: 2796 / 1290 is 2.167, so the set that went
+/// to Connect is rejected at Play's upload form, and every phone shaped like a
+/// phone since about 2018 fails the same way. And **no alpha channel**, which
+/// the engine's PNG encoder always writes whether or not a single pixel uses
+/// it.
+///
+/// Neither is a reason to capture the app again. The screen is identical — the
+/// same phone, the same safe area, the same six shots — and what changes is
+/// only the mount: the canvas widens by 110 pixels either side of a phone that
+/// stays exactly where it was, which takes the ratio to 1.997 and is invisible
+/// next to the Apple version. So this slot deliberately shares [kSlot69]'s
+/// geometry and overrides nothing but the frame around it.
+///
+/// 1400 rather than the 1398 that would make it exactly 2.000, because a rule
+/// written as "not more than twice" is a rule somebody's validator may have
+/// implemented as "less than twice", and two pixels is nothing to pay to never
+/// find out which.
+const Slot kSlotPlay = Slot(
+  screen: Size(430, 932),
+  safeTop: 59,
+  safeBottom: 34,
+  dir: 'appstore/play',
+  web: false,
+  canvas: Size(1400, 2796),
+  opaque: true,
+);
+
 /// The slots by the name `APPSTORE_SLOT` calls them.
-const Map<String, Slot> kSlots = <String, Slot>{'6.9': kSlot69, '6.5': kSlot65};
+const Map<String, Slot> kSlots = <String, Slot>{
+  '6.9': kSlot69,
+  '6.5': kSlot65,
+  'play': kSlotPlay,
+};
 
 /// Which slot this run captures, from `APPSTORE_SLOT`, defaulting to the one
 /// Apple requires. An unknown name is a typo in a Makefile, and silently
@@ -160,6 +229,19 @@ const double _kWebScale = 1.5;
 /// Connect and Play Console; this is content the website is built from and is
 /// committed with it.
 const String _kWebDir = 'website/images/screens';
+
+/// Where the things only Play asks for land.
+///
+/// Separate from [Slot.dir] because they are not screenshots and do not belong
+/// in a slot: Play takes the same six captures Apple does, and then asks for
+/// one more picture that Apple has no equivalent of. Keeping it out of
+/// `appstore/` also keeps that directory what its own comment says it is —
+/// the set you drag into a screenshot form, all the same size.
+const String _kPlayDir = 'appstore/play';
+
+/// The 512 × 512 icon `tool/app_icon.dart` writes for the Play listing, which
+/// the feature graphic below is built around rather than redrawing.
+const String _kPlayIcon = 'src/android/app/src/main/ic_launcher-playstore.png';
 
 /// Roll Hippo's brand red — the same value `hippoherd.com` uses for it.
 const Color _kBrand = Color(0xFFD7263D);
@@ -363,6 +445,15 @@ void main() {
   if (_slot.web) {
     test('07 · the hero', () => heroes(dir));
   }
+
+  // Declared under the Play slot so that `appstore/play/` has one origin —
+  // everything in that directory is what `make screenshots-play` wrote, which
+  // is a rule worth more than saving the run its one cross-run dependency.
+  // The picture it is built from was written by the 6.9" run rather than this
+  // one; [feature] says so itself if it is not there.
+  if (identical(_slot, kSlotPlay)) {
+    test('07 · the feature graphic', () => feature(dir));
+  }
 }
 
 /// One shot, as a test.
@@ -459,7 +550,11 @@ Future<void> _shot(
     _check(name, image);
 
     final ui.Image framed = await _frame(image, caption);
-    await _writePng('$dir/${_slot.dir}/$name.png', framed);
+    await _writePng(
+      '$dir/${_slot.dir}/$name.png',
+      framed,
+      opaque: _slot.opaque,
+    );
     framed.dispose();
     image.dispose();
 
@@ -496,8 +591,8 @@ void _check(String name, ui.Image image) {
 /// app is a dark rectangle. The caption and the brand wash are what make one
 /// thumbnail tell itself apart from the next.
 Future<ui.Image> _frame(ui.Image shot, String caption) async {
-  final double w = _slot.pixels.width;
-  final double h = _slot.pixels.height;
+  final double w = _slot.framed.width;
+  final double h = _slot.framed.height;
 
   final ui.PictureRecorder recorder = ui.PictureRecorder();
   final Canvas canvas = Canvas(recorder);
@@ -534,8 +629,16 @@ Future<ui.Image> _frame(ui.Image shot, String caption) async {
   // The phone: the capture, scaled down and rounded off. No bezel drawing —
   // the shot already has the app's own rounded dark chrome in it, and a
   // painted-on aluminium rail is the kind of detail that dates a listing.
-  final double phoneW = w * 0.78;
-  final double phoneH = phoneW * h / w;
+  //
+  // Sized by the frame's height and the *shot's* own aspect, not by the
+  // frame's width and the frame's aspect. For both Apple slots those are the
+  // same arithmetic to within a pixel, because there the canvas is the
+  // capture's size — 0.78 of the width of a 1290 × 2796 frame is the same
+  // phone as 0.78 of its height. They come apart the moment a frame is not
+  // the shape of the thing inside it, which is exactly what [kSlotPlay] is,
+  // and doing it the other way there would stretch the screenshot sideways.
+  final double phoneH = h * 0.78;
+  final double phoneW = phoneH * shot.width / shot.height;
   final double phoneX = (w - phoneW) / 2;
   final double phoneY = h * 0.215;
   final RRect phone = RRect.fromRectAndRadius(
@@ -571,30 +674,236 @@ Future<ui.Image> _frame(ui.Image shot, String caption) async {
   return recorder.endRecording().toImage(w.round(), h.round());
 }
 
-/// The caption, laid out centred and wrapped to [maxWidth].
-ui.Paragraph _paragraph(String caption, double maxWidth) {
+/// The caption, laid out and wrapped to [maxWidth].
+///
+/// The defaults are the framed screenshot's caption, which is what this was
+/// written for and still its only caller at those values; the feature graphic
+/// below reaches for the same layout at three other sizes, which is the whole
+/// reason any of it is a parameter.
+ui.Paragraph _paragraph(
+  String caption,
+  double maxWidth, {
+  double fontSize = 78,
+  FontWeight weight = FontWeight.w700,
+  Color colour = const Color(0xFFFFFFFF),
+  TextAlign align = TextAlign.center,
+  double letterSpacing = -1.5,
+  double height = 1.22,
+}) {
   final ui.ParagraphBuilder builder = ui.ParagraphBuilder(
     ui.ParagraphStyle(
-      textAlign: TextAlign.center,
+      textAlign: align,
       fontFamily: 'Roboto',
-      fontSize: 78,
-      fontWeight: FontWeight.w700,
-      height: 1.22,
+      fontSize: fontSize,
+      fontWeight: weight,
+      height: height,
     ),
   )..pushStyle(
     ui.TextStyle(
-      color: const Color(0xFFFFFFFF),
+      color: colour,
       fontFamily: 'Roboto',
-      fontSize: 78,
-      fontWeight: FontWeight.w700,
-      height: 1.22,
-      letterSpacing: -1.5,
+      fontSize: fontSize,
+      fontWeight: weight,
+      height: height,
+      letterSpacing: letterSpacing,
     ),
   );
   builder.addText(caption);
   final ui.Paragraph paragraph = builder.build();
   paragraph.layout(ui.ParagraphConstraints(width: maxWidth));
   return paragraph;
+}
+
+// ── The feature graphic ──────────────────────────────────────────────────────
+
+/// Play's feature graphic: 1024 × 500, and required for every listing.
+///
+/// Apple has no equivalent, which is why this is the one picture the Apple run
+/// never needed. Play puts it across the top of the store page above the
+/// screenshots, and uses it again on its own promotional surfaces, where the
+/// listing's name and icon are drawn over the top by the store rather than by
+/// this canvas.
+///
+/// Two consequences shape the layout. It gets **cropped** — Play shows it at
+/// other aspect ratios than the one it demands, and what survives every crop
+/// is the middle — so nothing that has to be read goes near an edge. And it is
+/// often seen at a few hundred pixels wide in a list, which is the same
+/// argument [_frame] makes for its captions: at that size a screenshot is a
+/// dark rectangle, and the mark and the wordmark are the only things doing any
+/// work.
+///
+/// Composed from files on disk for [heroes]' reason. The icon is the one
+/// `tool/app_icon.dart` already writes for this exact upload, and the phone is
+/// the website's copy of capture 01 — so the banner cannot drift from the
+/// listing it sits above.
+Future<void> feature(String dir) async {
+  final File icon = File('$dir/$_kPlayIcon');
+  if (!icon.existsSync()) {
+    throw StateError(
+      'no Play icon at $_kPlayIcon — run `make icon` first, which is what '
+      'writes it',
+    );
+  }
+
+  final File capture = File('$dir/$_kWebDir/01-tray.png');
+  if (!capture.existsSync()) {
+    throw StateError(
+      'no capture at $_kWebDir/01-tray.png — run `make screenshots` first, '
+      'which is the run that writes the website copies this is built from',
+    );
+  }
+
+  final ui.Image mark = await _load(icon.path);
+  final ui.Image phone = await _load(capture.path);
+  final ui.Image banner = await _banner(mark, phone);
+
+  // Opaque, for the reason every Play-bound file here is: the store rejects a
+  // feature graphic that so much as has an alpha channel.
+  await _writePng('$dir/$_kPlayDir/feature-graphic.png', banner, opaque: true);
+
+  banner.dispose();
+  mark.dispose();
+  phone.dispose();
+}
+
+/// Lays the mark, the wordmark and one phone across Play's 1024 × 500.
+Future<ui.Image> _banner(ui.Image mark, ui.Image phone) async {
+  // Play's size, exactly, and not negotiable — the upload form rejects
+  // anything else outright rather than scaling it. Written as constants
+  // because unlike a [Slot] there is only ever this one.
+  const double w = 1024;
+  const double h = 500;
+
+  final ui.PictureRecorder recorder = ui.PictureRecorder();
+  final Canvas canvas = Canvas(recorder);
+
+  // The same wash the framed shots and the hero use, turned on its side: this
+  // canvas is twice as wide as it is tall, and a vertical gradient across 500
+  // pixels reads as a flat colour.
+  canvas.drawRect(
+    const Rect.fromLTWH(0, 0, w, h),
+    Paint()
+      ..shader = ui.Gradient.linear(
+        const Offset(0, 0),
+        const Offset(w, h),
+        <Color>[const Color(0xFF2A0B12), const Color(0xFF16070C), _kInk],
+        <double>[0.0, 0.5, 1.0],
+      ),
+  );
+  // The glow sits behind the mark rather than the middle, because the middle
+  // is where the phone goes and the mark is what needs lifting off the ink.
+  canvas.drawCircle(
+    const Offset(w * 0.24, h * 0.5),
+    w * 0.34,
+    Paint()
+      ..shader = ui.Gradient.radial(
+        const Offset(w * 0.24, h * 0.5),
+        w * 0.34,
+        <Color>[
+          _kBrand.withValues(alpha: 0.34),
+          _kBrand.withValues(alpha: 0.0),
+        ],
+      ),
+  );
+
+  // ── The left block: mark, wordmark beside it, tagline under both ──
+  const double markSide = 132;
+  const double left = w * 0.055;
+  const double gap = 28;
+
+  final ui.Paragraph wordmark = _paragraph(
+    'Roll Hippo',
+    w * 0.42,
+    fontSize: 74,
+    align: TextAlign.left,
+  );
+  final ui.Paragraph tagline = _paragraph(
+    'D4 to D20, ten at once —\nand they land where they land.',
+    w * 0.52,
+    fontSize: 29,
+    weight: FontWeight.w400,
+    colour: const Color(0xCCFFFFFF),
+    align: TextAlign.left,
+    letterSpacing: 0,
+    height: 1.35,
+  );
+
+  // Centred as one block rather than each piece against the canvas, so the
+  // tagline growing a line moves the mark up instead of walking off the
+  // bottom edge.
+  final double blockH = markSide + 26 + tagline.height;
+  final double top = (h - blockH) / 2;
+
+  final RRect marked = RRect.fromRectAndRadius(
+    const Rect.fromLTWH(left, 0, markSide, markSide).translate(0, 0),
+    const Radius.circular(markSide * 0.225),
+  ).shift(Offset(0, top));
+  canvas.save();
+  canvas.clipRRect(marked);
+  canvas.drawImageRect(
+    mark,
+    Rect.fromLTWH(0, 0, mark.width.toDouble(), mark.height.toDouble()),
+    marked.outerRect,
+    Paint()..filterQuality = FilterQuality.high,
+  );
+  canvas.restore();
+
+  // The wordmark's own box is taller than its glyphs, so it is centred against
+  // the mark by its height rather than sharing a baseline with it.
+  canvas.drawParagraph(
+    wordmark,
+    Offset(left + markSide + gap, top + (markSide - wordmark.height) / 2),
+  );
+  canvas.drawParagraph(tagline, Offset(left, top + markSide + 26));
+
+  // ── The phone ──
+  //
+  // Bleeding off the top and the bottom rather than fitted inside them. 500
+  // pixels is not enough height for a whole phone at a size worth looking at,
+  // and a shrunk-to-fit one reads as a stamp; a cropped one reads as a phone
+  // that happens to be bigger than the frame.
+  const double phoneH = 640;
+  final double phoneW = phoneH * phone.width / phone.height;
+  final Rect rect = Rect.fromCenter(
+    center: const Offset(w * 0.795, h * 0.5),
+    width: phoneW,
+    height: phoneH,
+  );
+  final RRect rounded = RRect.fromRectAndRadius(
+    rect,
+    Radius.circular(phoneW * 0.085),
+  );
+
+  canvas.save();
+  canvas.translate(rect.center.dx, rect.center.dy);
+  canvas.rotate(-0.06);
+  canvas.translate(-rect.center.dx, -rect.center.dy);
+
+  canvas.drawRRect(
+    rounded.shift(const Offset(0, 12)),
+    Paint()
+      ..color = const Color(0xAA000000)
+      ..maskFilter = const ui.MaskFilter.blur(BlurStyle.normal, 22),
+  );
+  canvas.save();
+  canvas.clipRRect(rounded);
+  canvas.drawImageRect(
+    phone,
+    Rect.fromLTWH(0, 0, phone.width.toDouble(), phone.height.toDouble()),
+    rect,
+    Paint()..filterQuality = FilterQuality.high,
+  );
+  canvas.restore();
+  canvas.drawRRect(
+    rounded,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = const Color(0x33FFFFFF),
+  );
+  canvas.restore();
+
+  return recorder.endRecording().toImage(w.round(), h.round());
 }
 
 // ── The hero ─────────────────────────────────────────────────────────────────
@@ -726,13 +1035,49 @@ Future<ui.Image> _load(String path) async {
   return frame.image;
 }
 
-Future<void> _writePng(String path, ui.Image image) async {
-  final ByteData? png = await image.toByteData(format: ui.ImageByteFormat.png);
+/// Writes [image] as a PNG, with or without the channel Play objects to.
+///
+/// [opaque] re-encodes through the `image` package with three channels instead
+/// of four, which is the same trick — and the same two lines — that
+/// `tool/app_icon.dart` uses to get an iOS icon past App Store validation. It
+/// is a re-encode rather than a fill: every pixel of these frames is already
+/// opaque, because the first thing [_frame] and [_banner] draw is a gradient
+/// across the whole canvas, so there is nothing to flatten and the only thing
+/// being taken away is the channel itself.
+Future<void> _writePng(
+  String path,
+  ui.Image image, {
+  bool opaque = false,
+}) async {
+  final Uint8List bytes =
+      opaque ? await _opaquePng(image) : await _rgbaPng(image);
   final File file = File(path);
   file.parent.createSync(recursive: true);
-  file.writeAsBytesSync(png!.buffer.asUint8List());
+  file.writeAsBytesSync(bytes);
   // ignore: avoid_print
-  print('wrote $path  (${image.width}x${image.height})');
+  print(
+    'wrote $path  (${image.width}x${image.height}'
+    '${opaque ? ', 24-bit' : ''})',
+  );
+}
+
+/// Straight out of the engine, alpha and all.
+Future<Uint8List> _rgbaPng(ui.Image image) async {
+  final ByteData? png = await image.toByteData(format: ui.ImageByteFormat.png);
+  return png!.buffer.asUint8List();
+}
+
+/// The same picture with the alpha channel taken off rather than filled in.
+Future<Uint8List> _opaquePng(ui.Image image) async {
+  final ByteData raw =
+      (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+  final img.Image rgba = img.Image.fromBytes(
+    width: image.width,
+    height: image.height,
+    bytes: raw.buffer,
+    numChannels: 4,
+  );
+  return img.encodePng(rgba.convert(numChannels: 3));
 }
 
 /// Registers the real Roboto and the Material icon font.

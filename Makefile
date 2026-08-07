@@ -22,8 +22,17 @@ ANDROID_DEVICE ?=
 KEYS ?= $(CURDIR)/keys
 IPA  ?= $(SRC)/build/ios/ipa/rollhippo.ipa
 
+# Play's half of the same arrangement. The upload key lives beside the Apple
+# one and is gitignored by both `keys/` and `*.jks`; the passwords that open it
+# live in src/android/key.properties, which is gitignored by name. Neither is
+# a certificate anybody issued — you make this key yourself, once, with
+# `make keystore`, and Play remembers its fingerprint from the first upload
+# onwards. See android/app/build.gradle.kts for what reads it.
+KEYSTORE ?= $(KEYS)/rollhippo-upload.jks
+AAB      ?= $(SRC)/build/app/outputs/bundle/release/app-release.aab
+
 .DEFAULT_GOAL := help
-.PHONY: help all ci format format-check analyze test desktop ios android ipa upload gif filmstrip picker cards hippo screenshots screenshots-65 site icon clean
+.PHONY: help all ci format format-check analyze test desktop ios android ipa upload keystore aab gif filmstrip picker cards hippo screenshots screenshots-65 screenshots-play site icon clean
 
 help:  ## Show this help
 	@# firstword, not the whole list: `-include release.env` puts that file
@@ -123,8 +132,9 @@ screenshots:  ## Render the store listing's screenshots, and the site's gallery
 	@# appstore/ is framed at Apple's exact 1290x2796, website/images/screens/
 	@# is the bare screen at half that. See tool/appstore.dart.
 	cd $(SRC) && APPSTORE_OUT=$(CURDIR) flutter test tool/appstore.dart
-	@echo "→ appstore/  (upload these)"
+	@echo "→ appstore/  (upload these to Connect)"
 	@echo "→ website/images/screens/  (the site and the guide)"
+	@echo "  Play needs its own set — run 'make screenshots-play' too."
 
 screenshots-65:  ## Render the listing again, for Apple's second iPhone slot
 	@# The same six captures at 414x896 and 3x, which is 1242x2688 — the 6.5"
@@ -143,6 +153,19 @@ screenshots-65:  ## Render the listing again, for Apple's second iPhone slot
 	@# run; see `Slot.web` in tool/appstore.dart.
 	cd $(SRC) && APPSTORE_OUT=$(CURDIR) APPSTORE_SLOT=6.5 flutter test tool/appstore.dart
 	@echo '→ appstore/6.5/  (upload these into the 6.5-inch slot)'
+
+screenshots-play:  ## Render the listing for Play, which will not take Apple's
+	@# Not optional, the way `screenshots-65` is. Play's rule is a shape
+	@# rather than a size — no side more than twice the other — and 1290 x
+	@# 2796 is 2.167, so the files Connect insists on are the files Play
+	@# refuses. It also rejects an alpha channel outright. Both are handled
+	@# in the slot rather than here; see `kSlotPlay` in tool/appstore.dart.
+	@#
+	@# Run it after `screenshots`, not instead of it. The feature graphic is
+	@# composed from the website's copy of the first capture, which the 6.9"
+	@# run is what writes — the tool says so plainly if it is missing.
+	cd $(SRC) && APPSTORE_OUT=$(CURDIR) APPSTORE_SLOT=play flutter test tool/appstore.dart
+	@echo '→ appstore/play/  (the six, plus the feature graphic, for Play)'
 
 site:  ## Copy the site into hippoherd's Roll Hippo page
 	@# Roll Hippo has no site of its own. hippoherd.com/rollhippo IS its site,
@@ -202,6 +225,75 @@ upload:  ## Send the built ipa to App Store Connect
 	  exit 1; }
 	API_PRIVATE_KEYS_DIR="$(KEYS)" xcrun altool --upload-app -t ios \
 	  -f "$(IPA)" --apiKey $(API_KEY_ID) --apiIssuer $(API_ISSUER_ID)
+
+keystore:  ## Generate the Play upload key — once, ever
+	@# Android has no equivalent of an Apple Distribution certificate. Nobody
+	@# issues this; you make it, and the first bundle you upload is what tells
+	@# Play which key to expect from then on. So this target runs at most once
+	@# in the life of the app, and the refusal below is the point of it.
+	@#
+	@# It is an *upload* key, not the app signing key. Under Play App Signing
+	@# — which is mandatory for new apps — Google holds the key that actually
+	@# signs what phones install, strips this one at the door and re-signs.
+	@# That makes losing this file recoverable in a way losing an Apple cert
+	@# is not: Google resets an upload key on request. Back it up anyway; a
+	@# reset is a support ticket and several days.
+	@#
+	@# No -storetype: keytool's default is PKCS12, which is what a JKS-named
+	@# file should contain these days and what Gradle reads without the
+	@# migration warning the real JKS format now prints. 10000 days is about
+	@# twenty-seven years, comfortably past Play's requirement that the key
+	@# outlive 2033.
+	@test ! -f "$(KEYSTORE)" || { \
+	  echo "make keystore: $(KEYSTORE) already exists."; \
+	  echo "  A second key would not replace it — it would be a key Play"; \
+	  echo "  does not know, and every build signed with it would be"; \
+	  echo "  rejected. Back this file up rather than regenerate it."; \
+	  exit 1; }
+	@mkdir -p "$(KEYS)"
+	keytool -genkeypair -v -keystore "$(KEYSTORE)" \
+	  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+	@echo
+	@echo "Now write $(SRC)/android/key.properties, with these four lines:"
+	@echo
+	@echo "    storeFile=$(KEYSTORE)"
+	@echo "    storePassword=<the store password you just chose>"
+	@echo "    keyAlias=upload"
+	@echo "    keyPassword=<the key password you just chose>"
+	@echo
+	@echo "That file and $(KEYS)/ are both gitignored. Back the .jks up"
+	@echo "somewhere that is not this repository, and keep the passwords"
+	@echo "with it — they are useless apart."
+
+aab:  ## Build the signed App Bundle for Play
+	@# The Play equivalent of `ipa`, and --release for the same reason: this
+	@# one is the shipping build, so the argument that made `android`
+	@# --profile — judge the feel against what ships — is the argument for
+	@# --release here.
+	@#
+	@# An App Bundle rather than an APK, because Play has not accepted an APK
+	@# for a new app since 2021. The .aab is not installable; it is the
+	@# ingredients, and Play generates a per-device APK from it at download
+	@# time. That is also why the ABI question `make android` raises does not
+	@# arise here — the bundle carries every architecture and each phone is
+	@# sent only its own.
+	@#
+	@# Signing is checked rather than assumed. Without key.properties the
+	@# build still succeeds, signed with the debug key — build.gradle.kts
+	@# falls back on purpose so CI keeps working without being handed a
+	@# secret — and Play rejects that upload with an error about a debug
+	@# certificate. Better to hear it here than at the upload form.
+	@test -f "$(SRC)/android/key.properties" || { \
+	  echo "make aab: no $(SRC)/android/key.properties"; \
+	  echo "  Without it the bundle is signed with the debug key, which Play"; \
+	  echo "  rejects. Run 'make keystore' if you have no upload key yet,"; \
+	  echo "  or write the file if you do — see android/app/build.gradle.kts."; \
+	  exit 1; }
+	cd $(SRC) && flutter build appbundle --release
+	@echo "→ $(AAB)"
+	@echo "  Play Console → Testing or Production → Create new release."
+	@echo "  Play refuses a versionCode it has already seen, exactly as"
+	@echo "  Connect refuses a build number: bump the +N in $(SRC)/pubspec.yaml."
 
 icon:  ## Draw the app icon, and both launch images, into the catalogues
 	@# Writes into the project, not /tmp: the files it makes are the icon.

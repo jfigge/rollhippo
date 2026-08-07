@@ -1,0 +1,35 @@
+<!-- The release build's manifest, and it exists to take one permission away.
+
+     `mobile_scanner` reads QR codes with ML Kit, and ML Kit brings
+     `com.google.android.datatransport:transport-backend-cct` with it —
+     Google's own telemetry queue, which declares INTERNET and
+     ACCESS_NETWORK_STATE in its library manifest. Nothing in lib/ opens a
+     socket, so those permissions arrived in the package without any code in
+     this app asking for them, and the merged release manifest carried INTERNET
+     for as long as nobody looked.
+
+     That mattered because website/privacy.html says, in bold, that the Android
+     release package is built without it, and offers that as the reason the
+     claim cannot be quietly reversed in a later build. A privacy page that can
+     be falsified with `aapt dump permissions` is worse than no privacy page.
+     So: make the sentence true rather than soften it.
+
+     Why the release source set rather than main. A build-type manifest sits
+     above main and far above any library in the merger's priority order, which
+     is what lets `tools:node="remove"` here delete a declaration a dependency
+     made. Putting it in main would also strip the INTERNET that
+     src/debug/AndroidManifest.xml and src/profile/AndroidManifest.xml add for
+     the Flutter tool's own use — that is how hot reload and the observatory
+     talk to a running app, and losing it would break `flutter run` and
+     `make android` to fix a problem neither of them has.
+
+     ACCESS_NETWORK_STATE is deliberately left alone. It transmits nothing —
+     it reads whether a network exists — and taking it away is not free:
+     ConnectivityManager throws SecurityException when asked without it, and
+     the thing doing the asking would be inside ML Kit where nothing here can
+     catch it. Removing INTERNET already closes the socket; removing the
+     read as well would risk the scanner to make a shorter list. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+</manifest>
