@@ -68,23 +68,17 @@ const double kAppMenuInset =
 ///
 /// Everything in it is about the app rather than about the dice in front of
 /// you, which is why it is a menu and not four more buttons on a screen that
-/// already has enough.
+/// already has enough. Two entries, and the pair of them is the whole of the
+/// test: Settings is about the phone, and Scan is about somebody else's.
+///
+/// Sharing used to be the third, and is not, because it is the one thing here
+/// that was never about the app. A code *is* a profile, so it belongs to a
+/// profile — the menu a save gives you when you hold it down, beside the Save
+/// and the Rename and the Delete that already act on that same save. See
+/// `profile_row.dart`. What is left up here needs no profile at all, which is
+/// why this button no longer takes one.
 class AppMenuButton extends StatefulWidget {
-  const AppMenuButton({
-    super.key,
-    required this.profile,
-    required this.name,
-    required this.onScanned,
-  });
-
-  /// The picker as it stands — both modes of it — for the Share sheet to turn
-  /// into a code.
-  final Profile profile;
-
-  /// What the open profile is called, or blank if it is not a save. It
-  /// goes into the code, so that the phone reading it can offer to keep it
-  /// under the same name.
-  final String name;
+  const AppMenuButton({super.key, required this.onScanned});
 
   /// Handed the profile a scanned code described, and the name that came
   /// with it. Not called if the scanner was closed without finding one.
@@ -94,7 +88,7 @@ class AppMenuButton extends StatefulWidget {
   State<AppMenuButton> createState() => _AppMenuButtonState();
 }
 
-enum _MenuItem { settings, scan, share }
+enum _MenuItem { settings, scan }
 
 class _AppMenuButtonState extends State<AppMenuButton> {
   Future<void> _run(_MenuItem item) async {
@@ -103,8 +97,6 @@ class _AppMenuButtonState extends State<AppMenuButton> {
         await showSettingsSheet(context);
       case _MenuItem.scan:
         await _scan();
-      case _MenuItem.share:
-        await showShareSheet(context, widget.profile, widget.name);
     }
   }
 
@@ -140,7 +132,6 @@ class _AppMenuButtonState extends State<AppMenuButton> {
           (BuildContext context) => <PopupMenuEntry<_MenuItem>>[
             _entry(_MenuItem.settings, Icons.tune, 'Settings'),
             _entry(_MenuItem.scan, Icons.qr_code_scanner, 'Scan'),
-            _entry(_MenuItem.share, Icons.qr_code_2, 'Share'),
           ],
     );
   }

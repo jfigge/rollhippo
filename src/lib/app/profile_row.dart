@@ -38,15 +38,25 @@ const double _kProfileEdge = 16;
 ///
 /// A profile is the whole of a save's interface. A tap opens it; a long press —
 /// or a right click, which is what the desktop harness has instead — asks what
-/// else you meant by it, and that menu is where saving is done. The heading says
-/// so, because nothing else on the screen can: the tap teaches itself and the
-/// hold does not.
+/// else you meant by it, and that menu is where saving and sharing are both
+/// done. The heading says so, because nothing else on the screen can: the tap
+/// teaches itself and the hold does not.
 ///
 /// The dashed one at the end answers to both gestures too, and means the same
 /// thing by them: a tap keeps what is on screen as a profile of its own, and a
 /// hold asks what else — which for that one is Reset, the way back to the
-/// set-up the app opens at. So the hold is worth trying on anything in the row,
-/// which is the only way a gesture with nothing to advertise it gets found.
+/// set-up the app opens at, and a Share of what is on screen. So the hold is
+/// worth trying on anything in the row, which is the only way a gesture with
+/// nothing to advertise it gets found.
+///
+/// Share is on every profile in the row rather than up in the app menu,
+/// because a share code *is* a profile and the row is where profiles are. What
+/// it hands over is whatever the profile you held down is: a save sends what
+/// that save holds, under its own name, the way Rename and Delete act on the
+/// save rather than on the screen — so an edit you have not kept does not go
+/// out under a name that does not describe it. The dashed one has no save
+/// behind it, so it sends what is on screen, unnamed, which is exactly what it
+/// has always meant.
 ///
 /// Nothing is written on its own. Editing the dice under an open profile changes
 /// the screen and not the save, until you hold a profile down and choose Save —
@@ -59,8 +69,10 @@ class ProfileRow extends StatelessWidget {
     required this.open,
     required this.onOpen,
     required this.onSave,
+    required this.onShare,
     required this.onNew,
     required this.onReset,
+    required this.onShareCurrent,
   });
 
   /// The id of the save the picker is currently showing, or null when what is
@@ -74,6 +86,13 @@ class ProfileRow extends StatelessWidget {
   /// screen handles it, because it is the screen being asked for.
   final ValueChanged<SavedProfile> onSave;
 
+  /// Share, from that same menu: this save, as a code. The screen handles it
+  /// for the reason every other entry here is handled there — the sheet is put
+  /// up over the whole picker, not inside the row — and it is handed the save
+  /// rather than reading the picker, because what a save shares is what it
+  /// holds.
+  final ValueChanged<SavedProfile> onShare;
+
   /// The + New profile. The screen handles it rather than this widget, because
   /// making a save means capturing what the screen is set to.
   final VoidCallback onNew;
@@ -82,6 +101,11 @@ class ProfileRow extends StatelessWidget {
   /// app opens with. The screen handles it for the same reason — the thing
   /// being reset is the screen, and this row is only where the gesture lands.
   final VoidCallback onReset;
+
+  /// Share, off the dashed profile's menu: what is on screen, as a code, under
+  /// no name at all. The one thing in the row that shares the picker rather
+  /// than a save, because it is the one thing in the row that is not one.
+  final VoidCallback onShareCurrent;
 
   @override
   Widget build(BuildContext context) {
@@ -162,9 +186,15 @@ class ProfileRow extends StatelessWidget {
                     selected: save.id == open,
                     onTap: () => onOpen(save),
                     onSave: () => onSave(save),
+                    onShare: () => onShare(save),
                     save: save,
                   ),
-                _NewProfile(key: kNewProfile, onTap: onNew, onReset: onReset),
+                _NewProfile(
+                  key: kNewProfile,
+                  onTap: onNew,
+                  onReset: onReset,
+                  onShare: onShareCurrent,
+                ),
               ],
             );
           },
@@ -182,6 +212,7 @@ class _Profile extends StatefulWidget {
     required this.selected,
     required this.onTap,
     required this.onSave,
+    required this.onShare,
     required this.save,
   });
 
@@ -189,6 +220,7 @@ class _Profile extends StatefulWidget {
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onSave;
+  final VoidCallback onShare;
   final SavedProfile save;
 
   @override
@@ -286,6 +318,8 @@ class _ProfileState extends State<_Profile> {
           name: save.name,
         );
         if (name != null) profiles.rename(save.id, name);
+      case _ProfileAction.share:
+        widget.onShare();
       case _ProfileAction.delete:
         final bool go = await showDeleteProfileDialog(context, save.name);
         if (go) profiles.remove(save.id);
@@ -303,14 +337,22 @@ class _ProfileState extends State<_Profile> {
 /// It carries the same pair of gestures as the profiles beside it, because it
 /// sits in their row and a hold that did nothing on one chip out of seven would
 /// read as the gesture having failed. A tap keeps what is on screen under a
-/// name; the hold has the one thing that belongs to no save — Reset, which puts
-/// the picker back to what the app opens with.
+/// name; the hold has Reset, which puts the picker back to what the app opens
+/// with and is the one thing in this row that belongs to no save at all, and a
+/// Share, which here hands the screen over as a code with no name on it.
 class _NewProfile extends StatelessWidget {
-  const _NewProfile({super.key, required this.onTap, required this.onReset});
+  const _NewProfile({
+    super.key,
+    required this.onTap,
+    required this.onReset,
+    required this.onShare,
+  });
 
   final VoidCallback onTap;
 
   final VoidCallback onReset;
+
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -347,21 +389,26 @@ class _NewProfile extends StatelessWidget {
     );
   }
 
-  /// A menu of one. Short because there is only one thing to do to a profile
-  /// that does not exist yet, and a menu rather than a second tap because the
-  /// row has taught the gesture already and starting over is not something to
-  /// hand to a finger that slipped.
+  /// A menu of two, and only one of them is peculiar to this profile.
+  ///
+  /// Reset first, because it is the one that belongs *only* here: every profile
+  /// in the row has a Share and none of them has a Reset, so the entry that
+  /// makes this menu worth opening is the entry that goes at the top of it. A
+  /// menu rather than a second tap for both, because the row has taught the
+  /// gesture already and starting over is not something to hand to a finger
+  /// that slipped.
   Future<void> _menu(BuildContext context) async {
-    final _NewAction? action = await _showChipMenu<_NewAction>(
-      context,
-      <PopupMenuEntry<_NewAction>>[
-        _entry(_NewAction.reset, Icons.restart_alt, 'Reset'),
-      ],
-    );
+    final _NewAction? action =
+        await _showChipMenu<_NewAction>(context, <PopupMenuEntry<_NewAction>>[
+          _entry(_NewAction.reset, Icons.restart_alt, 'Reset'),
+          _entry(_NewAction.share, Icons.qr_code_2, 'Share'),
+        ]);
     if (action == null) return;
     switch (action) {
       case _NewAction.reset:
         onReset();
+      case _NewAction.share:
+        onShare();
     }
   }
 }
@@ -411,18 +458,22 @@ class _DashedProfile extends CustomPainter {
 
 /// What a long press on a profile can lead to.
 ///
-/// Save first, because it is the one of the three anybody does twice in an
+/// Save first, because it is the one of the four anybody does twice in an
 /// evening — and because it is the only way anything is ever written, so a
 /// menu that buried it would be a menu that hid the point of the row.
 ///
+/// Delete last, because it is the one entry drawn in a colour of its own and
+/// the only one that cannot be undone by doing it again. Share goes above it
+/// rather than below for that reason alone: an entry that changes nothing at
+/// all has no business sitting under the one that ends the save.
+///
 /// Not opening it, though. A tap does that, and a menu whose first entry
 /// repeats the gesture that opened it has misunderstood what it is for.
-enum _ProfileAction { save, rename, delete }
+enum _ProfileAction { save, rename, share, delete }
 
-/// The dashed profile's one. An enum of a single value, rather than a bare
-/// bool, because the menu it comes out of is the same machinery as the one
-/// above and reads the same way at both ends.
-enum _NewAction { reset }
+/// The dashed profile's pair, which is the same list with everything that
+/// needs a save taken out of it and Reset put in.
+enum _NewAction { reset, share }
 
 /// What a hold on a save offers.
 Future<_ProfileAction?> _showProfileMenu(BuildContext context) {
@@ -431,6 +482,7 @@ Future<_ProfileAction?> _showProfileMenu(BuildContext context) {
     <PopupMenuEntry<_ProfileAction>>[
       _entry(_ProfileAction.save, Icons.save_outlined, 'Save'),
       _entry(_ProfileAction.rename, Icons.edit_outlined, 'Rename'),
+      _entry(_ProfileAction.share, Icons.qr_code_2, 'Share'),
       _entry(_ProfileAction.delete, Icons.delete_outline, 'Delete'),
     ],
   );

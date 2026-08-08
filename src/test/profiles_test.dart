@@ -121,6 +121,23 @@ Future<void> saveProfile(WidgetTester tester, String name) async {
   await tapText(tester, 'Save');
 }
 
+/// Puts up the Share sheet for the profile called [name], the way a thumb
+/// would: hold it down, and take Share off the menu.
+Future<void> shareProfile(WidgetTester tester, String name) async {
+  await tester.longPress(profile(name));
+  await tester.pumpAndSettle();
+  await tapText(tester, 'Share');
+}
+
+/// What is actually in the square the sheet is showing.
+///
+/// [ShareCodeView] is the only way to ask: `QrImageView` keeps the string it
+/// was handed to itself.
+ScannedProfile sharedCode(WidgetTester tester) =>
+    decodeProfile(
+      tester.widget<ShareCodeView>(find.byType(ShareCodeView)).code,
+    )!;
+
 /// Makes a save called [name] out of whatever is on screen, the way a thumb
 /// would: the dashed profile, the dialog, the name, Create.
 Future<void> createSave(WidgetTester tester, String name) async {
@@ -426,9 +443,15 @@ void main() {
       await tester.longPress(find.byKey(kNewProfile));
       await tester.pumpAndSettle();
 
-      // One thing to do to a profile that does not exist yet. The other three
-      // belong to a save, and there is no save here to do them to.
+      // Two things to do to a profile that does not exist yet, and Reset is
+      // the one that belongs only here — so it goes first. Save, Rename and
+      // Delete all need a save, and there is no save here to do them to.
       expect(find.text('Reset'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Reset')).dy,
+        lessThan(tester.getTopLeft(find.text('Share')).dy),
+      );
       expect(find.text('Save'), findsNothing);
       expect(find.text('Rename'), findsNothing);
       expect(find.text('Delete'), findsNothing);
@@ -698,7 +721,7 @@ void main() {
       await tester.tap(profile('Poker'));
       await tester.pumpAndSettle();
       expect(modeOf(tester), 1);
-      expect(find.text('Shuffle'), findsOneWidget);
+      expect(find.text('Deal'), findsOneWidget);
     });
 
     testWidgets('a dice save opened from card mode lands on the dice', (
@@ -770,12 +793,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Save'), findsOneWidget);
       expect(find.text('Rename'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
       expect(find.text('Delete'), findsOneWidget);
-      // Save first: it is the only way anything is ever written.
-      expect(
-        tester.getTopLeft(find.text('Save')).dy,
-        lessThan(tester.getTopLeft(find.text('Rename')).dy),
-      );
+      // Save first: it is the only way anything is ever written. Delete last:
+      // it is the only one that cannot be undone by doing it again, and Share
+      // — which touches nothing at all — has no business below it.
+      double top(String label) => tester.getTopLeft(find.text(label)).dy;
+      expect(top('Save'), lessThan(top('Rename')));
+      expect(top('Rename'), lessThan(top('Share')));
+      expect(top('Share'), lessThan(top('Delete')));
 
       await tapText(tester, 'Rename');
       expect(find.text('Rename profile'), findsOneWidget);
@@ -883,7 +909,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(modeOf(tester), 1);
-      expect(find.text('Shuffle'), findsOneWidget);
+      expect(find.text('Deal'), findsOneWidget);
       expect(find.text('(108 in the shoe)'), findsOneWidget);
     });
 
@@ -909,7 +935,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(modeOf(tester), 1);
-      expect(find.text('Shuffle'), findsOneWidget);
+      expect(find.text('Deal'), findsOneWidget);
       expect(find.text('(108 in the shoe)'), findsOneWidget);
     });
 
@@ -974,7 +1000,7 @@ void main() {
       );
 
       expect(modeOf(tester), 1, reason: 'a card code opens on the card page');
-      expect(find.text('Shuffle'), findsOneWidget);
+      expect(find.text('Deal'), findsOneWidget);
       expect(find.text('(108 in the shoe)'), findsOneWidget);
       expect(find.text('<12%'), findsOneWidget);
       expect(find.text('2 / $kMaxCardDice'), findsOneWidget);
@@ -1116,24 +1142,64 @@ void main() {
       expect(find.text('<$kMaxReshuffleAt%'), findsOneWidget);
     });
 
-    testWidgets('the code the picker offers carries the name it is open as', (
+    testWidgets('the code a save offers carries the name it is saved under', (
       WidgetTester tester,
     ) async {
       await pumpPicker(tester);
       await createSave(tester, 'Yahtzee');
 
-      await tester.tap(find.byType(AppMenuButton));
-      await tester.pumpAndSettle();
-      await tapText(tester, 'Share');
+      await shareProfile(tester, 'Yahtzee');
 
-      final ScannedProfile code =
-          decodeProfile(
-            tester.widget<ShareCodeView>(find.byType(ShareCodeView)).code,
-          )!;
+      final ScannedProfile code = sharedCode(tester);
       expect(code.name, 'Yahtzee');
       expect(code.profile, profiles.saves.single.profile);
       // And it says as much in words, under the square.
       expect(find.text('Yahtzee · 2 dice'), findsOneWidget);
+    });
+
+    testWidgets('a save shares what it holds, not what is on screen', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      await createSave(tester, 'Yahtzee');
+      // The screen is now a die further along than the save it came from, and
+      // nothing has written that die anywhere.
+      await addDie(tester);
+      expect(rack(tester).length, kDefaultDice.length + 1);
+
+      await shareProfile(tester, 'Yahtzee');
+
+      final ScannedProfile code = sharedCode(tester);
+      expect(code.name, 'Yahtzee');
+      expect(
+        code.profile.groups[0].length,
+        kDefaultDice.length,
+        reason:
+            'the code is named Yahtzee, so it has to be the Yahtzee that was '
+            'kept — Rename and Delete on the same menu mean that save too',
+      );
+      expect(code.profile, profiles.saves.single.profile);
+      expect(find.text('Yahtzee · 2 dice'), findsOneWidget);
+    });
+
+    testWidgets('the dashed one shares the screen, under no name at all', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      await createSave(tester, 'Yahtzee');
+      await addDie(tester);
+
+      await tester.longPress(find.byKey(kNewProfile));
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Share');
+
+      final ScannedProfile code = sharedCode(tester);
+      // Unnamed even though Yahtzee is lit, because what is on screen is not
+      // Yahtzee — a code labelled with a name it does not contain is the one
+      // thing the receiving phone cannot be told the truth about.
+      expect(code.name, isEmpty);
+      expect(code.profile.groups[0].length, kDefaultDice.length + 1);
+      expect(find.text('3 dice'), findsOneWidget);
     });
   });
 }

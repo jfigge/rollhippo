@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/motion/motion.dart';
@@ -49,6 +50,19 @@ Future<void> openMenu(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Puts up the Share sheet for what is on screen, the way a thumb would: hold
+/// the dashed profile down and take Share off the menu it gives you.
+///
+/// The dashed one rather than a save, because these tests are about the code
+/// the *picker* produces and nothing here has been saved. A save's own Share
+/// sends what that save holds, which `profiles_test.dart` is where to look for.
+Future<void> shareCurrent(WidgetTester tester) async {
+  await tester.longPress(find.byKey(kNewProfile));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Share'));
+  await tester.pumpAndSettle();
+}
+
 /// The plus in the first set's rack, which is how a die is added. Scoped to
 /// that rack: card mode has one of its own, one screen to the side.
 final Finder addDie = find.descendant(
@@ -90,9 +104,12 @@ void main() {
       );
 
       await openMenu(tester);
-      for (final String label in <String>['Settings', 'Scan', 'Share']) {
+      for (final String label in <String>['Settings', 'Scan']) {
         expect(find.text(label), findsOneWidget, reason: '$label is missing');
       }
+      // And not the third it used to have. Sharing is about a profile, so it
+      // is on the profiles — see the group below, which reaches it from there.
+      expect(find.text('Share'), findsNothing);
     });
 
     testWidgets('sits on the title line, over the rack edge', (
@@ -312,9 +329,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await pumpPicker(tester);
-      await openMenu(tester);
-      await tester.tap(find.text('Share'));
-      await tester.pumpAndSettle();
+      await shareCurrent(tester);
 
       final ShareCodeView qr = tester.widget<ShareCodeView>(
         find.byType(ShareCodeView),
@@ -345,9 +360,7 @@ void main() {
       await tester.tap(find.text('D20'));
       await tester.pump();
 
-      await openMenu(tester);
-      await tester.tap(find.text('Share'));
-      await tester.pumpAndSettle();
+      await shareCurrent(tester);
 
       final ShareCodeView qr = tester.widget<ShareCodeView>(
         find.byType(ShareCodeView),

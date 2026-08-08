@@ -303,9 +303,11 @@ class _PickerScreenState extends State<PickerScreen>
   /// away the dice behind it — and the lists are copies because the store holds
   /// what it is given while this screen carries on editing its own.
   ///
-  /// The mode goes with it, and is why this is only ever called from the two
-  /// places that write a save — [_newSave] and [_saveTo]. A profile is
-  /// saved *on* a page, and that is the page it opens on.
+  /// The mode goes with it, which is why this is only ever called where the
+  /// whole picker is meant: the two places that write a save — [_newSave] and
+  /// [_saveTo] — and [_shareCurrent], which writes nothing and hands the same
+  /// thing to another phone. A profile is saved *on* a page, and that is the
+  /// page it opens on, whether it was kept here or read off a code there.
   Profile _capture() => Profile(
     mode: _mode,
     groups: <List<DieSpec>>[
@@ -334,6 +336,26 @@ class _PickerScreenState extends State<PickerScreen>
     // that has not worked also looks like.
     _say('Saved to "${save.name}".');
   }
+
+  /// Share, from a save's own menu: that save, as a code somebody else can
+  /// point a phone at.
+  ///
+  /// What the *save* holds, not what is on screen — so a "Yahtzee" you have
+  /// added a die to since opening still shares the Yahtzee you kept. The name
+  /// on the code and the dice in it describe the same thing, which is the only
+  /// version of this that a receiving phone can be told the truth about, and it
+  /// is what Rename and Delete on the same menu already mean by that profile.
+  void _share(SavedProfile save) =>
+      unawaited(showShareSheet(context, save.profile, save.name));
+
+  /// Share, from the dashed profile's menu: what is on screen, under no name.
+  ///
+  /// Blank rather than the open save's name even when one is lit, for the
+  /// reason [_share] gives from the other end: this is the picker as it stands,
+  /// which need not be what any save holds. A code with no name on it opens
+  /// unnamed on the phone that reads it, which is what an unkept set-up is
+  /// there too.
+  void _shareCurrent() => unawaited(showShareSheet(context, _capture(), ''));
 
   /// Sets the picker to a whole profile, dropping whatever it was
   /// showing — which is what opening a save means, and why a profile needs no
@@ -721,8 +743,10 @@ class _PickerScreenState extends State<PickerScreen>
                     open: _saved,
                     onOpen: _open,
                     onSave: _saveTo,
+                    onShare: _share,
                     onNew: () => unawaited(_newSave()),
                     onReset: _reset,
+                    onShareCurrent: _shareCurrent,
                   ),
                 ),
                 _rollButton(),
@@ -755,8 +779,6 @@ class _PickerScreenState extends State<PickerScreen>
             children: <Widget>[
               const SizedBox(width: _kMenuEdge),
               AppMenuButton(
-                profile: _capture(),
-                name: profiles.byId(_saved)?.name ?? '',
                 onScanned:
                     (ScannedProfile scanned) => unawaited(_scanned(scanned)),
               ),
@@ -1359,11 +1381,14 @@ class _PickerScreenState extends State<PickerScreen>
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        // Card mode does not throw anything. What the button does there is put
-        // a shoe together and hand it to you face down, which is a shuffle and
-        // reads as one.
+        // Card mode does not throw anything. The button still builds a shoe
+        // and shuffles it, but that is the preparation and not the thing being
+        // asked for — and the card screen has its own button for turning each
+        // card over, which is "Draw". So this one is named for putting the
+        // game on the table rather than for the work behind it, and the two
+        // stay a pair of distinct gestures instead of two words for one.
         child: Text(
-          _cards ? 'Shuffle' : 'Roll',
+          _cards ? 'Deal' : 'Roll',
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
       ),

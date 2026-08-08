@@ -477,7 +477,7 @@ void main() {
       await tester.tap(swatchOf(kCardPage, green));
       await tester.pump();
 
-      await tester.tap(find.text('Shuffle'));
+      await tester.tap(find.text('Deal'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -490,17 +490,17 @@ void main() {
       expect(table.colourOf(2), kDiceWhite);
     });
 
-    testWidgets('the big button shuffles rather than rolls', (
+    testWidgets('the big button deals rather than rolls', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       expect(find.text('Roll'), findsOneWidget);
-      expect(find.text('Shuffle'), findsNothing);
+      expect(find.text('Deal'), findsNothing);
 
       await swipePanel(tester, find.text('Die 1 — D6'), -300);
       expect(find.text('Roll'), findsNothing);
 
-      await tester.tap(find.text('Shuffle'));
+      await tester.tap(find.text('Deal'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 

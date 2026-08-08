@@ -138,8 +138,9 @@ void main() {
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-saves.png');
 
-    // The menu that profile has, which is the only place Reset lives and the
-    // only thing on this screen that no label announces.
+    // The menu that profile has: Reset, which lives nowhere else, and Share,
+    // which every profile in the row has one of. The whole of it is the thing
+    // on this screen that no label announces.
     await tester.longPress(find.byKey(kNewProfile));
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-reset.png');

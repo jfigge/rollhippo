@@ -31,7 +31,7 @@ Run from the repo root:
 | `make format-check` | the same files as `format`, but it reports the drift rather than fixing it |
 | `make desktop` | macOS harness. Space shakes, **R** throws, arrows tilt, **G** toggles the rotational pseudo-forces for an A/B |
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
-| `make picker` | render the picker — both modes, its saves, the chooser, the naming dialog and the Reset menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
+| `make picker` | render the picker — both modes, its saves, the chooser, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
 | `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders, and both platforms' launch images with it — writes into the project, not `/tmp`. The XML beside the rasters is structure, not drawing, and is not regenerated: the adaptive icon's two files, `LaunchScreen.storyboard`, and Android's `launch_background.xml` and `styles.xml`, which only place the launch image and paint the picker's colour behind it |
 | `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel |
@@ -234,6 +234,12 @@ test exists to make the change deliberate, not to make it hard.
   and shoe and all, plus the name its owner saved it under, and it is what a QR
   code carries. Each reader declines the other version outright rather than
   decoding two thirds of it, which is what the version in the prefix is for.
+  An `RH2:` code is produced from the row of profiles rather than from the app
+  menu, and which one you held down decides what goes into it:
+  `PickerScreen._share` encodes the *save* — `save.profile` under `save.name`,
+  so an unkept edit does not travel under a name that no longer describes it —
+  while `_shareCurrent`, off the dashed `+ New`, encodes `_capture()` with a
+  blank name, because what is on screen belongs to no save.
   What happens to a scanned one is decided in `PickerScreen._scanned` and turns
   entirely on that name: blank loads it unnamed, a name you already have and
   match opens it without a word, and anything else asks. `Profile` has value
@@ -243,16 +249,20 @@ test exists to make the change deliberate, not to make it hard.
 - **Nothing is saved on its own.** Two places write a profile, and both
   are gestures: `+ New`, which makes one out of what is on screen, and Save on
   the menu a profile gives you when you hold it down (or right-click it). Between
-  them, `PickerScreen._saveTo` and `_newSave` are the only callers of
-  `_capture()`, and an edit to the picker touches no save at all. So the lit
+  them, `PickerScreen._saveTo` and `_newSave` are the only *writers*, and an
+  edit to the picker touches no save at all. `_capture()` has a third caller,
+  `_shareCurrent`, which writes nothing and hands the same object to another
+  phone. So the lit
   profile — and the title above it, which reads `Roll Hippo - <name>` — says which
   profile you *opened*, not that the screen still matches it. Save goes
   onto whichever profile was held down, which need not be that one. The mode rides along in `_capture()`, which means a profile is
   saved on a page and opens on the page it was saved from. `ProfileStore.write`
   is deliberately a no-op for a save that is no longer there.
 
-  The dashed `+ New` answers to the hold as well, and what its menu has is the
-  one thing that belongs to no save: **Reset**, `PickerScreen._reset`, which
+  The dashed `+ New` answers to the hold as well, and its menu is the two things
+  that belong to no save. **Share**, which sends the screen unnamed, and above
+  it — because it is the entry that lives nowhere else, where every profile in
+  the row has a Share — **Reset**, `PickerScreen._reset`, which
   `_apply`s `kDefaultProfile` and clears the lit profile. `kDefaultProfile` is
   the picker as `main` opens it — the state fields are initialised from it — so
   starting again by hand and starting again by launching the app land on the

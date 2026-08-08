@@ -423,7 +423,11 @@ void main() {
     await tester.tap(find.text('+ New Profile'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Menu'));
+    // Off the save's own menu, which is where sharing lives: hold the profile
+    // down, take Share. A long press is not a tap, so nothing is opened by it
+    // — and because the code comes off the save rather than off the screen,
+    // the caption under the square names it.
+    await tester.longPress(find.text('Yahtzee'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Share'));
     await tester.pumpAndSettle();

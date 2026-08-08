@@ -122,7 +122,7 @@ know Flutter exists.
 ## Running it
 
 ```
-make test        # 209 headless tests: geometry, integration, resting, containment, fairness
+make test        # 213 headless tests: geometry, integration, resting, containment, fairness
 make desktop     # macOS harness — phone-sized tray, simulated shake
 make ios         # build and install on the iPhone
 make android     # build and install on the Android phone
@@ -133,7 +133,8 @@ The app opens on the dice you are about to throw: add up to ten, give each one a
 colour and a number of sides, then **Roll**. In the tray, **Throw** puts them
 back in from the top and **Close** returns to the set.
 
-The three lines in the top left are the app menu. **Settings** is two controls.
+The three lines in the top left are the app menu, and it is two entries.
+**Settings** is two controls.
 **Motion control** is whether the phone's own movement plays at all: on, the box
 is simulated in the phone's frame of reference and tilting and shaking do what
 they look like they should; off, the tray is handed a phone held perfectly still
@@ -142,12 +143,20 @@ the only way to roll or deal. **Impact strength** is how hard the phone taps
 back when a die hits the side of the box, which is keyed on the impulse the wall
 actually delivered, so a heavy die landing hard feels different from a light one
 nudging a wall. Drag the slider and it plays each notch back at you, because a
-multiplier is not a sensation and nobody can set one by reading it. **Share** turns the whole profile into a QR code —
-which page you are on, every die, its kind and its colour, the shoe if you are
-in card mode, and the name you saved it under — and **Scan** reads one back off
-another phone. A code that arrives with a name offers to become a save on this
-phone too; one that names a profile you already have, and matches it,
-simply opens it.
+multiplier is not a sensation and nobody can set one by reading it. **Scan** is
+the other entry: it opens the camera and reads a code off another phone. One
+that arrives with a name offers to become a save on this phone too; one that
+names a profile you already have, and matches it, simply opens it.
+
+Making those codes belongs to the profiles rather than to the menu, because a
+code *is* a profile. Hold one down — or right-click it in the harness — and
+**Share** is on the menu that comes up, beside Save, Rename and Delete. It turns
+that save into a QR code: which page you are on, every die, its kind and its
+colour, the shoe if you are in card mode, and the name it is saved under. What
+goes out is what the *save* holds, so an edit you have not kept does not travel
+under a name that no longer describes it. The dashed **+ New** has a Share of its
+own, and that one sends what is actually on screen, unnamed — which is what
++ New has always meant.
 
 The desktop harness letterboxes to 393 × 852 points whatever size its window is,
 so the tray it simulates is the same 64 × 140 mm tray as the phone's. Drag to
