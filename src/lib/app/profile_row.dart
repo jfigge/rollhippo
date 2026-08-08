@@ -38,7 +38,9 @@ const double _kProfileEdge = 16;
 ///
 /// A profile is the whole of a save's interface. A tap opens it; a long press —
 /// or a right click, which is what the desktop harness has instead — asks what
-/// else you meant by it, and that menu is where saving is done.
+/// else you meant by it, and that menu is where saving is done. The heading says
+/// so, because nothing else on the screen can: the tap teaches itself and the
+/// hold does not.
 ///
 /// Nothing is written on its own. Editing the dice under an open profile changes
 /// the screen and not the save, until you hold a profile down and choose Save —
@@ -85,13 +87,36 @@ class ProfileRow extends StatelessWidget {
           // themselves, moved up here: the heading takes the top of the block
           // rather than being added to it, so nothing below has moved.
           padding: EdgeInsets.fromLTRB(_kProfileEdge, 7, _kProfileEdge, 5),
-          child: Text(
-            'Profiles',
-            style: TextStyle(
-              color: Color(0xAABFD0E4),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          // Two weights on one line: the heading, and then in the lighter of the
+          // two the picker already uses for its subtitles, what holding a
+          // profile down is for. That gesture is the whole of a save's second
+          // interface, and a menu that only opens on a gesture is a menu nobody
+          // finds unless something says so.
+          //
+          // One line is not a preference. The block below is given the space
+          // between the mode dots and the Roll button and no more, so a heading
+          // that took a second line would take it out of the profiles. At 13 the
+          // label fits the narrowest phone with room over; at a large text scale
+          // it will not, and there it is to lose its tail rather than the row.
+          child: Text.rich(
+            TextSpan(
+              children: <TextSpan>[
+                TextSpan(
+                  text: 'Profiles',
+                  style: TextStyle(
+                    color: Color(0xAABFD0E4),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: ' (press and hold for options)',
+                  style: TextStyle(color: Color(0x99BFD0E4)),
+                ),
+              ],
             ),
+            style: TextStyle(fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         Expanded(child: _block()),
