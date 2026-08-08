@@ -249,4 +249,17 @@ class Tuning {
   /// the journey left puts the card face up in the air and then lays it flat,
   /// which is what a hand does with one.
   static const double dealTurn = 0.78;
+
+  /// How far into that same journey the card being replaced is clear of the
+  /// screen, 0 to 1.
+  ///
+  /// The outgoing card is not covered by the incoming one — it slides down the
+  /// glass and out of the bottom of the box while the new one is still in the
+  /// air. This is the clock it does that on, and it runs out first on purpose.
+  /// A card still sliding out as another lays itself down reads as two things
+  /// happening at once; gone much earlier and the glass sits bare long enough
+  /// to look like something went wrong. Just under three quarters leaves one
+  /// beat of empty glass between the two, which is the beat a hand takes
+  /// between sweeping a card away and putting the next one down.
+  static const double dealDiscard = 0.72;
 }

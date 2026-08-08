@@ -129,6 +129,7 @@ void main() {
     expect(Tuning.cardFloorGap, 0.0157, reason: 'a drawn card, off the floor');
     expect(Tuning.dealDuration, 0.45, reason: 'a hand putting a card down');
     expect(Tuning.dealTurn, 0.78, reason: 'over before it lands');
+    expect(Tuning.dealDiscard, 0.72, reason: 'gone before the next one lands');
   });
 
   test('a 16 mm acrylic die still weighs what one weighs', () {

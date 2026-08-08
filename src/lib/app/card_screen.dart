@@ -107,12 +107,17 @@ class _CardScreenState extends State<CardScreen>
     final MotionFrame motion = _motion.sample(dt);
     if (isShake(motion) && _since >= _kDrawCooldown) _draw();
 
-    // And the one thing on this table that moves. The test is before the
-    // advance rather than after it, so the frame the card lands on is painted
-    // too — asking afterwards would leave it drawn a frame short of the glass
-    // and nothing would come along to finish it.
+    // And the only things on this table that move: the card arriving and the
+    // card it is replacing, which leaves at the same time. `busy` is both of
+    // them, and it has to be both — a reshuffle sweeps a card away with
+    // nothing following it, and ticking on the flight alone would leave that
+    // one hanging half off the bottom of the box for ever.
+    //
+    // The test is before the advance rather than after it, so the frame the
+    // card lands on is painted too — asking afterwards would leave it drawn a
+    // frame short of the glass and nothing would come along to finish it.
     final CardTable? table = _table;
-    if (table != null && table.deal.flying) {
+    if (table != null && table.deal.busy) {
       table.advance(dt);
       _frame.value++;
     }

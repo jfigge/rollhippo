@@ -94,6 +94,14 @@ const double _kBackHippo = 0.66;
 /// is no reason for the dice on a three-dice card to change size.
 const double _kFaceMargin = 0.055;
 
+/// How far the outgoing card has turned by the time it is off the screen,
+/// radians, clockwise.
+///
+/// Small. It is the difference between a card being swept off a table and one
+/// being posted through a slot, and any more than this stops reading as a
+/// sweep and starts reading as a card that has been thrown.
+const double _kDiscardTilt = 0.14;
+
 /// How far out of square a hand-shuffled pile stands, as a fraction of its own
 /// height, and how far off the back wall the whole pile stands, metres.
 ///
@@ -130,33 +138,69 @@ void paintCardScene(Canvas canvas, Size size, CardTable table) {
 
   // A card in the air has already replaced [Deck.shown] — the draw happens the
   // moment it is asked for and only the arrival is animated — so while one is
-  // flying, what is lying on the glass is the deal's own memory of the card it
-  // is going to cover.
+  // flying, the card the deal remembers is the one being replaced, and that
+  // one is on its way out of the bottom of the box.
   final Deal deal = table.deal;
-  final PlayingCard? flying = deal.card;
-  final PlayingCard? lying = flying != null ? deal.under : table.deck.shown;
+  final PlayingCard? leaving = deal.under;
 
-  // Which of the two is in front, and the whole of what says so is which way
-  // the flying card is facing. A card still face down is on its way over and
-  // has not been laid on anything yet; a card that has turned past its own
-  // edge is one a hand is putting down, and it goes on top.
-  //
-  // The two of them cross over at exactly the instant the card is edge on,
-  // which is the one moment in the deal when there is nothing of it on screen
-  // for the swap to be visible in. Ordering by depth instead would be true to
-  // the box and wrong to look at: the card is behind the glass for all but the
-  // last instant of the journey, so it would slide in *behind* the card it is
-  // being dealt onto and appear at the end.
-  final double squash = flying == null ? 1 : math.cos(deal.turn);
-  final bool onTop = squash < 0;
-
-  if (!onTop) _paintFlight(canvas, camera, table, squash);
+  // Nothing lies still on the glass while a deal is on. The card that was
+  // there is leaving and the card that is coming has not arrived, so what is
+  // drawn here is drawn only in the quiet between deals.
+  final PlayingCard? lying = deal.busy ? null : table.deck.shown;
   if (lying != null) {
     _paintShadow(canvas, camera, 0, _drawnY(table), 0);
     _paintFace(canvas, camera, lying, 0, _drawnY(table), 0, _stylesOf(table));
   }
-  if (onTop) _paintFlight(canvas, camera, table, squash);
+
+  // The one arriving, and then the one leaving in front of it — which is the
+  // box's own order, honestly: the outgoing card is against the glass for the
+  // whole of its slide, and the incoming one is behind the glass for all but
+  // the last instant of its journey.
+  //
+  // This used to be a lie, and had to be. When the outgoing card stayed put
+  // and was covered, drawing by depth left the new card hidden behind it for
+  // the whole flight and popping into view at the end, so the two were swapped
+  // over at the instant the flying card went edge on. Nothing needs swapping
+  // now: the card underneath is falling out of the way, and the new one comes
+  // out from behind it as it goes.
+  _paintFlight(canvas, camera, table);
+  if (leaving != null) {
+    _paintDiscard(canvas, camera, table, leaving, deal.discard);
+  }
 }
+
+/// The card being replaced, on its way out.
+///
+/// Straight down the glass and off the bottom of the box, turning a little as
+/// it goes — which is the difference between a card being swept off a table
+/// and a card being posted through a slot.
+///
+/// [gone] is 0 lying on the glass and 1 clear of the screen. It stays at z = 0
+/// throughout: the card is against the glass when the slide starts and nothing
+/// in the box pushes it back, so the only thing that changes is how far down
+/// the glass it has got.
+void _paintDiscard(
+  Canvas canvas,
+  TrayCamera camera,
+  CardTable table,
+  PlayingCard card,
+  double gone,
+) {
+  final double from = _drawnY(table);
+  final double y = from + (_discardY(table) - from) * gone;
+  final double tilt = _kDiscardTilt * gone;
+  _paintShadow(canvas, camera, 0, y, 0, tilt: tilt);
+  _paintFace(canvas, camera, card, 0, y, 0, _stylesOf(table), tilt: tilt);
+}
+
+/// Where a card has gone when it has gone: its centre one whole card below the
+/// bottom of the glass.
+///
+/// A card's height rather than half of one, because it is turning on the way
+/// down and a tilted card reaches further from its own centre than an upright
+/// one does. This clears every corner of it whatever angle it finished at,
+/// which is cheaper than working out what that angle costs.
+double _discardY(CardTable table) => -table.height / 2 - Tuning.cardHeight;
 
 /// The card being dealt, wherever it has got to. Nothing, when none is.
 ///
@@ -181,14 +225,16 @@ void paintCardScene(Canvas canvas, Size size, CardTable table) {
 /// quarter a real card rotating about its own left-to-right axis keeps its top
 /// edge on top. What is drawn is what would be there. The face takes over at
 /// exactly the angle where that stops being true.
-void _paintFlight(
-  Canvas canvas,
-  TrayCamera camera,
-  CardTable table,
-  double squash,
-) {
+void _paintFlight(Canvas canvas, TrayCamera camera, CardTable table) {
   final PlayingCard? card = table.deal.card;
   if (card == null) return;
+
+  // Which side of the card is facing you, and what is left of its height. A
+  // card rotated about its own left-to-right axis keeps all of its width and
+  // loses its height by the cosine of the angle, and past the quarter turn
+  // that cosine goes negative — which is the card presenting its other side.
+  // So the sign picks the side and what is left is how tall to draw it.
+  final double squash = math.cos(table.deal.turn);
 
   // Off the top of the pile and down onto the glass. Both ends of the journey
   // are worked out from the tray exactly as the resting positions are, so the
@@ -369,12 +415,13 @@ void _paintBack(
   double y,
   double z, {
   double squash = 1,
+  double tilt = 0,
 }) {
   const double w = Tuning.cardWidth;
   const double h = Tuning.cardHeight;
 
   canvas.save();
-  _intoCard(canvas, camera, x, y, z, squash);
+  _intoCard(canvas, camera, x, y, z, squash, tilt);
 
   // y runs up in here, so the corner the light comes from is +y and the far
   // one is −y. The gradient goes between those two and nowhere near the
@@ -466,6 +513,9 @@ Path _diamond(Offset centre, double radius) =>
 /// axis, because that is the whole of what a turn about the card's left-to-
 /// right axis does to it from here — the printing on the card foreshortens with
 /// the card, which is why it is done to the frame rather than to the shape.
+///
+/// [tilt] is the other turn a card can make, the one about the axis you are
+/// looking down. Only the card being discarded uses it.
 void _intoCard(
   Canvas canvas,
   TrayCamera camera,
@@ -473,10 +523,16 @@ void _intoCard(
   double y,
   double z,
   double squash,
+  double tilt,
 ) {
   final double scale = camera.scaleAt(z) * camera.pixelsPerMetre;
   final Offset centre = camera.project(Vector3(x, y, z));
   canvas.translate(centre.dx, centre.dy);
+  // Between the two, so the card turns about its own middle in the plane of
+  // the glass rather than about anything on screen. It is in screen space —
+  // y still runs down at this point — so a positive [tilt] is clockwise, which
+  // is the way a card swept off to the left goes over.
+  canvas.rotate(tilt);
   canvas.scale(scale, -scale * squash);
 }
 
@@ -496,9 +552,10 @@ void _paintFace(
   double z,
   List<DieStyle> styles, {
   double squash = 1,
+  double tilt = 0,
 }) {
   canvas.save();
-  _intoCard(canvas, camera, x, y, z, squash);
+  _intoCard(canvas, camera, x, y, z, squash, tilt);
   _printFace(canvas, card, styles);
   canvas.restore();
 }
@@ -639,9 +696,20 @@ void _paintShadow(
   double z, {
   double squash = 1,
   double fade = 1,
+  double tilt = 0,
 }) {
   final double scale = camera.scaleAt(z) * camera.pixelsPerMetre;
   final Offset centre = camera.project(Vector3(x, y, z));
+
+  // The shadow turns with the card, about the same point. A blurred blob is
+  // forgiving about most things and unforgiving about this one: leave it
+  // square under a card that is not and the corners of the card hang over the
+  // ends of their own shadow.
+  canvas.save();
+  canvas.translate(centre.dx, centre.dy);
+  canvas.rotate(tilt);
+  canvas.translate(-centre.dx, -centre.dy);
+
   final Rect rect = Rect.fromCenter(
     center: centre.translate(0, Tuning.cardWidth * _kCorner * scale),
     width: Tuning.cardWidth * scale,
@@ -659,6 +727,7 @@ void _paintShadow(
         Tuning.cardWidth * 0.10 * scale,
       ),
   );
+  canvas.restore();
 }
 
 /// Paints [table] whenever [repaint] says something about it has changed.

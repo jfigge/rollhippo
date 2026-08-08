@@ -198,11 +198,23 @@ test exists to make the change deliberate, not to make it hard.
   animates only its journey from the top of the pile to the glass. So a second
   ask mid-flight lands the first card rather than losing it, and anything that
   wants the card *presently on the glass* during a deal has to ask `Deal.under`
-  rather than `Deck.shown`. The flying card is drawn behind the card it is
-  landing on until it has turned past its own edge, and in front afterwards —
-  ordering the two by depth instead would be true to the box and wrong to look
-  at, because the card is behind the glass for all but the last instant of the
-  journey and would slide in underneath the one it is being dealt onto.
+  rather than `Deck.shown`.
+
+  That card is not covered — it *leaves*. It slides down the glass and out of
+  the bottom of the box on its own clock, `Tuning.dealDiscard`, which runs out
+  before the flight does, so there is a beat of bare glass before the new card
+  reaches it. `Deal.flying` and `Deal.discarding` are independent and neither
+  implies the other: a reshuffle sweeps a card away with nothing following it,
+  and the first deal onto an empty glass has nothing to sweep. `Deal.busy` is
+  both, and is what `CardScreen` ticks on and what the painter asks before it
+  draws anything lying still — during a deal there is no such card.
+
+  Because the outgoing card leaves, the two are now drawn in the box's own
+  depth order: the flight first, the card leaving over the top of it, and the
+  new one comes out from behind the old one as it drops. That used to be a lie
+  it had to tell — with the outgoing card staying put, depth order left the
+  incoming one hidden behind it for the whole flight and popping into view at
+  the end, so the two were swapped at the instant the flying card went edge on.
 - **The profiles wrap, and the Roll button does not move.** `ProfileRow` is a
   `Wrap` inside a `SingleChildScrollView`, under a "Profiles" heading that is
   *outside* that scroll view so it stays put while the block scrolls under it,

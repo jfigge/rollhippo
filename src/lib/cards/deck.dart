@@ -149,16 +149,33 @@ class Deal {
   /// The card in the air, or null when nothing is being dealt.
   PlayingCard? get card => _card;
 
-  /// The card it is landing on: whatever was lying on the glass when this one
-  /// was asked for, and null if the glass was empty.
+  /// The card being replaced: whatever was lying on the glass when this one
+  /// was asked for, and null once it has left.
   ///
-  /// Worth keeping, because the alternative is a blank glass for the length of
-  /// the flight — the outgoing card vanishing the moment the new one lifts off
-  /// reads as a card being taken away rather than as one being covered.
+  /// It leaves rather than waits to be covered. A card that simply vanished
+  /// the moment the next one lifted off would read as one being snatched away,
+  /// which is why this was kept in the first place; a card that lay there and
+  /// was buried never looked like it had been played. So it is dealt with the
+  /// same way a hand deals with it — swept off the table — and [discard] is
+  /// how far through that it is.
   PlayingCard? get under => _under;
 
   /// True while a card is in the air.
   bool get flying => _card != null;
+
+  /// True while the card being replaced is still on its way out.
+  ///
+  /// Not the same question as [flying], and neither implies the other: a
+  /// reshuffle sends a card away with nothing following it, and a deal onto an
+  /// empty glass has nothing to send.
+  bool get discarding => _under != null;
+
+  /// True while anything at all on this table is moving.
+  ///
+  /// What the screen ticks on and what the painter asks before it draws a card
+  /// lying still, because during a deal there is no such card: the one that
+  /// was there is leaving and the one that is coming has not arrived.
+  bool get busy => flying || discarding;
 
   /// How far along the journey the card is: 0 on the pile, 1 on the glass.
   double get travel => _ease(_fraction(Tuning.dealDuration));
@@ -171,27 +188,42 @@ class Deal {
   double get turn =>
       math.pi * _ease(_fraction(Tuning.dealDuration * Tuning.dealTurn));
 
+  /// How far the outgoing card has got: 0 lying on the glass, 1 clear of the
+  /// box altogether.
+  ///
+  /// On its own clock, like [turn], and for the same kind of reason — it runs
+  /// out at [Tuning.dealDiscard] of the journey, so the glass is empty for a
+  /// beat before the new card reaches it. Where "clear of the box" is belongs
+  /// to the painter, which knows where a card lies and how big the box is.
+  double get discard =>
+      _ease(_fraction(Tuning.dealDuration * Tuning.dealDiscard));
+
   double _fraction(double over) => (_elapsed / over).clamp(0.0, 1.0);
 
-  /// Sends [card] on its way, onto [under]. A null [card] — which is what a
-  /// reshuffle deals — clears the air instead, and lands anything already in
-  /// it.
+  /// Sends [card] on its way and [under] off the table. Either may be null and
+  /// they are independent: a reshuffle deals no card and still has one to
+  /// clear away, and the first deal onto an empty glass clears nothing.
   void start(PlayingCard? card, PlayingCard? under) {
     _card = card;
-    _under = card == null ? null : under;
+    _under = under;
     _elapsed = 0;
   }
 
   /// One frame, in real seconds.
+  ///
+  /// Two clocks off one elapsed time, and they stop at different moments: the
+  /// outgoing card is gone first, the arriving one lands last. The elapsed
+  /// time is only reset once both are done, because either of them still
+  /// running is a reason to keep counting.
   void advance(double dt) {
-    if (_card == null) return;
+    if (!busy) return;
     _elapsed += dt;
-    if (_elapsed < Tuning.dealDuration) return;
+    // Off the bottom of the box, and nothing will draw it again.
+    if (_elapsed >= Tuning.dealDuration * Tuning.dealDiscard) _under = null;
     // Landed. The card is the deck's [Deck.shown] now and the painter draws it
     // lying on the glass, which is where this left it.
-    _card = null;
-    _under = null;
-    _elapsed = 0;
+    if (_elapsed >= Tuning.dealDuration) _card = null;
+    if (!busy) _elapsed = 0;
   }
 }
 
@@ -243,7 +275,8 @@ class CardTable {
   final Deal deal = Deal();
 
   /// Turns the top card over onto the glass, or reshuffles if the shoe is
-  /// spent — and sends whatever came of that on its way across the box.
+  /// spent — and sends whatever came of that on its way across the box, while
+  /// whatever was already on the glass slides out of the bottom of it.
   ///
   /// The deal is the whole of what is animated here, and it is animated after
   /// the fact: the card has already left the pile by the time this returns,
@@ -259,7 +292,7 @@ class CardTable {
   /// One frame, in real seconds.
   ///
   /// Nothing on this table is simulated — a card is not a rigid body and there
-  /// is nothing in the box to throw. The only thing that moves is the card
-  /// being dealt.
+  /// is nothing in the box to throw. The only things that move are the card
+  /// being dealt and the one it is replacing.
   void advance(double dt) => deal.advance(dt);
 }

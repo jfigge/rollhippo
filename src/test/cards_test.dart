@@ -238,6 +238,9 @@ void main() {
     /// Runs [seconds] of table time past it, in frame-sized steps that add up
     /// to exactly that — the deal is eased, so it is steepest in the middle
     /// and half a frame of overshoot there is a fifth of a radian of turn.
+    // Enough to be certainly past a boundary and nowhere near the next one.
+    const double kPastIt = 0.01;
+
     void run(CardTable table, double seconds) {
       const int steps = 24;
       for (int i = 0; i < steps; i++) {
@@ -285,30 +288,67 @@ void main() {
       expect(deal.deal.flying, isTrue, reason: 'over, but not landed');
     });
 
-    test('a second ask lands the first card and deals onto it', () {
+    test('a second ask lands the first card and sends it on its way', () {
       final CardTable deal = table();
       deal.draw();
       final PlayingCard first = deal.deck.shown!;
       run(deal, Tuning.dealDuration / 3);
 
       deal.draw();
-      expect(deal.deal.under, same(first), reason: 'it is covering that one');
+      expect(deal.deal.under, same(first), reason: 'that one is leaving');
       expect(deal.deal.card, same(deal.deck.shown));
       expect(deal.deal.travel, 0, reason: 'the new one starts at the pile');
+      expect(deal.deal.discard, 0, reason: 'and the old one has not moved yet');
       expect(deal.deck.remaining, 34, reason: 'and both were really dealt');
     });
 
-    test('a reshuffle clears the air rather than dealing into it', () {
+    test('the card being replaced is gone before the new one lands', () {
+      final CardTable deal = table();
+      deal.draw();
+      run(deal, Tuning.dealDuration);
+      final PlayingCard first = deal.deck.shown!;
+
+      deal.draw();
+      expect(deal.deal.under, same(first));
+
+      // Two clocks off one elapsed time, and the outgoing card's runs out
+      // first: there is a beat of empty glass before the new card reaches it.
+      run(deal, Tuning.dealDuration * Tuning.dealDiscard / 2);
+      expect(deal.deal.discard, closeTo(0.5, 0.02), reason: 'eased both ends');
+      expect(deal.deal.discarding, isTrue);
+      expect(deal.deal.flying, isTrue);
+
+      // Past the clock rather than onto it: twenty-four steps of a divided
+      // duration do not add back up to it exactly, and landing a float's width
+      // short of the boundary would leave the card still on its way out.
+      run(deal, Tuning.dealDuration * Tuning.dealDiscard / 2 + kPastIt);
+      expect(deal.deal.discarding, isFalse, reason: 'off the bottom');
+      expect(deal.deal.flying, isTrue, reason: 'and the new one still in air');
+      expect(deal.deal.busy, isTrue);
+
+      run(deal, Tuning.dealDuration);
+      expect(deal.deal.busy, isFalse, reason: 'both done');
+    });
+
+    test('a reshuffle deals no card and still clears the glass', () {
       final CardTable deal = table(dice: 1);
       for (int i = 0; i < 6; i++) {
         deal.draw();
       }
       expect(deal.deck.remaining, 0);
+      final PlayingCard last = deal.deck.shown!;
 
       deal.draw();
       expect(deal.deck.shown, isNull);
       expect(deal.deal.flying, isFalse, reason: 'there is no card to fly');
-      expect(deal.deal.under, isNull, reason: 'and none left on the glass');
+      expect(deal.deal.under, same(last), reason: 'but one to sweep away');
+      expect(deal.deal.busy, isTrue, reason: 'so the screen keeps ticking');
+
+      // And it leaves on its own, with nothing following it. This is the case
+      // that a clock hung off the flight alone would strand half off the box.
+      run(deal, Tuning.dealDuration * Tuning.dealDiscard + kPastIt);
+      expect(deal.deal.under, isNull);
+      expect(deal.deal.busy, isFalse);
     });
   });
 

@@ -28,6 +28,13 @@ import 'package:rollhippo/tray/tray.dart';
 /// single frame of it says which.
 const double _kOutputScale = 2;
 
+/// Advances [table] to [seconds] in, a capture step at a time.
+void _runTo(CardTable table, double seconds) {
+  for (double t = 0; t < seconds; t += _kGifStep) {
+    table.advance(_kGifStep);
+  }
+}
+
 /// The gif: small enough to look at whole, and the same 30 fps off a 120 Hz
 /// clock the roll gif is captured on.
 const double _kGifScale = 0.5;
@@ -68,6 +75,14 @@ void main() {
       '$dir/cards-colour.png',
       table(colours: <int>[kDicePalette[5], kDicePalette[2]]),
     );
+
+    // And the middle of a deal, which is the one thing on this table a still
+    // cannot otherwise show: the card that was on the glass on its way out of
+    // the bottom of the box, and the next one still in the air behind it.
+    final CardTable leaving = table();
+    leaving.draw();
+    _runTo(leaving, Tuning.dealDuration * Tuning.dealDiscard / 2);
+    await _write('$dir/cards-leaving.png', leaving);
   });
 
   test('a card being dealt', () async {
@@ -83,7 +98,7 @@ void main() {
     // A card already lying on the glass before the one being watched, because
     // that is what every deal after the first one lands on.
     table.draw();
-    while (table.deal.flying) {
+    while (table.deal.busy) {
       table.advance(_kGifStep);
     }
 
