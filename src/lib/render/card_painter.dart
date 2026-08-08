@@ -459,11 +459,51 @@ void _paintFace(
   List<DieStyle> styles, {
   double squash = 1,
 }) {
-  const double w = Tuning.cardWidth;
-  const double h = Tuning.cardHeight;
-
   canvas.save();
   _intoCard(canvas, camera, x, y, z, squash);
+  _printFace(canvas, card, styles);
+  canvas.restore();
+}
+
+/// The same card, printed into a plain box on screen instead of into the tray.
+///
+/// What the picker's [CardPreview] draws, and the reason the printing below is
+/// its own function: a card standing still in a rack is not in the box, has no
+/// depth to be projected from and no turn to be foreshortened by, but it has to
+/// be the *same* card — same stock, same rule, same corner diamonds, same pip
+/// squares — or the rack would be advertising a card the deal does not hand
+/// over. So the two of them differ in nothing but how the canvas gets into the
+/// card's own frame: through the camera there, through [box] here.
+///
+/// The card keeps its proportions inside [box] and is centred in it, on the
+/// larger of the two axes it does not fill. Stretching a card to fill a box
+/// would be the one distortion nothing else in the app allows.
+void paintCardInto(
+  Canvas canvas,
+  Rect box,
+  PlayingCard card,
+  List<DieStyle> styles,
+) {
+  final double scale = math.min(
+    box.width / Tuning.cardWidth,
+    box.height / Tuning.cardHeight,
+  );
+
+  canvas.save();
+  canvas.translate(box.center.dx, box.center.dy);
+  // Negative on y for the same reason [_intoCard] is: the card's frame runs
+  // millimetres with y up, and everything printed below is written in it.
+  canvas.scale(scale, -scale);
+  _printFace(canvas, card, styles);
+  canvas.restore();
+}
+
+/// The printing, in the card's own frame — millimetres, y up, the middle of the
+/// card at the origin. Whoever put the canvas there decides how big it is and
+/// which way it is turned; this only prints.
+void _printFace(Canvas canvas, PlayingCard card, List<DieStyle> styles) {
+  const double w = Tuning.cardWidth;
+  const double h = Tuning.cardHeight;
 
   const Rect rect = Rect.fromLTRB(-w / 2, -h / 2, w / 2, h / 2);
   final RRect stock = RRect.fromRectAndRadius(
@@ -494,8 +534,6 @@ void _paintFace(
       styles[i],
     );
   }
-
-  canvas.restore();
 }
 
 /// One die face on a card: a die in [style]'s colours, and the pips it shows.
