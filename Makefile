@@ -14,6 +14,22 @@ HERD     ?= $(CURDIR)/../../../js/projects/hippoherd
 # attached", which is the usual case; name one when there are two.
 ANDROID_DEVICE ?=
 
+# Gradle's launcher JVM, not ours. From JDK 24 the runtime warns whenever an
+# unnamed module calls System.load, and Gradle's own file watching and process
+# handling is native code — net.rubygrapefruit's native-platform — so every
+# Android build opens with four lines of warning and a promise to block the
+# call outright in some later release. `--enable-native-access` is the
+# sanctioned way to answer it: the code is Gradle's own, and it is allowed.
+#
+# It has to arrive as an environment variable. `org.gradle.jvmargs` in
+# android/gradle.properties is the daemon's, and the daemon is not what warns;
+# the process that does is the launcher `gradlew` itself, whose only JVM
+# options are JAVA_OPTS and GRADLE_OPTS. Appended rather than assigned so an
+# existing GRADLE_OPTS survives, and exported because the process that runs
+# gradlew is `flutter build`, two levels down.
+GRADLE_OPTS := $(strip $(GRADLE_OPTS) --enable-native-access=ALL-UNNAMED)
+export GRADLE_OPTS
+
 # App Store Connect, for `upload`. The issuer and key ids are not themselves
 # secrets, but the .p8 they name is, so all three stay together: the ids in
 # release.env and the key in keys/, both gitignored. Between them they are the

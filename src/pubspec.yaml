@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: ^3.7.2
@@ -34,7 +34,14 @@ dependencies:
   # Accelerometer and gyroscope. The tray reads both: the accelerometer is the
   # effective gravity field inside the box, and the gyroscope supplies the
   # rotational pseudo-forces that turn a wrist flick into a tumble.
-  sensors_plus: ^6.1.0
+  #
+  # 7 rather than 6 for the Android build and nothing else: 7.1.0 is where the
+  # plugin stopped applying the Kotlin Gradle Plugin unconditionally, which is
+  # what Flutter now warns about on its way to failing the build over it. The
+  # Dart side is identical — same three streams, same samplingPeriod — and 7.0's
+  # own breaking change was a floor on AGP and Gradle that this project is
+  # already well above.
+  sensors_plus: ^7.1.0
 
   # Vector3, Quaternion and Matrix3 for the rigid-body maths. Flutter already
   # ships it; naming it here is just honesty about a direct import.

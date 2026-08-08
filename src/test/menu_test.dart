@@ -329,6 +329,10 @@ void main() {
         <DieSpec>[],
         <DieSpec>[],
       ]);
+      // And the whole of it, in one line, because a profile has value equality.
+      // This is the constant `+ New` puts the picker back to, so it is also
+      // what holds the two together: what the app opens at *is* a new profile.
+      expect(read.profile, kDefaultProfile);
       expect(find.text('2 dice'), findsOneWidget);
     });
 

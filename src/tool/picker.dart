@@ -138,6 +138,14 @@ void main() {
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-saves.png');
 
+    // The menu that profile has, which is the only place Reset lives and the
+    // only thing on this screen that no label announces.
+    await tester.longPress(find.byKey(kNewProfile));
+    await tester.pumpAndSettle();
+    await _write(tester, '$dir/picker-reset.png');
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(kNewProfile));
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-name.png');

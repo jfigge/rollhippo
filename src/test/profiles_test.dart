@@ -368,6 +368,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await pumpPicker(tester);
+      await addDie(tester);
       await tester.tap(find.byKey(kNewProfile));
       await tester.pumpAndSettle();
 
@@ -386,10 +387,13 @@ void main() {
 
       expect(profile('Yahtzee'), findsOneWidget);
       expect(profiles.saves.single.name, 'Yahtzee');
+      // The die that was added on the way here went in with it: what is kept is
+      // the screen, and the screen is not left behind either.
       expect(
         profiles.saves.single.profile.groups[0].length,
-        kDefaultDice.length,
+        kDefaultDice.length + 1,
       );
+      expect(rack(tester).length, kDefaultDice.length + 1);
     });
 
     testWidgets('cancelling keeps nothing', (WidgetTester tester) async {
@@ -401,6 +405,69 @@ void main() {
 
       expect(profiles.isEmpty, isTrue);
       expect(profile('Yahtzee'), findsNothing);
+    });
+
+    testWidgets('start again, from the menu the dashed one gives you', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      // A save made of three dice, and then a screen taken further away from
+      // the defaults still — in the other mode, so that both halves of the
+      // picker have something to put back.
+      await addDie(tester);
+      await createSave(tester, 'Yahtzee');
+      await goToMode(tester, 1);
+      await tester.tap(
+        find.descendant(of: find.byKey(kCardPage), matching: find.text('3')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('(108 in the shoe)'), findsOneWidget);
+
+      await tester.longPress(find.byKey(kNewProfile));
+      await tester.pumpAndSettle();
+
+      // One thing to do to a profile that does not exist yet. The other three
+      // belong to a save, and there is no save here to do them to.
+      expect(find.text('Reset'), findsOneWidget);
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Rename'), findsNothing);
+      expect(find.text('Delete'), findsNothing);
+
+      await tapText(tester, 'Reset');
+
+      // Back to what the app opens at, both modes and the page it starts on.
+      expect(modeOf(tester), 0);
+      expect(rack(tester).length, kDefaultDice.length);
+      await goToMode(tester, 1);
+      expect(find.text('(72 in the shoe)'), findsOneWidget);
+      expect(find.text('<5%'), findsOneWidget);
+
+      // The save it was made from is untouched, and nothing is lit any more:
+      // what is on screen has come from no profile, which is what a first run
+      // looks like too.
+      expect(
+        profiles.saves.single.profile.groups[0].length,
+        kDefaultDice.length + 1,
+      );
+      expect(find.text('Roll Hippo'), findsOneWidget);
+      expect(find.text('Roll Hippo - Yahtzee'), findsNothing);
+    });
+
+    testWidgets('and leave the row alone if you think better of it', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      await addDie(tester);
+
+      await tester.longPress(find.byKey(kNewProfile));
+      await tester.pumpAndSettle();
+      // Out through the barrier, which is the way out of any of these menus.
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset'), findsNothing);
+      expect(rack(tester).length, kDefaultDice.length + 1);
+      expect(profiles.isEmpty, isTrue);
     });
 
     testWidgets('wrap rather than run off the side', (

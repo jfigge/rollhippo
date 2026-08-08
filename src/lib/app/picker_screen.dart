@@ -133,6 +133,20 @@ const List<DieSpec> kDefaultDice = <DieSpec>[
   DieSpec(kind: DieKind.d6, colour: kDiceWhite),
 ];
 
+/// An empty desk: the whole picker as the app opens it, both modes and all.
+///
+/// The state below starts here, [_PickerScreenState._reset] comes back to it,
+/// and the launch chooser's *+ New Profile* opens nothing precisely because the
+/// picker is already sitting at it. One constant for all three, so that
+/// starting again is the same set-up however you got there.
+const Profile kDefaultProfile = Profile(
+  mode: ProfileMode.dice,
+  groups: <List<DieSpec>>[kDefaultDice, <DieSpec>[], <DieSpec>[]],
+  colours: <int>[kDiceWhite, kDiceWhite],
+  decks: 2,
+  reshuffleAt: 5,
+);
+
 /// The groups worth throwing, deep-copied, in the order they were set up.
 ///
 /// An empty group is not a set you forgot to fill in, it is one you never
@@ -212,7 +226,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// The mode Roll will act on. Set the moment a swipe is committed to rather
   /// than when it lands, so the button and the dots agree with the box that is
   /// on its way in.
-  ProfileMode _mode = ProfileMode.dice;
+  ProfileMode _mode = kDefaultProfile.mode;
 
   bool get _cards => _mode == ProfileMode.cards;
 
@@ -224,7 +238,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// would have to be kept in step. Only the colours vary: every one of them
   /// is a D6, since a deck of every outcome only makes sense for dice that all
   /// have the same faces.
-  final List<int> _cardColours = <int>[kCardDie.colour, kCardDie.colour];
+  final List<int> _cardColours = List<int>.of(kDefaultProfile.colours);
 
   /// Which of them the swatches are pointed at, exactly as [_selectedIn] does
   /// for a group of real dice. Card mode always has at least one die, so this
@@ -232,8 +246,8 @@ class _PickerScreenState extends State<PickerScreen>
   int _cardSelected = 0;
 
   /// What the shoe is made of.
-  int _decks = 2;
-  int _reshuffleAt = 5;
+  int _decks = kDefaultProfile.decks;
+  int _reshuffleAt = kDefaultProfile.reshuffleAt;
 
   /// Which save the picker was last opened from or saved to, by id, or null
   /// when what is on screen has come from neither. It lights that profile; it does
@@ -369,8 +383,9 @@ class _PickerScreenState extends State<PickerScreen>
   /// Which profile to open, asked once, before anything has been touched.
   Future<void> _chooseAtLaunch() async {
     final SavedProfile? save = await showOpenProfileDialog(context);
-    // Null is New: the picker is already sitting at its defaults, which is
-    // exactly what a new profile is, so there is nothing to do.
+    // Null is New: the picker is already sitting at [kDefaultProfile], which is
+    // exactly what a new profile is, so there is nothing to do. [_reset] is the
+    // same state, reached later on.
     if (save == null || !mounted) return;
     _open(save);
   }
@@ -387,6 +402,24 @@ class _PickerScreenState extends State<PickerScreen>
     if (name == null || !mounted) return;
     final SavedProfile save = profiles.add(name, _capture());
     setState(() => _saved = save.id);
+  }
+
+  /// Back to the beginning — Reset, from the menu the dashed profile gives you
+  /// when you hold it down.
+  ///
+  /// [kDefaultProfile] is the set-up the app opens at, so this is the one way
+  /// back to an empty desk without closing the app: two white D6s in one set,
+  /// nothing in the other two, the shoe as it comes, and the dice page.
+  ///
+  /// Nothing is lit afterwards, and the title goes back to the plain one,
+  /// because what is on screen has come from no save — which is the same thing
+  /// a first run is, and the same thing the launch chooser's *+ New Profile*
+  /// leaves you looking at. It asks first about nothing at all, for the reason
+  /// [_apply] gives: what it replaces was either kept in a profile of its own
+  /// or was never named. The saves themselves are not touched.
+  void _reset() {
+    _apply(kDefaultProfile);
+    setState(() => _saved = null);
   }
 
   /// Something about the saves has changed — one renamed, one deleted.
@@ -689,6 +722,7 @@ class _PickerScreenState extends State<PickerScreen>
                     onOpen: _open,
                     onSave: _saveTo,
                     onNew: () => unawaited(_newSave()),
+                    onReset: _reset,
                   ),
                 ),
                 _rollButton(),

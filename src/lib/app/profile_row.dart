@@ -42,6 +42,12 @@ const double _kProfileEdge = 16;
 /// so, because nothing else on the screen can: the tap teaches itself and the
 /// hold does not.
 ///
+/// The dashed one at the end answers to both gestures too, and means the same
+/// thing by them: a tap keeps what is on screen as a profile of its own, and a
+/// hold asks what else — which for that one is Reset, the way back to the
+/// set-up the app opens at. So the hold is worth trying on anything in the row,
+/// which is the only way a gesture with nothing to advertise it gets found.
+///
 /// Nothing is written on its own. Editing the dice under an open profile changes
 /// the screen and not the save, until you hold a profile down and choose Save —
 /// which puts what is on screen into *that* profile, whichever one it is. So the
@@ -54,6 +60,7 @@ class ProfileRow extends StatelessWidget {
     required this.onOpen,
     required this.onSave,
     required this.onNew,
+    required this.onReset,
   });
 
   /// The id of the save the picker is currently showing, or null when what is
@@ -70,6 +77,11 @@ class ProfileRow extends StatelessWidget {
   /// The + New profile. The screen handles it rather than this widget, because
   /// making a save means capturing what the screen is set to.
   final VoidCallback onNew;
+
+  /// Reset, off that same profile's menu: put the picker back to the set-up the
+  /// app opens with. The screen handles it for the same reason — the thing
+  /// being reset is the screen, and this row is only where the gesture lands.
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +164,7 @@ class ProfileRow extends StatelessWidget {
                     onSave: () => onSave(save),
                     save: save,
                   ),
-                _NewProfile(key: kNewProfile, onTap: onNew),
+                _NewProfile(key: kNewProfile, onTap: onNew, onReset: onReset),
               ],
             );
           },
@@ -287,10 +299,18 @@ class _ProfileState extends State<_Profile> {
 /// other profile in the row is a thing that exists and can be opened; this one is
 /// the space for one that does not exist yet, drawn the way the rack draws the
 /// slot the next die lands in.
+///
+/// It carries the same pair of gestures as the profiles beside it, because it
+/// sits in their row and a hold that did nothing on one chip out of seven would
+/// read as the gesture having failed. A tap keeps what is on screen under a
+/// name; the hold has the one thing that belongs to no save — Reset, which puts
+/// the picker back to what the app opens with.
 class _NewProfile extends StatelessWidget {
-  const _NewProfile({super.key, required this.onTap});
+  const _NewProfile({super.key, required this.onTap, required this.onReset});
 
   final VoidCallback onTap;
+
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -299,6 +319,9 @@ class _NewProfile extends StatelessWidget {
       label: 'Save this profile',
       child: GestureDetector(
         onTap: onTap,
+        // The hold and the right click, both, exactly as a save answers them.
+        onLongPress: () => unawaited(_menu(context)),
+        onSecondaryTap: () => unawaited(_menu(context)),
         behavior: HitTestBehavior.opaque,
         child: CustomPaint(
           painter: const _DashedProfile(),
@@ -322,6 +345,24 @@ class _NewProfile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// A menu of one. Short because there is only one thing to do to a profile
+  /// that does not exist yet, and a menu rather than a second tap because the
+  /// row has taught the gesture already and starting over is not something to
+  /// hand to a finger that slipped.
+  Future<void> _menu(BuildContext context) async {
+    final _NewAction? action = await _showChipMenu<_NewAction>(
+      context,
+      <PopupMenuEntry<_NewAction>>[
+        _entry(_NewAction.reset, Icons.restart_alt, 'Reset'),
+      ],
+    );
+    if (action == null) return;
+    switch (action) {
+      case _NewAction.reset:
+        onReset();
+    }
   }
 }
 
@@ -378,12 +419,35 @@ class _DashedProfile extends CustomPainter {
 /// repeats the gesture that opened it has misunderstood what it is for.
 enum _ProfileAction { save, rename, delete }
 
-/// Puts the menu over the profile it was asked from.
+/// The dashed profile's one. An enum of a single value, rather than a bare
+/// bool, because the menu it comes out of is the same machinery as the one
+/// above and reads the same way at both ends.
+enum _NewAction { reset }
+
+/// What a hold on a save offers.
 Future<_ProfileAction?> _showProfileMenu(BuildContext context) {
+  return _showChipMenu<_ProfileAction>(
+    context,
+    <PopupMenuEntry<_ProfileAction>>[
+      _entry(_ProfileAction.save, Icons.save_outlined, 'Save'),
+      _entry(_ProfileAction.rename, Icons.edit_outlined, 'Rename'),
+      _entry(_ProfileAction.delete, Icons.delete_outline, 'Delete'),
+    ],
+  );
+}
+
+/// Puts a menu over the profile it was asked from, whichever profile that is.
+///
+/// One presenter for both, so that the dashed profile's menu cannot arrive as a
+/// different object to the one every other profile in the row puts up.
+Future<T?> _showChipMenu<T>(
+  BuildContext context,
+  List<PopupMenuEntry<T>> items,
+) {
   final RenderBox profile = context.findRenderObject()! as RenderBox;
   final RenderBox overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-  return showMenu<_ProfileAction>(
+  return showMenu<T>(
     context: context,
     position: RelativeRect.fromRect(
       Rect.fromPoints(
@@ -404,21 +468,16 @@ Future<_ProfileAction?> _showProfileMenu(BuildContext context) {
       borderRadius: BorderRadius.circular(14),
       side: const BorderSide(color: Color(0x14FFFFFF)),
     ),
-    items: <PopupMenuEntry<_ProfileAction>>[
-      _entry(_ProfileAction.save, Icons.save_outlined, 'Save'),
-      _entry(_ProfileAction.rename, Icons.edit_outlined, 'Rename'),
-      _entry(_ProfileAction.delete, Icons.delete_outline, 'Delete'),
-    ],
+    items: items,
   );
 }
 
-PopupMenuItem<_ProfileAction> _entry(
-  _ProfileAction action,
-  IconData icon,
-  String label,
-) {
+/// One line of it. Delete is the only entry that is red, and it is the only one
+/// that takes something away that cannot be got back — Reset drops what is on
+/// screen, which was either kept in a profile of its own or was never named.
+PopupMenuItem<T> _entry<T>(T action, IconData icon, String label) {
   final bool destructive = action == _ProfileAction.delete;
-  return PopupMenuItem<_ProfileAction>(
+  return PopupMenuItem<T>(
     value: action,
     height: 46,
     child: Row(
