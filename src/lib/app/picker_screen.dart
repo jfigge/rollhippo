@@ -109,8 +109,16 @@ const Key kCardPage = ValueKey<String>('card-page');
 /// slider too, and the picker is still built underneath it.
 const Key kReshuffleSlider = ValueKey<String>('reshuffle');
 
-/// The empty slot that takes the next die: the large plus drawn where that die
-/// would land, which is where adding one is done now that no button does it.
+/// The empty slot that takes the next die: the large plus, which is where
+/// adding one is done now that no button does it.
+///
+/// It is drawn in the *last* slot of the rack and stays there, rather than
+/// walking along behind the dice as they are added — a button that moves out
+/// from under the finger pressing it is a button that has to be chased. The
+/// die still lands in the first free slot; the plus says *add one*, not
+/// *here*. The last die is the one exception, because the only slot left for
+/// it is the plus's own: it arrives, the plus goes, and the plus is back the
+/// moment a die is taken off again.
 ///
 /// Every rack with room in it has one — both modes are built at once and the
 /// page view keeps more than one group built — so anything reaching for it has
@@ -952,6 +960,9 @@ class _PickerScreenState extends State<PickerScreen>
   /// deliberately a row of nothing rather than a row of empty slots: it is the
   /// space [_cardsPage] spends on a panel with a slider in it.
   Widget _cardRack() {
+    // The same plus the dice rack has, in the same place: the last slot of the
+    // three, until the third die lands in it.
+    final int adder = _cardDice < kMaxCardDice ? kMaxCardDice - 1 : -1;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: kRackMargin),
       child: Column(
@@ -976,23 +987,24 @@ class _PickerScreenState extends State<PickerScreen>
                           child:
                               i < kMaxCardDice
                                   ? _RackSlot(
-                                    key: i == _cardDice ? kAddDie : null,
+                                    key: i == adder ? kAddDie : null,
                                     spec: i < _cardDice ? _cardSpec(i) : null,
                                     selected: i == _cardSelected,
-                                    adds: i == _cardDice,
+                                    adds: i == adder,
                                     // Tappable, and selected the same way the
                                     // dice rack is: the swatches below are
                                     // about one die of the card, and this is
                                     // where you say which. There is still no
                                     // kind to choose — every card-mode die is
                                     // a D6 — so colour is all a tap can lead
-                                    // to here. The slot past the last die is
-                                    // the plus, and takes another; past three
-                                    // there is no slot at all.
+                                    // to here. The third slot is the plus and
+                                    // takes another die, until the third die
+                                    // is that slot; past three there is no
+                                    // slot at all.
                                     onTap:
                                         i < _cardDice
                                             ? () => _selectCardDie(i)
-                                            : i == _cardDice
+                                            : i == adder
                                             ? _addCardDie
                                             : null,
                                   )
@@ -1185,10 +1197,15 @@ class _PickerScreenState extends State<PickerScreen>
   /// have: they say how many more the tray will take, and — more usefully —
   /// they stop a die moving under your finger when you add another one. On an
   /// untouched group they are all there is, which is what an empty group ought
-  /// to look like: room for ten, and nothing in it.
+  /// to look like: room for ten, and nothing in it — with the plus at the far
+  /// end of them, where it stays.
   Widget _rack(int group) {
     final List<DieSpec> dice = _groups[group];
     final int selected = _selectedIn[group];
+    // Where the plus is: the last slot in the rack, for as long as the rack has
+    // room for another die. A full one has no plus at all — the tenth die is
+    // sitting in the slot it was drawn in — which [kAddDie] is the long form of.
+    final int adder = dice.length < kMaxDice ? kMaxDice - 1 : -1;
     return Padding(
       // The one key in the app. A page view is entitled to know which of its
       // children is which, and so is anything looking for a particular group's
@@ -1215,19 +1232,19 @@ class _PickerScreenState extends State<PickerScreen>
                         child: AspectRatio(
                           aspectRatio: 1,
                           child: _RackSlot(
-                            // The first empty slot is where another die would
-                            // go, so it is where you ask for one. A full rack
-                            // has no such slot, and that is the whole of the
-                            // limit: nothing to tap, and nothing greyed out
-                            // to explain why not.
-                            key: i == dice.length ? kAddDie : null,
+                            // The last slot is where you ask for another die,
+                            // and it is the same slot every time. A full rack
+                            // has no plus — that slot is a die now — and that
+                            // is the whole of the limit: nothing to tap, and
+                            // nothing greyed out to explain why not.
+                            key: i == adder ? kAddDie : null,
                             spec: i < dice.length ? dice[i] : null,
                             selected: i == selected,
-                            adds: i == dice.length,
+                            adds: i == adder,
                             onTap:
                                 i < dice.length
                                     ? () => _select(group, i)
-                                    : i == dice.length
+                                    : i == adder
                                     ? () => _addTo(group)
                                     : null,
                           ),
@@ -1412,9 +1429,9 @@ class _RackSlot extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
 
-  /// Whether this is the slot another die would land in — drawn as a plus the
-  /// size of the die that is about to be there, and the only empty slot in the
-  /// rack a tap does anything to. Never true of a slot that has a [spec].
+  /// Whether this is the slot the plus is drawn in — the last one in the rack,
+  /// for as long as the rack has room for another die, and the only empty slot
+  /// a tap does anything to. Never true of a slot that has a [spec].
   final bool adds;
 
   @override
