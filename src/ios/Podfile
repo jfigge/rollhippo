@@ -1,5 +1,15 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Stated here as well as in Runner.xcodeproj, and not redundantly. Left
+# commented — as the Flutter template leaves it — CocoaPods picks a floor of its
+# own for every pod that does not name one, and what the *app* declares in its
+# Info.plist stops being the whole answer to what the package supports. Naming
+# it makes one number govern both halves of the build.
+#
+# 15.0 because Apple requires it: an upload with a MinimumOSVersion below 15.0
+# is warned about now (altool 90068) and refused from Spring 2027. No dependency
+# forces it — mobile_scanner asks 12.0 and the highest of any plugin here is
+# shared_preferences_foundation at 13.0 — so this is Apple's floor rather than
+# ours, taken early because the alternative is taking it under a deadline.
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

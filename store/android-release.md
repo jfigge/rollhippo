@@ -198,10 +198,56 @@ The target refuses to run without `key.properties`, because the build would
 otherwise succeed, be signed with the debug key, and be rejected at the upload
 form an hour later.
 
-`versionCode` comes from the `+N` in `src/pubspec.yaml`, exactly as the iOS
-build number does. Play refuses a `versionCode` it has already seen, so a
-second upload means bumping it and rebuilding — the same ceremony as
-`make upload`.
+`versionCode` comes from the `+N` in `src/pubspec.yaml`. Play refuses a
+`versionCode` it has already seen, so a second upload means bumping it and
+rebuilding.
+
+**This is where the two stores stop behaving alike.** Flutter writes
+`manageAppVersionAndBuildNumber: true` into the `ExportOptions.plist` it
+generates, so on export Xcode asks App Store Connect what it already holds and
+numbers the IPA past it — the archive can say build 4 and the exported `.ipa`
+say 5. Play has no such courtesy: the number in the bundle is the number it
+compares, and a repeat is refused outright. So the `+N` in `pubspec.yaml` is a
+*floor* for iOS and an *exact value* for Android, and it is Android that
+decides when it has to move.
+
+### `make play-upload`
+
+```
+make play-upload                    # internal track
+make play-upload PLAY_TRACK=beta    # anything wider, deliberately
+```
+
+`bin/play_upload.py` talks to the Play Developer API directly — four requests,
+standard library only, with `openssl` for the one thing Python cannot do
+unaided: sign the service account's JWT with RS256. No fastlane, no Ruby, no
+`google-auth`, nothing installed to send one file.
+
+The API is transactional, and the script follows its shape: open an edit,
+upload the bundle, assign a track, commit. Nothing is visible on Play until the
+commit, so anything that fails before it leaves the listing exactly as it was.
+
+**Setting it up, once.** The credential is not an App Store Connect key with a
+different name — it is a *Google Cloud service account*, a robot user created
+in one console and granted permission in another:
+
+1. **Google Cloud Console** → the project linked to your Play account →
+   **IAM & Admin → Service Accounts → Create**. Name it anything; grant it no
+   project roles — the permission that matters is granted in Play, not here.
+2. On that account: **Keys → Add key → Create new key → JSON**. It downloads
+   once.
+3. Save it as **`keys/play-service-account.json`**. `keys/` is gitignored, so
+   it is covered the moment it lands.
+4. **Play Console → Users and permissions → Invite new user**, paste the
+   service account's email (`…@….iam.gserviceaccount.com`), and give it
+   **Release** permissions for Roll Hippo — at minimum *Release to testing
+   tracks*. Production needs its own box ticked, which is a good place for the
+   friction to be.
+
+⚠️ **The API will not accept an app's first bundle.** Google requires one
+manual upload through the Console before it answers at all, and until then it
+returns 403 no matter how the permissions are set. So the first release is a
+browser job whatever this script says; every one after it is `make play-upload`.
 
 ---
 
@@ -302,10 +348,17 @@ between them is one evening.
 - **CI still builds a debug-signed release APK, on purpose.** It proves AOT,
   R8, the pods and the merged manifest still work. It is not a shippable
   artefact and the workflow names it so nobody mistakes it for one.
-- **Nothing here uploads.** There is no `make` equivalent of `make upload` for
-  Play. The Console's web form is the whole path for a first submission;
-  automating it via the Play Developer API is worth doing only once the manual
-  route has been walked at least once.
+- **The first Play upload is a browser job no matter what `make play-upload`
+  says.** Google will not let the API deliver an app's first bundle, and says
+  so with a 403 that looks exactly like a permissions mistake — which is what
+  makes it worth writing down. The Console's form is the path for release one;
+  the target works from release two onwards.
+- **The two upload paths carry different secrets, from different issuers.**
+  `make upload` uses an App Store Connect key Apple issues (`keys/AuthKey_*.p8`,
+  ids in `release.env`). `make play-upload` uses a Google Cloud service account
+  (`keys/play-service-account.json`) that Google Cloud creates and the *Play*
+  Console separately grants. Neither console is where the other's credential
+  comes from, which is the part that catches people out.
 - **Android hardware is not one thing, and the accelerometer is the only part
   of it you can count on.** Anything reading a sensor has to survive that
   sensor being absent — not by testing for it, but by handling the stream

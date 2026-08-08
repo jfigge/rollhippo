@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ^3.7.2
@@ -57,8 +57,12 @@ dependencies:
 
   # Reads one back. This is the dependency with teeth: it is the camera, so it
   # is the reason `ios/Runner/Info.plist` carries NSCameraUsageDescription and
-  # the reason both Xcode projects had their deployment targets raised (iOS 15,
-  # macOS 10.15). See lib/app/scan_screen.dart.
+  # the reason macOS is built against 10.15. See lib/app/scan_screen.dart.
+  #
+  # It is no longer why iOS is at 15.0, though it once was. This package has
+  # since dropped its own floor to 12.0, and the highest any plugin here asks
+  # for is 13.0 — so what holds iOS at 15.0 now is Apple, which warns on an
+  # upload below it and refuses one from Spring 2027. See ios/Podfile.
   mobile_scanner: ^7.4.0
 
   # Remembers the haptic calibration between launches. The number was arrived

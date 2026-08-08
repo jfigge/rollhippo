@@ -47,8 +47,17 @@ IPA  ?= $(SRC)/build/ios/ipa/rollhippo.ipa
 KEYSTORE ?= $(KEYS)/rollhippo-upload.jks
 AAB      ?= $(SRC)/build/app/outputs/bundle/release/app-release.aab
 
+# `play-upload`. The service account's JSON key is the whole secret and lives
+# in keys/ with the others; the package name is not a secret and is the same
+# applicationId android/app/build.gradle.kts freezes. The track defaults to the
+# safest one there is — override it on the command line for anything wider, so
+# that reaching production is always something somebody typed.
+PLAY_KEY     ?= $(KEYS)/play-service-account.json
+PLAY_PACKAGE ?= com.rollhippo.rollhippo
+PLAY_TRACK   ?= internal
+
 .DEFAULT_GOAL := help
-.PHONY: help all ci format format-check analyze test desktop ios android ipa upload keystore aab gif filmstrip picker cards hippo screenshots screenshots-65 screenshots-play site icon clean
+.PHONY: help all ci format format-check analyze test desktop ios android ipa upload keystore aab play-upload gif filmstrip picker cards hippo screenshots screenshots-65 screenshots-play site icon clean
 
 help:  ## Show this help
 	@# firstword, not the whole list: `-include release.env` puts that file
@@ -329,9 +338,44 @@ aab:  ## Build the signed App Bundle for Play
 	  exit 1; }
 	cd $(SRC) && flutter build appbundle --release
 	@echo "→ $(AAB)"
-	@echo "  Play Console → Testing or Production → Create new release."
+	@echo "  'make play-upload' sends it, or upload it in the Console."
 	@echo "  Play refuses a versionCode it has already seen, exactly as"
 	@echo "  Connect refuses a build number: bump the +N in $(SRC)/pubspec.yaml."
+
+play-upload:  ## Send the built .aab to Play
+	@# The Android `upload`, and separate from `aab` for the reason that one
+	@# is separate from `ipa`: the bundle is worth keeping and worth re-sending,
+	@# and a transfer that fails at Google's end should not cost a rebuild.
+	@#
+	@# Where this differs from its Apple twin is the credential. altool takes a
+	@# key Apple issues for App Store Connect; Play wants a *Google Cloud
+	@# service account* — a robot user, created in a different console from the
+	@# one it acts on, and then granted release permission inside Play. Its JSON
+	@# key is the secret, and it is the only file needed here.
+	@#
+	@# The track is `internal` unless told otherwise: minutes rather than a
+	@# review, up to 100 testers, and no bearing on the closed-testing clock
+	@# that production access depends on. Widen it deliberately —
+	@#
+	@#     make play-upload PLAY_TRACK=beta
+	@#
+	@# — and note the API will not accept the *first* bundle for an app. Google
+	@# requires one manual upload through the Console before it will answer,
+	@# which is a 403 no permission fixes.
+	@test -f "$(PLAY_KEY)" || { \
+	  echo "make play-upload: no service account key at $(PLAY_KEY)"; \
+	  echo "  Google Cloud → IAM → Service Accounts issues it, and Play"; \
+	  echo "  Console → Users and permissions is where it is granted access."; \
+	  echo "  See store/android-release.md."; \
+	  exit 1; }
+	@test -f "$(AAB)" || { \
+	  echo "make play-upload: no bundle at $(AAB) — run 'make aab' first"; \
+	  exit 1; }
+	python3 bin/play_upload.py \
+	  --key "$(PLAY_KEY)" \
+	  --aab "$(AAB)" \
+	  --package "$(PLAY_PACKAGE)" \
+	  --track "$(PLAY_TRACK)"
 
 icon:  ## Draw the app icon, and both launch images, into the catalogues
 	@# Writes into the project, not /tmp: the files it makes are the icon.
