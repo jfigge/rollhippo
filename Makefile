@@ -92,7 +92,21 @@ ios:  ## Build and install on the iPhone
 	@# there is a feel judged against the wrong thing. `flutter run -d $(DEVICE)`
 	@# when hot reload is worth more than the feel being honest.
 	cd $(SRC) && flutter build ios --profile
-	cd $(SRC) && flutter install -d $(DEVICE) --profile
+	@# `devicectl`, and not `flutter install`, because that one takes the old
+	@# copy off the phone before it puts the new one on — `installApp(...,
+	@# uninstall: true)` in the tool's own `install.dart`, with no flag to stop
+	@# it; `--uninstall-only` is the other direction. On iOS removing an app
+	@# removes its container, and the container is where `NSUserDefaults` lives,
+	@# which is where `ProfileStore` keeps every save. So a build installed that
+	@# way arrives on a phone with no profiles on it, every time, and it looks
+	@# like the app forgetting rather than the Makefile deleting.
+	@#
+	@# Installing over the top is what a TestFlight or App Store update does,
+	@# and it is what this does. `flutter run -d $(DEVICE) --profile` is safe
+	@# for the same reason — its `uninstallFirst` defaults to false — and is
+	@# the thing to reach for when hot reload is worth more than the feel.
+	xcrun devicectl device install app --device $(DEVICE) \
+	  $(SRC)/build/ios/iphoneos/Runner.app
 
 android:  ## Build and install on the Android phone
 	@# --profile for exactly the reason `ios` is: the solver runs in Dart on
@@ -105,6 +119,13 @@ android:  ## Build and install on the Android phone
 	@# then cheerfully uninstall Roll Hippo from the phone to make room for a
 	@# build that was never going to run on it. So: ask for an Android one by
 	@# name, and stop if there is not one.
+	@#
+	@# And then `adb install -r` rather than `flutter install`, for the reason
+	@# `ios` gives: `flutter install` uninstalls first whatever the platform,
+	@# and an uninstalled Android app takes its `shared_preferences` XML with
+	@# it. `-r` is a reinstall that keeps the data, and it needs the new APK to
+	@# be signed with the same key as the one already there — which for two
+	@# builds off this machine it is.
 	@id=$${ANDROID_DEVICE:-$$(cd $(SRC) && flutter devices --machine | python3 -c \
 	    "import json,sys; d=[x for x in json.load(sys.stdin) if str(x.get('targetPlatform','')).startswith('android')]; print(d[0]['id'] if d else '')")}; \
 	  if [ -z "$$id" ]; then \
@@ -114,7 +135,8 @@ android:  ## Build and install on the Android phone
 	    exit 1; \
 	  fi; \
 	  echo "installing to $$id"; \
-	  cd $(SRC) && flutter install -d "$$id" --profile
+	  adb -s "$$id" install -r \
+	    $(SRC)/build/app/outputs/flutter-apk/app-profile.apk
 
 gif:  ## Render a scripted roll to an animated GIF
 	@mkdir -p $(SCRATCH)

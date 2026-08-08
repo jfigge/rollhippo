@@ -6,6 +6,7 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import '../cards/deck.dart';
 import '../tray/tray.dart';
+import 'hippo.dart';
 import 'tray_painter.dart';
 
 /// The stock a card is printed on. What the dice on it are printed in is not a
@@ -68,10 +69,20 @@ const double _kRuleLine = 0.007;
 const double _kCornerInset = 0.090;
 const double _kCornerPip = 0.036;
 
-/// The back's own middle: the outlined diamond, and the filled one inside it.
-/// The face has nothing there because the dice go there.
-const double _kBackDiamond = 0.174;
-const double _kBackPip = 0.079;
+/// The back's own middle: the hippopotamus, as a fraction of a card's width
+/// from the tip of its tail to the tip of its nose. The face has nothing there
+/// because the dice go there.
+///
+/// Two thirds of the card, which is far larger than the diamond that used to
+/// stand here and has to be. A diamond is legible at any size because it is a
+/// diamond; an animal has two eyes, two ears, four feet and a mouth, and below
+/// about this it stops being a hippopotamus and becomes a smudge with a nose.
+///
+/// It is the *width* rather than the height because the animal is half again
+/// as long as it is tall, so what stops this growing is the two corner pips it
+/// would run into — not the top and bottom of the card, which have room to
+/// spare.
+const double _kBackHippo = 0.66;
 
 /// How far in from the edge the printed dice keep, as a fraction of a card's
 /// width.
@@ -158,10 +169,18 @@ void paintCardScene(Canvas canvas, Size size, CardTable table) {
 /// Each side is drawn the right way up in its own frame rather than mirrored
 /// through the stock, which is what a real card is: two designs printed on
 /// opposite faces of one piece of card, each the right way round from the only
-/// place it can be seen from. Turning a card end over end like this comes out
-/// right only because the back is symmetric about both of its axes — an
-/// asymmetric back would arrive upside down, which is a good part of why the
-/// backs of real cards are the designs they are.
+/// place it can be seen from. It is the *face* that this is a lie about, and
+/// deliberately: a card turned end over end really does arrive upside down,
+/// and drawing it that way would hand the player a card they had to tilt their
+/// head at. Court cards are double-headed for the same reason, and a card of
+/// dice is symmetric enough to get away with it.
+///
+/// The back needs no such licence, and this is why it is allowed to carry an
+/// animal that has a right way up. [squash] is the cosine of the turn, so the
+/// back is drawn for the first quarter of it and no further — and through that
+/// quarter a real card rotating about its own left-to-right axis keeps its top
+/// edge on top. What is drawn is what would be there. The face takes over at
+/// exactly the angle where that stops being true.
 void _paintFlight(
   Canvas canvas,
   TrayCamera camera,
@@ -329,11 +348,17 @@ Vector3 _pileTop(CardTable table) => Vector3(
 
 /// The top of the pile: the back of a card.
 ///
-/// Navy, ruled in gold, with a diamond in the middle and a smaller one in each
-/// corner — which is what the back of a playing card has looked like since
-/// somebody worked out that a plain one shows every crease. Nothing here is
-/// asymmetric: a back has to look the same whichever way up the card is dealt,
-/// and a diamond is the shape that manages it about both axes at once.
+/// Navy, ruled in gold, with a small diamond in each corner — which is what
+/// the back of a playing card has looked like since somebody worked out that a
+/// plain one shows every crease — and the hippopotamus in the middle of it.
+///
+/// The animal is the one thing on either side of a card that is not symmetric
+/// about both of its axes, and a real deck could not have it: turn one of
+/// these cards end over end and its back would be standing on its head, which
+/// is a mark, and a marked back is a deck you can read from behind. It is free
+/// here for the reason given at [_paintFlight] — the back is on screen only
+/// for the first quarter of the turn, where a real card's back is still the
+/// right way up, and the pile is drawn upright because it is a pile.
 ///
 /// Drawn in the card's own millimetres and scaled into place, so the design
 /// holds together at whatever size the pile happens to be seen at.
@@ -372,13 +397,26 @@ void _paintBack(
   final Paint gold = _rulePaint(_cardGold);
   _paintRule(canvas, card, gold);
 
-  // And the middle, which is the back's alone: one diamond drawn, one filled
-  // inside it.
-  canvas.drawPath(_diamond(Offset.zero, w * _kBackDiamond), gold);
-  canvas.drawPath(
-    _diamond(Offset.zero, w * _kBackPip),
-    Paint()..color = _cardGoldDeep,
-  );
+  // And the middle, which is the back's alone: the animal, in one fine gold
+  // line, and the one thing on the card that is filled rather than drawn for
+  // its eye.
+  //
+  // Drawn with the rule's own pen — the same gold at the same weight — so the
+  // border and the hippopotamus read as one printing rather than as a picture
+  // somebody put inside a frame. Rounded at the joins and the ends, which the
+  // rule has no use for and an animal does: a mitre on the point of an ear or
+  // the heel of a foot puts a spur on it at this line width.
+  final HippoDrawing hippo = HippoDrawing(width: w * _kBackHippo);
+  final Paint pen =
+      _rulePaint(_cardGold)
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+  canvas.drawPath(hippo.outline, pen);
+  canvas.drawPath(hippo.lines, pen);
+  final Paint pupil = Paint()..color = _cardGoldDeep;
+  for (final Offset eye in hippo.eyes) {
+    canvas.drawCircle(eye, hippo.eyeRadius, pupil);
+  }
 
   canvas.restore();
 }

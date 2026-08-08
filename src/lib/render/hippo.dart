@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show Offset, Path;
 
 import 'package:vector_math/vector_math_64.dart';
 
@@ -289,3 +290,279 @@ double hippoReach(Vector3 n) {
   }
   return best;
 }
+
+/// The animal in one line, for printing on something flat.
+///
+/// The same hippopotamus as [kHippo] — the barrel that is mostly belly, the
+/// head carried low and the legs that are almost an afterthought — but drawn
+/// from a picture rather than derived from the lumps, and it does one thing
+/// the lumps cannot: it turns its head. The die's hippopotamus is in strict
+/// profile because a box has no other view; this one is three quarters on, so
+/// both eyes, both ears and both nostrils are in it, and that is most of what
+/// makes it read as an animal looking back at you rather than as a silhouette.
+///
+/// It faces −x. The rest of this file has the animal's nose along +z and would
+/// have put it the other way round, and the reason it does not is that the
+/// drawing this was taken from faces left and a card back is a picture before
+/// it is a coordinate system.
+///
+/// It is not a hull, and nothing here is held to the cube the way [kHippo] is:
+/// nothing collides with this and no floor comes up to meet it. That is what
+/// buys the ears, the toes, the tail and the face.
+///
+/// What it leaves out is everything the card has no room for. At the size this
+/// prints — a little over half a card wide, which is ninety-odd pixels on a
+/// phone — a wrinkle is a smudge and a freckle is nothing at all. Every line
+/// below earns its place by still being legible there.
+class HippoDrawing {
+  /// The animal [width] wide from its nose to its rump, centred on the origin,
+  /// in a frame where +y is up.
+  ///
+  /// Up, rather than down, because that is the frame the rest of this file is
+  /// written in and a drawing of the animal that ran the other way to the
+  /// model of it would be a trap. A canvas whose y runs down has to turn it
+  /// over — which is one `scale(1, -1)`, and is what the card back does anyway
+  /// to get into a card's own millimetres.
+  factory HippoDrawing({required double width}) {
+    // One transform rather than a scale factor threaded through two hundred
+    // coordinates: the drawing below is written once, in its own units, and
+    // moved into place afterwards. Set entry by entry, like the numeral
+    // placement in `tray_painter.dart` — this is a uniform scale and a shift
+    // along one axis, and spelling it out is shorter than composing it.
+    final double scale = width / _kDrawingWidth;
+    final Matrix4 into =
+        Matrix4.identity()
+          ..setEntry(0, 0, scale)
+          ..setEntry(1, 1, scale)
+          ..setEntry(1, 3, -scale * _kDrawingCentre);
+    return HippoDrawing._(
+      _outline().transform(into.storage),
+      _lines().transform(into.storage),
+      <Offset>[
+        for (final List<double> eye in _kEyes)
+          Offset(eye[0] * scale, (eye[1] - _kDrawingCentre) * scale),
+      ],
+      _kEyeRadius * scale,
+    );
+  }
+
+  const HippoDrawing._(this.outline, this.lines, this.eyes, this.eyeRadius);
+
+  /// The whole animal, closed: muzzle, both ears, the back, the rump, and the
+  /// two legs on this side of it.
+  final Path outline;
+
+  /// Everything else, as open strokes in the same pen — the two legs on the far
+  /// side, the crease where the head meets the shoulder, the jaw, the line
+  /// round the muzzle, the mouth, the nostrils, the toes and the tail.
+  ///
+  /// One path rather than a dozen, because they are all drawn identically and
+  /// a `Path` holds as many subpaths as it likes. Naming each of them would be
+  /// naming the same `drawPath` twelve times.
+  final Path lines;
+
+  /// Where the two eyes go, and how big they are — spots rather than paths,
+  /// because they are the one thing on the animal that is filled. Two of them,
+  /// which is the whole point of turning the head.
+  final List<Offset> eyes;
+  final double eyeRadius;
+}
+
+/// How wide the drawing below is written, in its own units, and where the
+/// middle of its height falls — the numbers it is centred and scaled by.
+///
+/// Nose to rump is exactly two, so [_kDrawingWidth] is what a caller's `width`
+/// buys. The height is whatever the animal came to, which is a little over
+/// two thirds of that: a hippopotamus is a long low thing, and the reason this
+/// is stated rather than measured is that `Path.getBounds` counts control
+/// points, and half the control points here are outside the ink.
+const double _kDrawingWidth = 2.0;
+const double _kDrawingCentre = -0.01;
+
+/// The eyes: on the forehead, above the muzzle and clear of it. A hippopotamus
+/// carries them on top of its skull rather than in the sides of it, and on a
+/// head turned three quarters on that puts both of them in view with the whole
+/// snout below.
+///
+/// Two numbers each rather than an `Offset`, because an `Offset` is not const
+/// enough to sit in a table like this one.
+const List<List<double>> _kEyes = <List<double>>[
+  <double>[-0.85, 0.33],
+  <double>[-0.50, 0.31],
+];
+const double _kEyeRadius = 0.038;
+
+/// The silhouette, clockwise from the tip of the nose: up the front of the
+/// face, over both ears, along the back, down the rump, and forward again
+/// under the animal past the two legs on this side of it.
+Path _outline() =>
+    Path()
+      // Up the front of the face, which on a hippopotamus is very nearly
+      // vertical and very nearly flat.
+      ..moveTo(-1.00, 0.02)
+      ..cubicTo(-1.01, 0.18, -0.98, 0.30, -0.93, 0.37)
+      // The brow over the near eye, and then the near ear: small, round, and
+      // set on the very top of the skull where the animal keeps them.
+      ..cubicTo(-0.92, 0.40, -0.91, 0.43, -0.90, 0.45)
+      ..cubicTo(-0.89, 0.56, -0.86, 0.63, -0.82, 0.63)
+      ..cubicTo(-0.78, 0.63, -0.75, 0.55, -0.74, 0.47)
+      // The dip between the ears, and the far one. The far ear is smaller and
+      // sits lower, which is the whole of what says the head is turned.
+      ..cubicTo(-0.68, 0.45, -0.60, 0.45, -0.52, 0.47)
+      ..cubicTo(-0.50, 0.54, -0.46, 0.59, -0.42, 0.59)
+      ..cubicTo(-0.38, 0.59, -0.34, 0.53, -0.32, 0.47)
+      // Up over the shoulder and along the back, which is the highest line on
+      // the animal and rises a little past the ears before it turns over.
+      ..cubicTo(-0.18, 0.56, -0.02, 0.64, 0.16, 0.67)
+      ..cubicTo(0.34, 0.69, 0.56, 0.66, 0.72, 0.55)
+      // The rump, which is where a hippopotamus is roundest.
+      ..cubicTo(0.80, 0.46, 0.89, 0.28, 0.90, 0.06)
+      ..cubicTo(0.92, -0.10, 0.91, -0.24, 0.89, -0.34)
+      // The near hind leg: down the back of it, round the foot, up the front.
+      ..cubicTo(0.92, -0.46, 0.91, -0.56, 0.90, -0.64)
+      ..cubicTo(0.86, -0.69, 0.78, -0.69, 0.74, -0.64)
+      ..cubicTo(0.73, -0.54, 0.72, -0.44, 0.70, -0.38)
+      // The belly, which sags between the legs. This is the line that stops
+      // the animal reading as a dog.
+      ..cubicTo(0.48, -0.44, 0.20, -0.47, -0.04, -0.42)
+      // The near foreleg, the same way round.
+      ..cubicTo(-0.06, -0.50, -0.08, -0.58, -0.09, -0.66)
+      ..cubicTo(-0.13, -0.71, -0.21, -0.71, -0.25, -0.66)
+      ..cubicTo(-0.26, -0.56, -0.27, -0.46, -0.28, -0.40)
+      // The chest, and then the underside of the jaw — the deepest part of the
+      // head, and most of what makes this a hippopotamus rather than a pig.
+      ..cubicTo(-0.40, -0.34, -0.50, -0.28, -0.58, -0.26)
+      ..cubicTo(-0.72, -0.25, -0.86, -0.24, -0.94, -0.18)
+      ..cubicTo(-0.99, -0.14, -1.00, -0.06, -1.00, 0.02)
+      ..close();
+
+/// Everything that is not the silhouette, in one path.
+Path _lines() {
+  final Path path = Path();
+
+  // Inside each ear, the fold that says it is an ear and not a bump.
+  path
+    ..moveTo(-0.855, 0.480)
+    ..cubicTo(-0.845, 0.540, -0.825, 0.565, -0.805, 0.555)
+    ..moveTo(-0.475, 0.495)
+    ..cubicTo(-0.465, 0.535, -0.450, 0.555, -0.430, 0.548);
+
+  // The crease where the head stops and the shoulder starts. A hippopotamus
+  // has no neck, so this is the only thing that separates the two, and without
+  // it the head is simply the front of the body.
+  path
+    ..moveTo(-0.30, 0.46)
+    ..cubicTo(-0.20, 0.30, -0.13, 0.10, -0.14, -0.08)
+    ..cubicTo(-0.15, -0.22, -0.20, -0.32, -0.28, -0.38);
+
+  // The muzzle, and it is the whole of the face. A hippopotamus's snout is a
+  // rounded lump stuck on the front of its head, so the line that cuts it off
+  // is a shallow arc that turns *down* and back at the far end — a lobe, with
+  // no corner anywhere in it. Drawn as a straight band across the face with a
+  // corner at the end it reads as a strap buckled round the animal's nose,
+  // which is what it did until this was written properly.
+  //
+  // It starts high on the front of the face and finishes on the jaw, so the
+  // snout is a closed shape rather than a mark that stops in mid-air.
+  //
+  // There is no cheek line under the far ear, which the drawing this came from
+  // has. Three curves down one side of a head is one more than this size can
+  // hold: at ninety pixels they stop being a jaw and become hatching, and this
+  // is the one that has to survive.
+  path
+    ..moveTo(-0.99, 0.20)
+    ..cubicTo(-0.86, 0.18, -0.72, 0.15, -0.58, 0.11)
+    ..cubicTo(-0.48, 0.08, -0.42, -0.01, -0.42, -0.12)
+    ..cubicTo(-0.42, -0.22, -0.43, -0.28, -0.45, -0.30);
+
+  // The mouth, which hugs the jaw rather than crossing the face. On a
+  // hippopotamus the mouth *is* the bottom of the snout — it runs a whisker
+  // above the chin, roughly parallel to it. Anywhere higher and it is a second
+  // muzzle line.
+  //
+  // It stops short of the chin at both ends rather than running the whole
+  // width. Carried right out to the front of the face it converges with the
+  // jaw into a long thin sliver, which reads as a zip rather than a mouth, and
+  // the gap it leaves at the front is the lip.
+  path
+    ..moveTo(-0.90, -0.13)
+    ..cubicTo(-0.82, -0.17, -0.72, -0.19, -0.62, -0.19);
+
+  // The nostrils: two curls high on the snout, not two dots. A dot is a stud;
+  // the curl is what a hippopotamus has. One shape placed twice rather than
+  // two written out, because two hand-drawn approximations of the same curl
+  // come out as two different marks, and at this size the second one stops
+  // reading as a nostril and starts reading as a question mark.
+  for (final List<double> nostril in _kNostrils) {
+    path
+      ..moveTo(nostril[0] - 0.039, nostril[1] + 0.013)
+      ..cubicTo(
+        nostril[0] - 0.013,
+        nostril[1] + 0.062,
+        nostril[0] + 0.042,
+        nostril[1] + 0.029,
+        nostril[0] + 0.018,
+        nostril[1] - 0.023,
+      );
+  }
+
+  // The two legs on the far side, drawn as far as they are visible: down the
+  // back, round the foot, and up the front, stopping where the body covers
+  // them. Open strokes rather than part of the silhouette, because that is
+  // what standing behind something looks like.
+  path
+    ..moveTo(-0.34, -0.40)
+    ..cubicTo(-0.36, -0.52, -0.37, -0.60, -0.38, -0.66)
+    ..cubicTo(-0.42, -0.70, -0.50, -0.70, -0.54, -0.66)
+    ..cubicTo(-0.55, -0.58, -0.55, -0.50, -0.54, -0.44)
+    ..moveTo(0.62, -0.40)
+    ..cubicTo(0.60, -0.52, 0.59, -0.60, 0.58, -0.66)
+    ..cubicTo(0.54, -0.70, 0.46, -0.70, 0.42, -0.66)
+    ..cubicTo(0.41, -0.58, 0.41, -0.50, 0.42, -0.44);
+
+  // Toes. Two strokes to a foot, which is three toes, which is what a
+  // hippopotamus stands on. Short, because at this size a long one closes the
+  // foot up into a grid.
+  for (final List<double> foot in _kFeet) {
+    for (final double side in <double>[-1, 1]) {
+      path
+        ..moveTo(foot[0] + side * 0.030, foot[1])
+        ..lineTo(foot[0] + side * 0.026, foot[1] + 0.055);
+    }
+  }
+
+  // The tail: thin, hanging down the back of the rump, with the tuft on the
+  // end that is the only part of one anybody ever draws.
+  //
+  // It stands further off the rump than the drawing this came from puts it,
+  // where the two lines very nearly touch. At this size very nearly touching
+  // is one thick line, and the tail disappears into the animal.
+  path
+    ..moveTo(0.86, 0.34)
+    ..cubicTo(0.94, 0.26, 0.98, 0.12, 0.98, -0.02)
+    ..moveTo(0.98, -0.02)
+    ..lineTo(0.94, -0.13)
+    ..moveTo(0.98, -0.02)
+    ..lineTo(0.98, -0.15)
+    ..moveTo(0.98, -0.02)
+    ..lineTo(1.00, -0.12);
+
+  return path;
+}
+
+/// Where each nostril sits on the snout, well clear of the muzzle line above
+/// it and the mouth below.
+const List<List<double>> _kNostrils = <List<double>>[
+  <double>[-0.90, 0.04],
+  <double>[-0.68, 0.00],
+];
+
+/// The middle of each foot, at the sole. The toe strokes run *up* from here
+/// into the foot: a hippopotamus's toes are divisions in the front of it, and
+/// the same strokes drawn downwards are claws on a cat.
+const List<List<double>> _kFeet = <List<double>>[
+  <double>[-0.17, -0.685],
+  <double>[-0.46, -0.685],
+  <double>[0.50, -0.685],
+  <double>[0.82, -0.685],
+];

@@ -34,8 +34,8 @@ Run from the repo root:
 | `make picker` | render the picker — both modes, its saves, the chooser, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
 | `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders, and both platforms' launch images with it — writes into the project, not `/tmp`. The XML beside the rasters is structure, not drawing, and is not regenerated: the adaptive icon's two files, `LaunchScreen.storyboard`, and Android's `launch_background.xml` and `styles.xml`, which only place the launch image and paint the picker's colour behind it |
-| `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel |
-| `make android` | `--profile` for exactly the same reason. On either platform, `flutter run -d <id>` when hot reload is worth more than the feel |
+| `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel. Installs with `xcrun devicectl`, **never `flutter install`** — that one uninstalls the old copy first and cannot be told not to, and an uninstalled iOS app takes its container, its `NSUserDefaults` and so every saved profile with it |
+| `make android` | `--profile` for exactly the same reason, and `adb install -r` for the other one — same trap, same cost, `shared_preferences`' XML instead of `NSUserDefaults`. On either platform, `flutter run -d <id>` when hot reload is worth more than the feel; `run` installs over the top, which is why it is safe |
 | `make ipa` | `--release`, and signed — the build that goes to App Store Connect. Needs the Apple Distribution certificate in the keychain |
 | `make upload` | send that archive to App Store Connect. The key id and issuer come from `release.env`, the `.p8` itself from `keys/`, and both are gitignored — together they are the whole of what a new machine needs before it can ship. `--apiKey` takes the key's *id*, never a path: altool builds `AuthKey_<id>.p8` itself and hunts for it in four fixed directories, which `API_PRIVATE_KEYS_DIR` replaces. Connect refuses a build number it has already seen, so a second upload means bumping the `+N` in `pubspec.yaml` and rebuilding |
 | `make screenshots` | render the store listing and the website's pictures. Writes into the *project*, like `make icon`: `appstore/` is framed and captioned at Apple's exact 1290 × 2796 and is what you upload, `website/images/screens/` is the bare screen at half that and is what the site and the guide are built from, and `website/images/hero.png` and `og.png` are composed from those |
@@ -67,7 +67,8 @@ src/lib/motion/    MotionSource — the sensors, a synthetic phone for the harne
                    (StillMotionSource) for when motion control is switched off
 src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable · Deal
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
-                   hippo (the animal, in lumps — a picture, not a body)
+                   hippo (the animal twice over: in lumps for the die, and in one line
+                   for the back of a card — neither of them a body)
 src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
                    haptics (HapticEngine + HapticDriver) · settings (haptic gain · motion control)
@@ -288,6 +289,19 @@ test exists to make the change deliberate, not to make it hard.
   needs its head. The kind itself is never withheld, so a save or a share code holding
   one still opens; what is withheld is the chip, which `PickerScreen` only
   offers when the open profile is named `kHippoProfile`.
+
+  `HippoDrawing`, in the same file, is the *other* hippopotamus: the same
+  animal in one gold line, and it is what is printed in the middle of a card
+  back. It is not held to the cube, because nothing collides with a card, and
+  it is not derived from the lumps either — it is drawn, three quarters on,
+  which is the one view a box cannot give. That is what buys it two eyes, two
+  ears, two nostrils, toes and a tail, none of which the die's hippopotamus
+  can afford. It is also
+  the only thing on either side of a card that is not symmetric about both of
+  its axes, and `_paintFlight` in `card_painter.dart` is where that is paid
+  for: the back is drawn only through the first quarter of a card's turn,
+  which is exactly the part where a real card's back is still the right way
+  up.
 
 - **A held die keeps the face *index* it was read at**, in `DiceTray.held`.
   Reading one live is reading it against a gravity that has nothing to do with
