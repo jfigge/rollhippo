@@ -454,17 +454,31 @@ void main() {
   }
 }
 
-/// One shot, as a test.
+/// One shot, as a test, starting from an empty desk.
 ///
-/// The wrapper exists for one line of it. `debugDefaultTargetPlatformOverride`
-/// puts the app on iOS, which is what stops `letterbox()` shrinking the screen
-/// into `kHarnessScreen` and lets it lay out at the phone geometry the capture
-/// claims to be — but the test framework checks after EVERY test body that no
-/// foundation debug variable was left set, and it checks before `tearDown`
-/// runs. So the reset has to happen inside the body, which means it has to
-/// happen in a `finally`, which means it has to happen here.
+/// The wrapper exists for the clearing. [profiles] is one store for the whole
+/// process — the app has exactly one and so does a `flutter test` run of it —
+/// and nothing empties it between tests, so every save a capture makes is
+/// still there for the next one. That is not merely untidy: capture 05 seeds
+/// five profiles and capture 06 wants a screen with one Yahtzee on it, so
+/// without this the second Yahtzee joins the first and `find.text('Yahtzee')`
+/// has two answers where `longPress` needs one. The whole run then fails on
+/// 06 — *after* the five before it have already been written over the ones in
+/// the project, and with capture 07 going on to compose the hero out of five
+/// fresh pictures and one stale one.
+///
+/// So each capture starts from nothing, which is also what each of them
+/// describes: they set up the screen they are a picture of, and none of them
+/// means "and whatever the last one left lying about". Cleared going in rather
+/// than coming out, because the state that matters is the state a body starts
+/// with — a capture added at the end of the file would otherwise be the one
+/// that inherits everything.
 void _capture(String name, Future<void> Function(WidgetTester tester) body) {
   testWidgets(name, (WidgetTester tester) async {
+    // `saves` hands back a copy, so removing as we go is safe.
+    for (final SavedProfile save in profiles.saves) {
+      profiles.remove(save.id);
+    }
     await body(tester);
   });
 }
