@@ -189,7 +189,7 @@ screenshots:  ## Render the store listing's screenshots, and the site's gallery
 	@echo "  Play needs its own set — run 'make screenshots-play' too."
 
 screenshots-65:  ## Render the listing again, for Apple's second iPhone slot
-	@# The same six captures at 414x896 and 3x, which is 1242x2688 — the 6.5"
+	@# The same seven captures at 414x896 and 3x, which is 1242x2688 — the 6.5"
 	@# slot. Apple requires only the 6.9" set `screenshots` makes and scales
 	@# it down itself for everything smaller, so this is optional; what it
 	@# buys is that a listing read on a 6.5" phone shows these untouched
@@ -217,7 +217,7 @@ screenshots-play:  ## Render the listing for Play, which will not take Apple's
 	@# composed from the website's copy of the first capture, which the 6.9"
 	@# run is what writes — the tool says so plainly if it is missing.
 	cd $(SRC) && APPSTORE_OUT=$(CURDIR) APPSTORE_SLOT=play flutter test tool/appstore.dart
-	@echo '→ appstore/play/  (the six, plus the feature graphic, for Play)'
+	@echo '→ appstore/play/  (the seven, plus the feature graphic, for Play)'
 
 site:  ## Copy the site into hippoherd's Roll Hippo page
 	@# Roll Hippo has no site of its own. hippoherd.com/rollhippo IS its site,

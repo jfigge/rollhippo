@@ -12,6 +12,7 @@ import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
+import 'package:rollhippo/app/tutorial.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/render/tray_painter.dart';
 import 'package:rollhippo/tray/tray.dart';
@@ -39,13 +40,27 @@ import 'package:rollhippo/tray/tray.dart';
 ///                             Written by the 6.9" run only — the site wants
 ///                             one set of pictures, not one per slot.
 ///   `appstore/play/`          Play's own upload, and its own slot. The same
-///                             six captures on a wider frame, because Play
+///                             seven captures on a wider frame, because Play
 ///                             refuses anything more than twice as long as it
 ///                             is wide and a modern phone is 2.167; plus the
 ///                             1024 × 500 feature graphic, which is the one
 ///                             thing Play asks for that Apple has no
 ///                             equivalent of. Everything here is written
 ///                             without an alpha channel. See [kSlotPlay].
+///
+/// TO RE-RENDER ONE SHOT AND NOT THE REST, name it:
+///
+///     APPSTORE_OUT=<repo root> flutter test tool/appstore.dart \
+///       --plain-name '07 · the tutorial'
+///
+/// Worth knowing because the dice are not seeded. A tray's `Random` is a fresh
+/// one every run, so every capture with dice in it comes out a different roll
+/// — which is the honest thing for a tool that photographs a simulation to do,
+/// and means a full run rewrites all seven files in a directory the project
+/// commits. Naming one leaves the other six byte-for-byte where they were.
+/// Only the composites care about their neighbours: the hero is built from
+/// three of the web-sized files, so a run that skips those and rebuilds it
+/// would compose new pictures with old ones.
 ///
 /// WHY THE FONTS ARE LOADED BY HAND. `flutter test` substitutes a font with no
 /// glyphs in it, which is why the sibling tools in this directory all note that
@@ -173,7 +188,7 @@ const Slot kSlot65 = Slot(
 /// it.
 ///
 /// Neither is a reason to capture the app again. The screen is identical — the
-/// same phone, the same safe area, the same six shots — and what changes is
+/// same phone, the same safe area, the same seven shots — and what changes is
 /// only the mount: the canvas widens by 110 pixels either side of a phone that
 /// stays exactly where it was, which takes the ratio to 1.997 and is invisible
 /// next to the Apple version. So this slot deliberately shares [kSlot69]'s
@@ -233,7 +248,7 @@ const String _kWebDir = 'website/images/screens';
 /// Where the things only Play asks for land.
 ///
 /// Separate from [Slot.dir] because they are not screenshots and do not belong
-/// in a slot: Play takes the same six captures Apple does, and then asks for
+/// in a slot: Play takes the same seven captures Apple does, and then asks for
 /// one more picture that Apple has no equivalent of. Keeping it out of
 /// `appstore/` also keeps that directory what its own comment says it is —
 /// the set you drag into a screenshot form, all the same size.
@@ -434,14 +449,49 @@ void main() {
     );
   });
 
+  _capture('07 · the tutorial', (WidgetTester tester) async {
+    await _view(tester);
+
+    // One save behind it, so the row of profiles in the backdrop is a row
+    // somebody has used rather than a lone dashed outline. The tour builds its
+    // own dice and its own shoe to demonstrate with, but the profiles it shows
+    // are the real ones — see `tutorial.dart`.
+    profiles.add('Yahtzee', _saved(5));
+
+    // `tutorial: true` is what `main` passes on a launch that has never shown
+    // it, and the only thing that puts the tour up unasked.
+    await tester.pumpWidget(_app(const PickerScreen(tutorial: true)));
+    await tester.pumpAndSettle();
+
+    // Settled rather than pumped a fixed number of times, unlike the tray and
+    // the card table: nothing behind either of the first two cards is ticking.
+    // The tour builds its tray on the fifth card and not before, which is a
+    // decision made for the phone's sake and pays for itself again here.
+    //
+    // The second card, which is the rack. The first is said over the *card*
+    // page and is the truer picture of what the backdrop is for — it shows a
+    // page you would have to swipe to reach — but a rack of five coloured
+    // solids with a ring of light round it is the one that can still be read
+    // at thumbnail size.
+    await tester.tap(_onCard('Next'));
+    await tester.pumpAndSettle();
+
+    await _shot(
+      tester,
+      dir,
+      '07-tutorial',
+      'A tour on the first run.\nAnd any time after.',
+    );
+  });
+
   // Declared last, and a plain `test` rather than a `testWidgets`: it pumps
-  // nothing, and what it composes are the six files the captures above have
-  // just written. Declaration order is run order, which is the whole of what
+  // nothing, and what it composes are three of the web-sized files the
+  // captures above have just written. Declaration order is run order, which is the whole of what
   // makes reading them back from disk safe.
   // Composed from the website's copies, so it belongs to the slot that writes
   // them — and like them it is one picture for the site, not one per slot.
   if (_slot.web) {
-    test('07 · the hero', () => heroes(dir));
+    test('08 · the hero', () => heroes(dir));
   }
 
   // Declared under the Play slot so that `appstore/play/` has one origin —
@@ -450,7 +500,7 @@ void main() {
   // The picture it is built from was written by the 6.9" run rather than this
   // one; [feature] says so itself if it is not there.
   if (identical(_slot, kSlotPlay)) {
-    test('07 · the feature graphic', () => feature(dir));
+    test('08 · the feature graphic', () => feature(dir));
   }
 }
 
@@ -535,7 +585,7 @@ Future<void> _pump(WidgetTester tester, int frames) async {
 /// upload and nothing else. `web/` is the bare screen at half that, which is
 /// what the site and the guide put on a page — a full-width PNG of a dark app
 /// displayed 320 px wide is three quarters of a megabyte spent on pixels the
-/// reader will never see, and there are six of them.
+/// reader will never see, and there are seven of them.
 ///
 /// The second capture is re-rendered at the lower ratio rather than resampled
 /// down from the first. It costs one more `toImage` and it is the difference
@@ -598,7 +648,7 @@ void _check(String name, ui.Image image) {
 /// Drops [shot] onto a branded background under [caption].
 ///
 /// The screenshot is inset rather than filling the canvas, which is the whole
-/// point of a framed shot: a store listing scrolls sideways through six of
+/// point of a framed shot: a store listing scrolls sideways through seven of
 /// these at thumbnail size, and at that size a full-bleed screenshot of a dark
 /// app is a dark rectangle. The caption and the brand wash are what make one
 /// thumbnail tell itself apart from the next.
@@ -1188,6 +1238,11 @@ final List<DieKind> _offered = <DieKind>[
 
 Finder _onDicePage(Finder finder) =>
     find.descendant(of: find.byKey(kDicePage), matching: finder);
+
+/// A button on the tutorial's own card rather than on the screen behind it,
+/// which is a whole picker and has a Roll of its own.
+Finder _onCard(String label) =>
+    find.descendant(of: find.byKey(kTutorialCard), matching: find.text(label));
 
 final Finder _addDie = find.descendant(
   of: find.byKey(const ValueKey<int>(0)),

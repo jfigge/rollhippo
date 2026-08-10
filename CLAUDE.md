@@ -59,8 +59,8 @@ Run from the repo root:
 | `make android` | `--profile` for exactly the same reason, and `adb install -r` for the other one — same trap, same cost, `shared_preferences`' XML instead of `NSUserDefaults`. On either platform, `flutter run -d <id>` when hot reload is worth more than the feel; `run` installs over the top, which is why it is safe |
 | `make ipa` | `--release`, and signed — the build that goes to App Store Connect. Needs the Apple Distribution certificate in the keychain |
 | `make upload` | send that archive to App Store Connect. The key id and issuer come from `release.env`, the `.p8` itself from `keys/`, and both are gitignored — together they are the whole of what a new machine needs before it can ship. `--apiKey` takes the key's *id*, never a path: altool builds `AuthKey_<id>.p8` itself and hunts for it in four fixed directories, which `API_PRIVATE_KEYS_DIR` replaces. Connect refuses a build number it has already seen, so a second upload means bumping the `+N` in `pubspec.yaml` and rebuilding |
-| `make screenshots` | render the store listing and the website's pictures. Writes into the *project*, like `make icon`: `appstore/` is framed and captioned at Apple's exact 1290 × 2796 and is what you upload, `website/images/screens/` is the bare screen at half that and is what the site and the guide are built from, and `website/images/hero.png` and `og.png` are composed from those |
-| `make screenshots-65` | the same six, for Apple's other iPhone slot: `appstore/6.5/` at 1242 × 2688. Rendered at that phone's own 414 × 896 rather than resampled from the 6.9" set — the aspect ratios are close but not equal, and the safe area is genuinely different (44 pt of notch against 59 of Dynamic Island), which moves everything inside a `SafeArea`. Writes no website pictures and no hero: those belong to the 6.9" run, which is what `Slot.web` in `tool/appstore.dart` decides. Optional — Apple requires only the 6.9" set and downscales it itself |
+| `make screenshots` | render the store listing and the website's pictures. Writes into the *project*, like `make icon`: `appstore/` is framed and captioned at Apple's exact 1290 × 2796 and is what you upload, `website/images/screens/` is the bare screen at half that and is what the site and the guide are built from, and `website/images/hero.png` and `og.png` are composed from those. **A full run re-renders all seven, and the dice are not seeded** — every capture with dice in it comes out a different roll, so redoing one shot means naming it: `flutter test tool/appstore.dart --plain-name '07 · the tutorial'` |
+| `make screenshots-65` | the same seven, for Apple's other iPhone slot: `appstore/6.5/` at 1242 × 2688. Rendered at that phone's own 414 × 896 rather than resampled from the 6.9" set — the aspect ratios are close but not equal, and the safe area is genuinely different (44 pt of notch against 59 of Dynamic Island), which moves everything inside a `SafeArea`. Writes no website pictures and no hero: those belong to the 6.9" run, which is what `Slot.web` in `tool/appstore.dart` decides. Optional — Apple requires only the 6.9" set and downscales it itself |
 | `make site` | `rsync` `website/` into hippoherd's `website/rollhippo/`. That page is Roll Hippo's whole website — it is written here and served there — and hippoherd's generator leaves it alone rather than overwriting it. Commit and push in *that* repo to deploy |
 
 Raw `flutter`/`dart` commands must run from `src/`, which is the package root.
@@ -105,9 +105,9 @@ src/tool/          filmstrip · roll_gif · one_die · picker · hippo · tutori
 website/           Roll Hippo's whole website — index.html, docs/index.html (the user guide),
                    and images/. Hand-written, no build step. `make site` copies it to
                    hippoherd's website/rollhippo/, which is where it is served from
-appstore/          the six framed 1290 × 2796 screenshots, for App Store Connect and Play
+appstore/          the seven framed 1290 × 2796 screenshots, for App Store Connect and Play
                    Console. Written by `make screenshots`; an upload, not a source.
-                   6.5/ is the same six at 1242 × 2688, from `make screenshots-65`
+                   6.5/ is the same seven at 1242 × 2688, from `make screenshots-65`
 ```
 
 `tray.dart` re-exports `profile.dart`, `dice.dart`, `tuning.dart` and

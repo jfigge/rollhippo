@@ -62,16 +62,35 @@ const double _kCardChrome = 118;
 /// dimmed at all.
 const Color _kScrim = Color(0xA6000000);
 
-/// How tall the block a page's words are drawn in gets.
+/// The smallest the block of words is ever squeezed to.
 ///
-/// Fixed, and the same on every page, because the dots and the buttons below
-/// it must not move as you swipe: a Next that shifted under the thumb pressing
-/// it would be a control you have to chase. A page too tall for the block
-/// scrolls inside it, which is what a large text scale does to the longest of
-/// them.
-const double _kBodyFraction = 0.21;
-const double _kMinBody = 130;
-const double _kMaxBody = 176;
+/// Only reached on a screen where the gap beside the spot cannot take the
+/// whole card — see [_kCardChrome]. Below this a page is a heading with a line
+/// and a half under it, which is not worth showing; better to let the card
+/// lean over the spot by a few points than to shrink it into nothing.
+const double _kMinWords = 96;
+
+/// The mark beside a heading, and the air under the heading row.
+///
+/// Named because two things have to agree about them: [_Words] draws with
+/// them and [_wordsHeight] measures with them, and a block measured against
+/// one set of numbers and drawn with another is a block that clips.
+const double _kMarkSize = 38;
+const double _kMarkGap = 12;
+const double _kTitleGap = 10;
+
+/// The two type styles a page is made of, for the same reason.
+const TextStyle _kTitleStyle = TextStyle(
+  color: Color(0xFFE8EEF6),
+  fontSize: 18,
+  fontWeight: FontWeight.w600,
+  letterSpacing: -0.3,
+);
+const TextStyle _kBodyStyle = TextStyle(
+  color: Color(0x99BFD0E4),
+  fontSize: 14,
+  height: 1.45,
+);
 
 /// Which screen stands behind a page of the tutorial.
 ///
@@ -553,7 +572,7 @@ class _TutorialScreenState extends State<_TutorialScreen> {
                       above ? Alignment.bottomCenter : Alignment.topCenter,
                   duration: const Duration(milliseconds: 320),
                   curve: Curves.easeOutCubic,
-                  child: _card(screen, room),
+                  child: _card(room),
                 ),
               ),
             ],
@@ -583,16 +602,7 @@ class _TutorialScreenState extends State<_TutorialScreen> {
     );
   }
 
-  Widget _card(Size screen, double room) {
-    // What the screen would like, held to what the gap can take. The floor is
-    // kept whatever happens: a card squeezed below it would be a heading with
-    // a line and a half of text under it, which is not worth showing at all —
-    // better to let it lean over the spot by a few points on a screen that
-    // small.
-    final double body = math.min(
-      (screen.height * _kBodyFraction).clamp(_kMinBody, _kMaxBody),
-      math.max(_kMinBody, room - _kCardChrome),
-    );
+  Widget _card(double room) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: kSheetWidth),
       child: Container(
@@ -600,10 +610,14 @@ class _TutorialScreenState extends State<_TutorialScreen> {
         margin: const EdgeInsets.all(14),
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
         decoration: BoxDecoration(
-          // Nearly opaque rather than opaque. The card sits on top of the
-          // screen it is describing, and a sliver of that showing through is
-          // what says so.
-          color: const Color(0xF2141A23),
+          // Opaque, and the same card the Settings and Share sheets are drawn
+          // on. It was translucent for a while, on the theory that a sliver of
+          // the screen behind would say the card was sitting on top of it —
+          // and what that actually looked like was a paragraph with somebody
+          // else's text smeared under it, because what is behind this card is
+          // a whole screen rather than a wash. The shadow and the hairline say
+          // the same thing without printing through.
+          color: const Color(0xFF141A23),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0x1FFFFFFF)),
           boxShadow: const <BoxShadow>[
@@ -614,87 +628,176 @@ class _TutorialScreenState extends State<_TutorialScreen> {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            SizedBox(
-              height: body,
-              child: PageView(
-                controller: _pages,
-                onPageChanged: _onPage,
-                children: <Widget>[
-                  for (final TutorialPage page in kTutorialPages)
-                    _Words(page: page),
-                ],
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints inner) {
+            // The tallest page there is, held to what the gap can take.
+            final double words = math.min(
+              _wordsHeight(
+                inner.maxWidth,
+                MediaQuery.textScalerOf(context),
+                DefaultTextStyle.of(context).style,
               ),
-            ),
-            const SizedBox(height: 6),
-            Row(
+              math.max(_kMinWords, room - _kCardChrome),
+            );
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                // The dots are what gives way when the row runs out of width,
-                // and they are the right thing to: seven of them, two buttons
-                // and a wide text scale do not fit a narrow phone, and of the
-                // three the dots are the one you can still read at four fifths
-                // the size. The buttons keep their tap targets, which is the
-                // whole reason for choosing.
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: PageDots(
-                      current: _at,
-                      // Every page has something on it. The hollow ring the
-                      // picker uses for a set with no dice in it has nothing
-                      // to say here, and the dots are still worth having:
-                      // they are how you know how much of this is left.
-                      filled: List<bool>.filled(kTutorialPages.length, true),
-                      onTap: _goTo,
-                    ),
+                SizedBox(
+                  height: words,
+                  child: PageView(
+                    controller: _pages,
+                    onPageChanged: _onPage,
+                    children: <Widget>[
+                      for (final TutorialPage page in kTutorialPages)
+                        _Words(page: page),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                // Skip goes when there is nothing left to skip. Leaving it
-                // beside a Done would be two buttons that do the same thing,
-                // one of them phrased as a regret.
-                if (!_last)
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xAABFD0E4),
+                const SizedBox(height: 6),
+                Row(
+                  children: <Widget>[
+                    // The dots are what gives way when the row runs out of
+                    // width, and they are the right thing to: seven of them,
+                    // two buttons and a wide text scale do not fit a narrow
+                    // phone, and of the three the dots are the one you can
+                    // still read at four fifths the size. The buttons keep
+                    // their tap targets, which is the reason for choosing.
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: PageDots(
+                          current: _at,
+                          // Every page has something on it. The hollow ring
+                          // the picker uses for a set with no dice in it has
+                          // nothing to say here, and the dots are still worth
+                          // having: they are how you know how much is left.
+                          filled: List<bool>.filled(
+                            kTutorialPages.length,
+                            true,
+                          ),
+                          onTap: _goTo,
+                        ),
+                      ),
                     ),
-                    child: const Text('Skip', style: TextStyle(fontSize: 15)),
-                  ),
-                const SizedBox(width: 6),
-                FilledButton(
-                  onPressed: _next,
-                  style: FilledButton.styleFrom(
-                    // The Roll button's blue: this is the one thing on the
-                    // card you are being asked to press.
-                    backgroundColor: const Color(0xFF3F6FA8),
-                    foregroundColor: const Color(0xFFF2F7FF),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 22,
-                      vertical: 12,
+                    const Spacer(),
+                    // Skip goes when there is nothing left to skip. Leaving it
+                    // beside a Done would be two buttons that do the same
+                    // thing, one of them phrased as a regret.
+                    if (!_last)
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xAABFD0E4),
+                        ),
+                        child: const Text(
+                          'Skip',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                      ),
+                    const SizedBox(width: 6),
+                    FilledButton(
+                      onPressed: _next,
+                      style: FilledButton.styleFrom(
+                        // The Roll button's blue: this is the one thing on the
+                        // card you are being asked to press.
+                        backgroundColor: const Color(0xFF3F6FA8),
+                        foregroundColor: const Color(0xFFF2F7FF),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        _last ? 'Done' : 'Next',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: Text(
-                    _last ? 'Done' : 'Next',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  ],
                 ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
+}
+
+/// How tall the block of words has to be, at [width].
+///
+/// Measured rather than chosen, and measured across *every* page rather than
+/// the one on screen. The block is one fixed height for all seven because the
+/// dots and the buttons under it must not move as you swipe — a Next that
+/// shifted under the thumb pressing it would be a control you have to chase —
+/// and the only honest fixed height is the tallest page's. A number picked to
+/// look about right is a number that is wrong on some phone: too big and every
+/// short page carries a hand's width of nothing, too small and the longest one
+/// scrolls, and which of the two you get depends on the width of the screen
+/// and on a text scale the reader chose.
+///
+/// [scaler] is the reader's text size, and it is why this cannot be worked out
+/// once: at twice the type the paragraph that needed four lines needs nine,
+/// and the card simply has to be taller.
+///
+/// [base] is the style a [Text] would have started from, and passing it is not
+/// optional. Neither [_kTitleStyle] nor [_kBodyStyle] names a font family —
+/// nothing in this app does, because the family belongs to the theme — so a
+/// [TextPainter] handed one of them bare is measuring in whatever face the
+/// engine falls back to. That is the substitute face under `flutter test`,
+/// which sets every glyph on a square body and is close to twice as wide as
+/// the real one: the block came out half as tall again as the words in it,
+/// with the difference sitting under the last line as a hand's width of
+/// nothing. Merging the inherited style in is what makes the measurement and
+/// the painting the same layout.
+double _wordsHeight(double width, TextScaler scaler, TextStyle base) {
+  final TextStyle title = base.merge(_kTitleStyle);
+  final TextStyle body = base.merge(_kBodyStyle);
+  double tallest = 0;
+  for (final TutorialPage page in kTutorialPages) {
+    // The heading sits beside the mark and can take two lines before it is cut
+    // off, so the row is whichever of the two is deeper.
+    final double heading = math.max(
+      _kMarkSize,
+      _measure(
+        page.title,
+        title,
+        width - _kMarkSize - _kMarkGap,
+        scaler,
+        maxLines: 2,
+      ),
+    );
+    tallest = math.max(
+      tallest,
+      heading + _kTitleGap + _measure(page.body, body, width, scaler),
+    );
+  }
+  return tallest;
+}
+
+/// How tall [text] comes out, laid out the way [_Words] will lay it out.
+double _measure(
+  String text,
+  TextStyle style,
+  double width,
+  TextScaler scaler, {
+  int? maxLines,
+}) {
+  final TextPainter painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+    textScaler: scaler,
+    maxLines: maxLines,
+  )..layout(maxWidth: math.max(0, width));
+  final double height = painter.height;
+  painter.dispose();
+  return height;
 }
 
 /// What one page says.
@@ -702,6 +805,11 @@ class _TutorialScreenState extends State<_TutorialScreen> {
 /// Left-aligned, with the mark beside the heading rather than over it. This is
 /// a label on the screen behind it rather than a slide, and a centred block of
 /// text with a picture on top of it reads as the second thing.
+///
+/// Every measurement it draws with is a constant it shares with
+/// [_wordsHeight], which works out how tall the block has to be by laying the
+/// same strings out in the same styles. Inline a size here and the block is
+/// measured against one page and drawn as another.
 class _Words extends StatelessWidget {
   const _Words({required this.page});
 
@@ -716,8 +824,8 @@ class _Words extends StatelessWidget {
           Row(
             children: <Widget>[
               Container(
-                width: 38,
-                height: 38,
+                width: _kMarkSize,
+                height: _kMarkSize,
                 decoration: BoxDecoration(
                   // The wash the selected slot in the rack is filled with, so
                   // the mark reads as the same material as the ring round the
@@ -731,31 +839,19 @@ class _Words extends StatelessWidget {
                   color: const Color(0xFF6E9AD0),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: _kMarkGap),
               Expanded(
                 child: Text(
                   page.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFFE8EEF6),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.3,
-                  ),
+                  style: _kTitleStyle,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            page.body,
-            style: const TextStyle(
-              color: Color(0x99BFD0E4),
-              fontSize: 14,
-              height: 1.45,
-            ),
-          ),
+          const SizedBox(height: _kTitleGap),
+          Text(page.body, style: _kBodyStyle),
         ],
       ),
     );
