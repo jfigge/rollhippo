@@ -42,6 +42,60 @@ class MotionFrame {
   );
 }
 
+/// How far a one-pole low pass should move towards a new sample over [dt]
+/// seconds, given a time constant of [tau].
+///
+/// A filter written as a fixed pair of weights — `held × 0.85 + sample × 0.15`
+/// — is not a filter with a time constant, it is a filter with a time constant
+/// *per frame*. Feed it a 120 Hz ProMotion iPhone and it settles in half the
+/// wall-clock time it takes on a 60 Hz Android, which for the gravity estimate
+/// means "down" chases a shake twice as eagerly on one phone as on the other,
+/// and for the angular acceleration means the Euler term — the one that turns
+/// a wrist flick into a tumble — arrives with twice the noise on it. The feel
+/// this app was tuned for is not a property the display rate is allowed to
+/// have an opinion about.
+///
+/// `1 − e^(−dt/τ)` is that same filter written in seconds. Two steps of `dt`
+/// now compose into exactly one step of `2dt`, so every rate reaches the same
+/// place at the same moment. A step longer than the constant snaps rather than
+/// overshooting, which is what a filter should do after a stall.
+double lowPass(double dt, double tau) {
+  // Nothing moves in no time. The formula says so on its own — e⁰ is 1 — but
+  // a frame of zero length reaches here as a guard rather than as arithmetic,
+  // and the wrong answer to it is the expensive one: a blend of 1 would snap
+  // the estimate onto a single raw sample and throw away the smoothing this
+  // exists to do.
+  if (dt <= 0) return 0.0;
+  // No constant is no filter.
+  if (tau <= 0) return 1.0;
+  return 1.0 - math.exp(-dt / tau);
+}
+
+/// Moves [held] towards [sample] by one step of that filter, in place.
+void _smooth(Vector3 held, Vector3 sample, double dt, double tau) {
+  final double blend = lowPass(dt, tau);
+  held.scale(1.0 - blend);
+  held.addScaled(sample, blend);
+}
+
+/// The three time constants, in seconds.
+///
+/// Not new numbers. Each is the per-frame weight this file used to carry,
+/// converted at the 60 Hz it was written against — `τ = dt / −ln(1 − blend)`,
+/// so 0.15 a frame becomes 102.6 ms, 0.3 becomes 46.7 ms and 0.4 becomes
+/// 32.6 ms. A 60 Hz phone therefore behaves exactly as it did, to four
+/// figures, and every other rate now behaves like a 60 Hz phone instead of
+/// like a differently-tuned one. Nothing here was re-judged by hand; the feel
+/// that was settled with a phone is the feel these preserve.
+///
+/// [_kGravityTau] is the slowest because which way is down is the slowest
+/// fact the sensors carry. [_kTwistTau] is quicker but still hard, because it
+/// smooths a *differentiated* signal and differentiating noise makes more of
+/// it. [_kDragTau] is the harness's alone.
+const double _kGravityTau = 0.1026;
+const double _kTwistTau = 0.0467;
+const double _kDragTau = 0.0326;
+
 abstract class MotionSource {
   /// The motion since the previous call, averaged over that interval.
   MotionFrame sample(double dt);
@@ -196,8 +250,7 @@ class SensorMotionSource implements MotionSource {
       estimate = _acceleration;
     }
     if (estimate != null) {
-      _gravityReading.scale(0.85);
-      _gravityReading.addScaled(estimate, 0.15);
+      _smooth(_gravityReading, estimate, dt, _kGravityTau);
     }
 
     if (_gyroCount > 0) {
@@ -206,8 +259,7 @@ class SensorMotionSource implements MotionSource {
         // Differentiating a noisy signal amplifies the noise, so the result is
         // smoothed hard. Euler forces only need the shape of the twist.
         final Vector3 raw = (next - _angularVelocity) / dt;
-        _angularAcceleration.scale(0.7);
-        _angularAcceleration.addScaled(raw, 0.3);
+        _smooth(_angularAcceleration, raw, dt, _kTwistTau);
       }
       _angularVelocity.setFrom(next);
       _gyroSum.setZero();
@@ -279,9 +331,10 @@ class ManualMotionSource implements MotionSource {
     final Vector3 acceleration = (velocity - _dragVelocity) / dt;
     _dragVelocity.setFrom(velocity);
     // One-pole smoothing: a mouse delivers position in steps, and raw
-    // differences between them are spikes no hand could produce.
-    _dragAcceleration.scale(0.6);
-    _dragAcceleration.addScaled(acceleration, 0.4);
+    // differences between them are spikes no hand could produce. In seconds
+    // rather than in frames, like the decay below it and the two filters the
+    // real sensor runs — see [lowPass].
+    _smooth(_dragAcceleration, acceleration, dt, _kDragTau);
   }
 
   /// Rolls and pitches the phone, in radians.

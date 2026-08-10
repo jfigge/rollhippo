@@ -299,5 +299,62 @@ void main() {
       expect(tray.readout.down, isTrue, reason: 'the dice were not put down');
       expect(tray.held, isEmpty);
     }, variant: harness);
+
+    /// On a phone rather than the harness. [letterbox] pins the desktop build
+    /// to one screen, so a device is the only place a tray ever sees its
+    /// widget change shape — an Android phone put into split screen, or a
+    /// foldable opened.
+    final TargetPlatformVariant phone = TargetPlatformVariant.only(
+      TargetPlatform.iOS,
+    );
+
+    testWidgets('a window that changes size keeps the roll it was showing', (
+      WidgetTester tester,
+    ) async {
+      await tester.binding.setSurfaceSize(kScreen);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: TrayScreen(
+            groups: <List<DieSpec>>[
+              <DieSpec>[white, white, white],
+            ],
+          ),
+        ),
+      );
+
+      final DiceTray tray = shownTray(tester);
+      for (int i = 0; i < 600; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        if (tray.readout.values != null && !tray.readout.moving) break;
+      }
+      expect(tray.canHold, isTrue, reason: 'the roll was never presented');
+
+      await tester.tapAt(
+        cameraFor(
+          kScreen,
+          tray.width,
+          tray.height,
+        ).project(tray.dice[1].position),
+      );
+      await tester.pump();
+      expect(tray.held.keys, <int>[1], reason: 'nothing was kept to lose');
+      final List<int> rolled = tray.faces;
+
+      // Half the height and the same width, which is what split screen is.
+      await tester.binding.setSurfaceSize(
+        Size(kScreen.width, kScreen.height / 2),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      expect(
+        identical(shownTray(tester), tray),
+        isTrue,
+        reason: 'the box was rebuilt, and building one throws the dice in it',
+      );
+      expect(shownTray(tester).faces, rolled, reason: 'the roll changed');
+      expect(shownTray(tester).held.keys, <int>[1], reason: 'the kept die');
+    }, variant: phone);
   });
 }

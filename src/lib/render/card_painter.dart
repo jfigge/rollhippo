@@ -120,11 +120,7 @@ const Color _cardEdgeDark = Color(0xFF0D1220);
 /// The whole card table: the box, the pile standing in it, and whatever has
 /// been dealt onto the glass.
 void paintCardScene(Canvas canvas, Size size, CardTable table) {
-  final TrayCamera camera = TrayCamera(
-    pixelsPerMetre: size.width / table.width,
-    eyeDistance: Tuning.eyeDistance,
-    centre: Offset(size.width / 2, size.height / 2),
-  );
+  final TrayCamera camera = cameraFor(size, table.width, table.height);
 
   paintTrayBox(
     canvas,
@@ -562,13 +558,19 @@ void _paintFace(
 
 /// The same card, printed into a plain box on screen instead of into the tray.
 ///
-/// What the picker's [CardPreview] draws, and the reason the printing below is
-/// its own function: a card standing still in a rack is not in the box, has no
-/// depth to be projected from and no turn to be foreshortened by, but it has to
-/// be the *same* card — same stock, same rule, same corner diamonds, same pip
-/// squares — or the rack would be advertising a card the deal does not hand
-/// over. So the two of them differ in nothing but how the canvas gets into the
-/// card's own frame: through the camera there, through [box] here.
+/// What [CardPreview] draws, and the reason the printing below is its own
+/// function: a card standing still in a rack is not in the box, has no depth to
+/// be projected from and no turn to be foreshortened by, but it has to be the
+/// *same* card — same stock, same rule, same corner diamonds, same pip squares
+/// — or the rack would be advertising a card the deal does not hand over. So
+/// the two of them differ in nothing but how the canvas gets into the card's
+/// own frame: through the camera there, through [box] here.
+///
+/// That last paragraph is about a rack that does not exist yet. This and
+/// [CardPreview] were written together and neither was ever wired in — the
+/// picker's card rack still shows the three D6s themselves where the card they
+/// stand for would go. What is described here is what the seam is *for*, not
+/// something the app presently does.
 ///
 /// The card keeps its proportions inside [box] and is centred in it, on the
 /// larger of the two axes it does not fill. Stretching a card to fill a box

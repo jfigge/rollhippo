@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/physics/body.dart';
 import 'package:rollhippo/physics/collision.dart';
+import 'package:rollhippo/physics/contact.dart';
+import 'package:rollhippo/physics/solver.dart';
 import 'package:rollhippo/physics/world.dart';
 import 'package:rollhippo/tray/tray.dart';
 import 'package:vector_math/vector_math_64.dart';
@@ -147,6 +149,72 @@ void main() {
         greaterThan(-kHeight / 2),
         reason: 'it should still bounce at all',
       );
+    });
+  });
+
+  group('warm starting', () {
+    // A manifold with one contact on it, which is all the cache looks at.
+    Manifold manifold(int key, int featureId) => Manifold(
+      a: die(),
+      b: die(),
+      normal: Vector3(0, 1, 0),
+      points: <ContactPoint>[
+        ContactPoint(
+          point: Vector3.zero(),
+          separation: 0,
+          featureId: featureId,
+        ),
+      ],
+      restitution: 0,
+      friction: 0,
+      key: key,
+    );
+
+    test('one contact cannot collect another one\'s impulse', () {
+      // The pair that used to share a slot. Manifold 1001 is dice 0 and 1,
+      // manifold 1003 is dice 0 and 3 — both of which a tray of four dice
+      // produces at once — and at the stride of 64 the first one's edge-pair
+      // contact and the second one's face vertex both keyed to 64197.
+      final ImpulseCache cache = ImpulseCache();
+      final Manifold edge = manifold(1001, 128 + 5);
+      final Manifold face = manifold(1003, 5);
+
+      edge.points.first.normalImpulse = 0.25;
+      cache
+        ..remember(edge, edge.points.first)
+        ..commit();
+
+      expect(
+        cache.recall(edge, edge.points.first)?.x,
+        0.25,
+        reason:
+            'a contact has to find its own impulse again — that is the '
+            'whole of what warm starting is',
+      );
+      expect(
+        cache.recall(face, face.points.first),
+        isNull,
+        reason: 'and no other manifold may inherit it',
+      );
+    });
+
+    test('no die overruns the space a feature id has', () {
+      for (final DieKind kind in DieKind.values) {
+        // The edge band numbers a contact by a pair of edge *directions*, and
+        // allows a die 32 of them. Fifteen is the most any of these has; a
+        // shape that went past it would not fail, it would start issuing ids
+        // that belong to some other pair of edges.
+        expect(
+          shapeFor(kind).edges.length,
+          lessThan(32),
+          reason: '${kind.label} has too many edge directions to number',
+        );
+        expect(
+          shapeFor(kind).vertices.length,
+          lessThan(32),
+          reason: kind.label,
+        );
+      }
     });
   });
 

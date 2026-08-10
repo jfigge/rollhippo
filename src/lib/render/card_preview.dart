@@ -18,6 +18,12 @@ import 'tray_painter.dart';
 ///
 /// It has no size of its own — [Size.infinite], like `DiePreview` — and fits
 /// the card into whatever box it is given, centred, on the card's own aspect.
+///
+/// **Nothing builds one yet.** This and [paintCardInto] were added for the
+/// card rack described above and the wiring was never done, so it is
+/// unfinished rather than unused. `flutter analyze` will not point it out,
+/// because a public class is entitled to have no caller — which is exactly why
+/// it is worth saying here.
 class CardPreview extends StatelessWidget {
   const CardPreview({super.key, required this.faces, required this.colours});
 

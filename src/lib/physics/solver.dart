@@ -15,7 +15,25 @@ class ImpulseCache {
   final Map<int, Vector3> _previous = <int, Vector3>{};
   final Map<int, Vector3> _current = <int, Vector3>{};
 
-  static int _key(Manifold m, ContactPoint c) => m.key * 64 + c.featureId;
+  /// One integer per contact, from the manifold it belongs to and the feature
+  /// that produced it.
+  ///
+  /// The stride is [featureIdLimit] rather than a number picked to fit the
+  /// ids in front of it: a contact's id has to land inside its own manifold's
+  /// slot, and an edge-pair id runs to 1152. At the stride of 64 this used to
+  /// have, an edge contact between two dice was recalled as a *face* contact
+  /// between a different pair — `1001 · 64 + 133` and `1003 · 64 + 5` are the
+  /// same number — so one pair began its step holding the impulses another
+  /// pair had settled on. The solver corrects it within the iteration budget,
+  /// which is why it read as jitter rather than as dice flying apart, and why
+  /// it survived this long.
+  static int _key(Manifold m, ContactPoint c) {
+    assert(
+      c.featureId >= 0 && c.featureId < featureIdLimit,
+      'feature id ${c.featureId} is outside the space this packing reserves',
+    );
+    return m.key * featureIdLimit + c.featureId;
+  }
 
   Vector3? recall(Manifold m, ContactPoint c) => _previous[_key(m, c)];
 

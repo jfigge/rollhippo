@@ -1142,6 +1142,52 @@ void main() {
       expect(find.text('<$kMaxReshuffleAt%'), findsOneWidget);
     });
 
+    testWidgets('and what is kept is cut down with it', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      // The same later-build code, saved rather than merely tried. What lands
+      // on the file has to be what the screen took: a save written from the
+      // code itself would hold four sets and nine decks behind a picker
+      // showing three of each, and would say so in the row — under a shoe size
+      // of nought, because six to the fourth by nine is not a number this app
+      // can produce and Dart's integer power wraps rather than complaining.
+      await scan(
+        tester,
+        Profile(
+          mode: ProfileMode.cards,
+          groups: <List<DieSpec>>[
+            <DieSpec>[for (int i = 0; i < 12; i++) kCardDie],
+            <DieSpec>[],
+            <DieSpec>[],
+            <DieSpec>[kCardDie],
+          ],
+          colours: const <int>[kDiceWhite, kDiceWhite, kDiceWhite, kDiceWhite],
+          decks: 9,
+          reshuffleAt: 99,
+        ),
+        name: 'Later',
+      );
+      await tapText(tester, 'Save');
+
+      final Profile kept = profiles.saves.single.profile;
+      expect(kept.groups.length, kMaxGroups);
+      expect(kept.groups[0].length, kMaxDice);
+      expect(kept.colours.length, kMaxCardDice);
+      expect(kept.decks, kMaxDecks);
+      expect(kept.reshuffleAt, kMaxReshuffleAt);
+      expect(
+        kept.summary,
+        '$kMaxDecks decks, 648 cards',
+        reason: 'the row has to describe a shoe the app could build',
+      );
+
+      // And on the file, not merely in the row.
+      await profiles.load();
+      expect(profiles.saves.single.profile, kept);
+    });
+
     testWidgets('the code a save offers carries the name it is saved under', (
       WidgetTester tester,
     ) async {

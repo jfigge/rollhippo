@@ -36,6 +36,32 @@ class TrayCamera {
   }
 }
 
+/// The camera that puts a box of [width] × [height] metres inside [size].
+///
+/// The box is a physical object with dimensions of its own, fixed when the
+/// screen it stands on opened. Normally [size] is exactly what those metres
+/// were measured from — the screen divided by [Tuning.logicalPixelsPerMetre] —
+/// and both ratios come to that same constant, so the smaller of them is the
+/// same number either way and the glass fills the widget as it always has.
+///
+/// They come apart when the widget is resized under a box that has already
+/// been thrown: an Android phone put into split screen, a foldable opened.
+/// The box does not resize with it, because rebuilding a box is re-rolling the
+/// dice in it and a result that survives a swipe has to survive a window. So
+/// the tray is fitted into whatever room there is and centred, which leaves a
+/// margin down two sides rather than a stretched box or a floor drawn off the
+/// bottom of the screen — and is exactly what [letterbox] already does to the
+/// whole app on the desktop harness, for the same reason.
+///
+/// One function for the painter and for [dieAt], because a tap has to land on
+/// the die it looks like it landed on, and two copies of this would be two
+/// chances for it not to.
+TrayCamera cameraFor(Size size, double width, double height) => TrayCamera(
+  pixelsPerMetre: math.min(size.width / width, size.height / height),
+  eyeDistance: Tuning.eyeDistance,
+  centre: Offset(size.width / 2, size.height / 2),
+);
+
 /// How one die is painted: its body colour, the ink its numbers are in, and
 /// whether what gets painted is a hippopotamus.
 class DieStyle {
@@ -202,11 +228,7 @@ double _screenArea(List<Offset> corners) {
 /// scene is anchored on the canvas' origin, so a caller that wants it somewhere
 /// else translates the canvas and calls this again.
 void paintTrayScene(Canvas canvas, Size size, DiceTray tray) {
-  final TrayCamera camera = TrayCamera(
-    pixelsPerMetre: size.width / tray.width,
-    eyeDistance: Tuning.eyeDistance,
-    centre: Offset(size.width / 2, size.height / 2),
-  );
+  final TrayCamera camera = cameraFor(size, tray.width, tray.height);
 
   // While the dice are being presented the box behind them steps back, so
   // that what is lit is the thing you are being asked to read.
@@ -274,11 +296,7 @@ void _paintHold(Canvas canvas, TrayCamera camera, RigidBody die) {
 /// a little over their own width apart, so a generous disc still cannot reach
 /// its neighbour's centre.
 int? dieAt(DiceTray tray, Size size, Offset local) {
-  final TrayCamera camera = TrayCamera(
-    pixelsPerMetre: size.width / tray.width,
-    eyeDistance: Tuning.eyeDistance,
-    centre: Offset(size.width / 2, size.height / 2),
-  );
+  final TrayCamera camera = cameraFor(size, tray.width, tray.height);
 
   final List<int> order = List<int>.generate(tray.dice.length, (int i) => i)
     ..sort(

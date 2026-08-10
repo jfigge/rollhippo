@@ -312,10 +312,16 @@ class _PickerScreenState extends State<PickerScreen>
   /// what it is given while this screen carries on editing its own.
   ///
   /// The mode goes with it, which is why this is only ever called where the
-  /// whole picker is meant: the two places that write a save — [_newSave] and
-  /// [_saveTo] — and [_shareCurrent], which writes nothing and hands the same
-  /// thing to another phone. A profile is saved *on* a page, and that is the
-  /// page it opens on, whether it was kept here or read off a code there.
+  /// whole picker is meant: the places that write a save — [_newSave],
+  /// [_saveTo], and [_scanned] when a code is kept — and [_shareCurrent],
+  /// which writes nothing and hands the same thing to another phone. A profile
+  /// is saved *on* a page, and that is the page it opens on, whether it was
+  /// kept here or read off a code there.
+  ///
+  /// Every one of those goes through here rather than writing what it happens
+  /// to be holding, and a scanned code is why it matters: what this returns
+  /// has been through [_apply] and is inside the picker's limits by
+  /// construction, where a code is only inside them by good manners.
   Profile _capture() => Profile(
     mode: _mode,
     groups: <List<DieSpec>>[
@@ -656,12 +662,23 @@ class _PickerScreenState extends State<PickerScreen>
         _take(scanned.profile);
         _say('Set up from "$name".');
       case ScannedChoice.keep:
+        // On screen first, and then keep *that* — not the code it came from.
+        // [_apply] is where a profile is held to what this picker has room
+        // for, so a code from some later build arrives as three sets rather
+        // than four and one deck rather than nine. Keeping the code itself
+        // would write a save holding dice this build will never show you,
+        // under a summary that described them: "9 decks" on a row that opens
+        // showing three. A save has to describe what opening it does.
+        //
+        // It is also what makes [_capture] the only thing a save is ever made
+        // of, which is what this screen says of itself everywhere else.
+        _apply(scanned.profile);
+        final Profile taken = _capture();
         if (existing != null) {
-          profiles.write(existing.id, scanned.profile);
+          profiles.write(existing.id, taken);
           _open(profiles.byId(existing.id)!);
         } else {
-          final SavedProfile made = profiles.add(name, scanned.profile);
-          _apply(scanned.profile);
+          final SavedProfile made = profiles.add(name, taken);
           setState(() => _saved = made.id);
         }
     }

@@ -118,6 +118,48 @@ void main() {
     );
   });
 
+  test('a die arrives at the floor at the speed the throw claims', () {
+    // The figure two comments quote, measured rather than reasoned about —
+    // which is the point of having it here at all. It had drifted: `throwDice`
+    // said 1.9 m/s where [Tuning.throwSpeed] said 2.3, and neither was what
+    // the tray actually did. Nothing else in the repo would have noticed.
+    //
+    // The spread is the throw's own: [Tuning.throwSpeed] is the floor and
+    // `throwDice` adds up to 0.6 on top, with the fall from the top of the
+    // tray under all of it. So this is a band, and a wide enough one that a
+    // seed landing on a corner cannot fail it — what it catches is the throw
+    // changing character.
+    final List<double> speeds = <double>[];
+    final double floor = -kHeight / 2;
+
+    for (int seed = 0; seed < 24; seed++) {
+      final DiceTray tray = trayOf(<DieSpec>[spec(DieKind.d6)], seed: seed);
+      final RigidBody die = tray.dice.single;
+      double fastest = 0;
+      const double dt = 1 / 240;
+      for (double t = 0; t < 4.0; t += dt) {
+        // Up to the frame it touches down on, and no further: past that the
+        // number is the rebound rather than the arrival.
+        if (die.position.y - floor < die.circumradius) break;
+        fastest = math.max(fastest, die.velocity.length);
+        tray.update(MotionFrame.still, dt);
+      }
+      speeds.add(fastest);
+    }
+
+    speeds.sort();
+    expect(
+      speeds.first,
+      greaterThan(2.0),
+      reason: 'the softest throw has stopped being a throw',
+    );
+    expect(
+      speeds.last,
+      lessThan(3.0),
+      reason: 'the hardest throw has turned into a drop from a height',
+    );
+  });
+
   test('a full tray of assorted dice starts apart and stays inside', () {
     // The six solids, and not the hippopotamus: it is a cube with an animal
     // drawn on it, so it would put a seventh die in the mixture without

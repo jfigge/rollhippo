@@ -278,9 +278,25 @@ class _Clip {
   final int id;
 }
 
-/// Ids at or above this belong to points the clipper made up; below it they are
-/// vertices of the incident face and mean the same thing every step.
+/// Where each band of [ContactPoint.featureId] begins.
+///
+/// Three kinds of point come out of this file and they have to be numbered so
+/// that no two of them can collide: below [_clippedId] an id is a vertex of
+/// the incident face, from there to [_edgeId] it is a point the clipper
+/// invented, and from [_edgeId] up it is a pair of edges. The widest die here
+/// has twenty vertices and pentagonal faces, so the first two bands are used
+/// to 20 and to 41 respectively — the rest is headroom for a shape with more
+/// corners than a D12.
+///
+/// [_edgePitch] is how many edge *directions* the last band allows a die, and
+/// so what puts its ceiling at `_edgeId + _edgePitch²` = 1152. A D12 and a D20
+/// have fifteen apiece, which is the most of any die in the set.
+/// `physics_test.dart` holds every kind under it, because a shape that
+/// overran it would not fail — it would quietly hand its contacts somebody
+/// else's ids.
 const int _clippedId = 32;
+const int _edgeId = 128;
+const int _edgePitch = 32;
 
 List<ContactPoint> _clipFaces(
   RigidBody reference,
@@ -424,9 +440,16 @@ ContactPoint? _edgeContact(RigidBody a, RigidBody b, _Axis axis) {
   final Vector3 closestA = pa + da * ta;
   final Vector3 closestB = pb + db * tb;
 
+  // The pair of edge groups names the feature, and the band keeps it clear of
+  // every vertex and clipped id. See [_clippedId] for the layout, and
+  // [featureIdLimit] for what depends on the whole of it staying inside.
+  assert(
+    axis.i < _edgePitch && axis.j < _edgePitch,
+    'a shape with $_edgePitch or more edge directions overruns the edge band',
+  );
   return ContactPoint(
     point: (closestA + closestB) * 0.5,
     separation: axis.separation,
-    featureId: 128 + axis.i * 32 + axis.j,
+    featureId: _edgeId + axis.i * _edgePitch + axis.j,
   );
 }

@@ -177,8 +177,17 @@ class DiceTray {
   ///
   /// They start along the top edge on a grid spaced by their own width, so any
   /// mixture of shapes packs without starting inside each other, and they leave
-  /// with enough downward speed to reach the floor at about 1.9 m/s — hard
-  /// enough to bounce back a visible fraction of the tray before they settle.
+  /// with enough downward speed to reach the floor at between 2.2 and 2.8
+  /// metres a second — hard enough to bounce back a visible fraction of the
+  /// tray before they settle.
+  ///
+  /// A range rather than a figure, because a throw is not one number:
+  /// [Tuning.throwSpeed] is the floor of it and the spread added below is what
+  /// makes two throws in a row different, with the fall from the top of the
+  /// tray on top of both. The constant's own comment quotes 2.3 m/s, which is
+  /// the bottom of this range and is the right answer to a different
+  /// question — what that number alone comes to, before anything is added to
+  /// it. `dice_test.dart` measures the range so neither can drift again.
   void throwDice() {
     // Put every die back on the spot it landed on before anything else. The
     // ones about to be thrown are leaving that spot immediately and will never

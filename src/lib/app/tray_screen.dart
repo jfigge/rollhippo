@@ -222,9 +222,20 @@ class _TrayScreenState extends State<TrayScreen>
     setState(() => _at = slide.to);
   }
 
+  /// Builds the boxes, the first time there is a screen to build them for.
+  ///
+  /// The size is taken every time — paging and hit testing are against the
+  /// widget as it is now — but the boxes are built once and never rebuilt.
+  /// They used to be rebuilt whenever the size changed, and a `DiceTray`'s
+  /// constructor throws the dice: an Android phone dropped into split screen,
+  /// or a foldable opened, would silently re-roll every group and lose
+  /// whatever had been kept. A roll that a swipe cannot shake is a roll a
+  /// window cannot shake either. What happens instead is that the box stays
+  /// the size it was and [cameraFor] fits it into whatever room there now is.
   void _ensureBoxes(Size size) {
-    if (_boxes.isNotEmpty && size == _size) return;
     _size = size;
+    // A degenerate first layout would otherwise be the size the tray keeps.
+    if (_boxes.isNotEmpty || size.isEmpty) return;
     _at = widget.initial.clamp(0, widget.groups.length - 1);
     _boxes
       ..clear()

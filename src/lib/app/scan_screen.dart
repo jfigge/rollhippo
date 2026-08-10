@@ -8,6 +8,10 @@ import '../tray/tray.dart';
 /// How much of the narrower screen dimension the framing square takes.
 const double _kWindowFraction = 0.68;
 
+/// What a QR code that is not ours earns: one line, and the camera left
+/// running. See [_ScanScreenState._onDetect].
+const String _kNotOurs = 'That is a QR code, but not a Roll Hippo one.';
+
 /// Point the camera at somebody else's Roll Hippo code.
 ///
 /// Pops with the profile the code described, or with null if you closed
@@ -36,14 +40,32 @@ class _ScanScreenState extends State<ScanScreen> {
   /// keeps running: the answer to the wrong code is to point at another one.
   String? _complaint;
 
-  /// One result per screen. The detector runs several times a second and will
-  /// happily read the same code again while the pop is still in flight.
-  bool _taken = false;
+  /// Whether this screen has already been sent back.
+  ///
+  /// One result per screen, whichever way it leaves — see [_leave]. The
+  /// detector runs several times a second and will happily read the same code
+  /// again while the pop is still in flight.
+  bool _leaving = false;
 
   @override
   void dispose() {
     unawaited(_controller.dispose());
     super.dispose();
+  }
+
+  /// The one way off this screen: with a profile, or with nothing.
+  ///
+  /// Every exit goes through here, and that is the whole of what it is for.
+  /// Closing is a pop like any other, and the camera does not stop when it is
+  /// tapped — the route spends the length of its exit transition still mounted
+  /// and still being handed frames. A Roll Hippo code drifting past in that
+  /// window used to pop a second time, and the second pop comes off whatever
+  /// is underneath: the picker. Guarding the detector against itself, which is
+  /// all [_leaving] used to do, does not cover being closed first.
+  void _leave([ScannedProfile? scanned]) {
+    if (_leaving || !mounted) return;
+    _leaving = true;
+    Navigator.of(context).pop(scanned);
   }
 
   /// A frame the detector found codes in.
@@ -53,18 +75,21 @@ class _ScanScreenState extends State<ScanScreen> {
   /// pointed at the world finds QR codes constantly, and a scanner that
   /// complained about each one would be unusable in a room with a poster in it.
   void _onDetect(BarcodeCapture capture) {
-    if (_taken || !mounted) return;
+    if (_leaving || !mounted) return;
     for (final Barcode code in capture.barcodes) {
       final String? raw = code.rawValue;
       if (raw == null) continue;
       final ScannedProfile? scanned = decodeProfile(raw);
       if (scanned == null) continue;
-      _taken = true;
-      Navigator.of(context).pop(scanned);
+      _leave(scanned);
       return;
     }
-    if (capture.barcodes.isEmpty) return;
-    setState(() => _complaint = 'That is a QR code, but not a Roll Hippo one.');
+    // Only the first one. The line does not change while the camera is pointed
+    // at the same wrong poster, and this is called several times a second — so
+    // setting it again would rebuild the chrome over a live camera preview to
+    // arrive at the string that is already on screen.
+    if (capture.barcodes.isEmpty || _complaint == _kNotOurs) return;
+    setState(() => _complaint = _kNotOurs);
   }
 
   @override
@@ -113,11 +138,7 @@ class _ScanScreenState extends State<ScanScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                _RoundButton(
-                  icon: Icons.close,
-                  label: 'Close',
-                  onTap: () => Navigator.of(context).pop(),
-                ),
+                _RoundButton(icon: Icons.close, label: 'Close', onTap: _leave),
                 ValueListenableBuilder<MobileScannerState>(
                   valueListenable: _controller,
                   builder:
@@ -192,11 +213,7 @@ class _ScanScreenState extends State<ScanScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _RoundButton(
-                  icon: Icons.close,
-                  label: 'Close',
-                  onTap: () => Navigator.of(context).pop(),
-                ),
+                _RoundButton(icon: Icons.close, label: 'Close', onTap: _leave),
               ],
             ),
           ),

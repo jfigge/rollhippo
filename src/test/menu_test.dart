@@ -378,9 +378,11 @@ void main() {
     ) async {
       await pumpPicker(tester);
 
-      // The scanner itself needs a camera, so what is driven here is the seam
-      // it pops back through — which is the part with the picker's own limits
-      // in it, and the part that can be got wrong.
+      // What is driven here is the seam the scanner pops back through, which
+      // is the part with the picker's own limits in it and the part that can
+      // be got wrong. The screen in front of it is somebody else's test —
+      // `scan_test.dart`, which drives the camera's own callback and needs no
+      // camera to do it.
       final AppMenuButton menu = tester.widget<AppMenuButton>(
         find.byType(AppMenuButton),
       );

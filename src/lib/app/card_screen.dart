@@ -59,7 +59,6 @@ class _CardScreenState extends State<CardScreen>
   late final MotionSource _motion;
 
   CardTable? _table;
-  Size _size = Size.zero;
 
   Duration _last = Duration.zero;
 
@@ -123,9 +122,16 @@ class _CardScreenState extends State<CardScreen>
     }
   }
 
+  /// Builds the table, the first time there is a screen to build it for.
+  ///
+  /// Once, like the tray's boxes and for a sharper version of their reason: a
+  /// new [CardTable] is a new [Deck], and a new Deck is a shuffle. A phone put
+  /// into split screen mid-game would have swept the card off the glass and
+  /// put the whole shoe back together, which is the one thing a shoe must only
+  /// ever do when it is asked to. The table keeps the size it was built at and
+  /// [cameraFor] fits it into the room there is.
   void _ensureTable(Size size) {
-    if (_table != null && size == _size) return;
-    _size = size;
+    if (_table != null || size.isEmpty) return;
     _table = CardTable(
       width: size.width / Tuning.logicalPixelsPerMetre,
       height: size.height / Tuning.logicalPixelsPerMetre,
