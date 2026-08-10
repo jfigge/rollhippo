@@ -9,13 +9,33 @@ is fine, as is `git checkout`/`branch` when the user asks for it.
 
 ## What this is
 
-A 3D dice-tray app: rigid-body physics for a chosen set of dice — up to ten,
+Two ways to get a roll, and the app is equally both. Nothing here is the tray
+with a card mode attached — say it that way round and you have described the
+wrong app.
+
+**A shoe of cards, one per possible roll.** `lib/cards/` builds every *ordered*
+outcome of one to three six-sided dice, one to three decks of them at once,
+shuffles it and deals without replacement, with a cut card at whatever
+percentage you set. Drawing a card is the same wager as throwing the dice it
+stands for — that is what makes it a stand-in rather than a gimmick — and it
+differs in the one way a shoe always does: what has already gone tells you
+something about what is left. That difference is the point of the mode, and
+`reshuffleAt` is there to let you decide how much of it you want.
+
+**A 3D dice tray.** Rigid-body physics for a chosen set of dice — up to ten,
 D4 through D20, each its own colour — in a phone-sized box, simulated in the
 *phone's own frame of reference* so the walls never move and the acceleration
 field inside them comes straight off the accelerometer.
 
-`README.md` explains why that decision is the whole thing, and what the six
-solids are. Read it once; don't restate it here.
+They are two pages of one picker rather than two screens, because they are
+alternatives to each other: whichever one you are looking at is what the button
+at the bottom does, and it is named Deal or Roll accordingly. A [Profile] is
+both pages at once for the same reason, so a save made on one does not throw
+away the other.
+
+`README.md` explains why the frame-of-reference decision is the whole of how
+the tray *feels*, and what the six solids are. Read it once; don't restate it
+here.
 
 ## Commands
 
@@ -139,6 +159,25 @@ test exists to make the change deliberate, not to make it hard.
   candidate axes through both vertex lists, which is why the edge loop in
   `collision.dart` is written out in scalars and why `RigidBody` caches its
   world-space vertices, face normals and edge directions in `syncDerived`.
+- **A contact's feature id is banded, and the bands have a ceiling.** Warm
+  starting hands each contact back the impulse it settled on last step, and it
+  finds it by `manifold key × featureIdLimit + featureId` — so an id that
+  strays out of its own manifold's slot silently collects a *different pair of
+  dice's* impulses. Three kinds of point come out of `collision.dart` and they
+  are numbered from three separate bases so that cannot happen: below
+  `_clippedId` (32) an id is a vertex of the incident face, up to `_edgeId`
+  (128) it is a point the clipper invented, and above that it is a pair of edge
+  groups at `_edgeId + i × _edgePitch + j`. That last band is the one with room
+  to overrun — it reaches 1151, which is what puts `featureIdLimit` at 2048 and
+  why a stride of 64 was a bug rather than a tight fit. The manifold keys are
+  banded the same way and by the same reasoning: a wall is `i × 8 + w` and a
+  pair is `1000 + i × 16 + j`, so a body gets eight wall slots and a pair
+  sixteen. **A shape with 32 or more edge directions breaks the edge band, a
+  ninth wall breaks the first stride, and a seventeenth die breaks the second**
+  — today's six walls and ten dice leave two and six of margin respectively,
+  and none of the three would fail loudly. The dice would just jitter. There is
+  an assert at each end (`_edgeContact` and `ImpulseCache._key`) and two tests
+  in `physics_test.dart`, and between them that is the whole guard.
 - **The bevel is a fraction of each shape's inradius**, not a fixed 1.3 mm. It
   works out to exactly `Tuning.dieBevel` on the D6, which is what the feel was
   tuned against; a D4 bevelled by the same absolute amount would be a ball.
@@ -169,12 +208,28 @@ test exists to make the change deliberate, not to make it hard.
   nobody has thrown yet, which is fed `MotionFrame.still` off-screen until it
   sleeps so its dice are lying on the floor by the time you reach them. Anything
   that assumes every tray advances every frame will be wrong.
+- **A box is built once and never resized; the camera letterboxes instead.** A
+  `DiceTray`'s constructor throws the dice and a `CardTable`'s builds a `Deck`,
+  which shuffles — so rebuilding either one on a layout change is re-rolling a
+  result somebody is looking at, or putting a half-dealt shoe back together.
+  Android split screen and an opening foldable both do exactly that. So
+  `_ensureBoxes` and `_ensureTable` build on the first non-empty size and never
+  again, and `cameraFor` fits whatever was built into whatever room there now
+  is, by the smaller of the two ratios — which leaves a margin down two sides
+  rather than a stretched box or a floor drawn off the bottom of the screen. A
+  roll that a swipe cannot shake is a roll a window cannot shake either. One
+  function serves the painter and `dieAt`, so a tap lands on the die it looks
+  like it landed on; `render_test.dart` holds the split-screen case. The sharp
+  edge is at the other end of the same guard: both bail on an empty size and
+  both callers then index straight into what was not built, so a genuinely
+  zero-sized first layout throws rather than drawing nothing.
 - **A deck is every *ordered* outcome, six to the power of the dice.** 1-2 and
-  2-1 are two ways for a pair to land, and a deck holding each unordered pair
-  once would quietly halve the odds of every double. `Deck.build` counts in base
-  six for exactly that reason. It differs from rolling in the one way a shoe
-  always does — it is drawn without replacement — which is what `reshuffleAt`,
-  `Deck.cut` and `Deck.spent` are about.
+  2-1 are two ways for a pair to land where snake eyes has only one, so a deck
+  holding each unordered pair once would quietly make every double twice as
+  likely as it is. `Deck.build` counts in base six for exactly that reason. It
+  differs from rolling in the one way a shoe always does — it is drawn without
+  replacement — which is what `reshuffleAt`, `Deck.cut` and `Deck.spent` are
+  about.
 - **The card pile is life-sized until it cannot be.** Three dice across three
   decks is 648 cards, and at real 0.32 mm stock that pile is deeper than the
   tray — it would come out through the glass. `_maxPileDepth` in
@@ -234,6 +289,23 @@ test exists to make the change deliberate, not to make it hard.
   `Wrap` is only as wide as its widest run and the column above would centre
   it, so the profiles would drift sideways as they were added.
 
+- **The sensor filters are in seconds, not in frames.** `lowPass(dt, tau)` is
+  `1 − e^(−dt/τ)`, and `_kGravityTau`, `_kTwistTau` and `_kDragTau` are time
+  constants — 0.1026, 0.0467 and 0.0326 s. They are not new numbers: each is
+  the per-frame weight this file used to carry, converted at the 60 Hz it was
+  written against by `τ = dt / −ln(1 − blend)`, so 0.15 a frame *is* 102.6 ms.
+  A phone at 60 Hz therefore behaves exactly as it always did, to four figures.
+  The reason it is written this way is the other phones: a fixed pair of
+  weights — `held × 0.85 + sample × 0.15` — is not a filter with a time
+  constant, it is a filter with a time constant *per frame*, so a 120 Hz
+  ProMotion iPhone settles in half the wall-clock time a 60 Hz Android takes.
+  Which way is down would then chase a shake twice as eagerly on one phone as
+  on the other. **Writing a bare blend factor back in would reintroduce that,
+  and it would only show up on hardware you are probably not holding** —
+  `gravity_test.dart` pins rate-independence and step composition for exactly
+  that reason. Two guards belong to the formula and not to taste: `dt <= 0`
+  returns 0 because nothing moves in no time, and `tau <= 0` returns 1 because
+  no constant is no filter.
 - **Motion control off is a source, not a flag.** `Settings.motion` is read in
   exactly two places — `TrayScreen.initState` and `CardScreen.initState`, both
   through `motionSourceFor` — and what it selects is a `StillMotionSource`

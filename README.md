@@ -1,11 +1,30 @@
-# Roll Hippo — dice tray
+# Roll Hippo — a shoe of every roll, and the tray that throws them
 
 [![CI](https://github.com/jfigge/rollhippo/actions/workflows/ci.yml/badge.svg)](https://github.com/jfigge/rollhippo/actions/workflows/ci.yml)
 
-Pick a set of dice — up to ten of them, any mixture of D4 through D20, each its
-own colour — throw them into a box the size of the phone screen and 20 cm deep,
-and read what they landed on. They fall under gravity, bounce off the walls and
-off each other, and tumble when the phone is shaken.
+Two ways to get a roll, and the app is equally both.
+
+**Deal one.** A shoe holds one card for every outcome the dice could produce —
+one to three six-sided dice, one to three decks of them at once — shuffled, and
+dealt without replacement. Every *ordered* combination is in there exactly once
+per deck: 1-2 and 2-1 are two separate ways for a pair to land where snake eyes
+has only one, and a deck holding each unordered pair once would make every
+double twice as likely as it is, quietly changing the odds of the game you were
+playing. Getting that right is what makes a card the same wager as the throw it
+stands for. It then differs in the one way a shoe always differs — it is drawn
+without replacement, so what has already gone tells you something about what is
+left — and there is a cut card, at a percentage you set, for exactly that
+reason. Three dice across three decks is 648 cards.
+
+**Or throw one.** Pick a set of dice — up to ten of them, any mixture of D4
+through D20, each its own colour — into a box the size of the phone screen and
+20 cm deep, and read what they landed on. They fall under gravity, bounce off
+the walls and off each other, and tumble when the phone is shaken.
+
+The two are pages of one screen rather than two screens, because they are
+alternatives: whichever you are looking at is what the button does, and it says
+Deal or Roll accordingly. The rest of this file is about the tray, which is the
+half with the physics in it.
 
 ## The one idea
 
@@ -107,10 +126,11 @@ rollhippo/
 └── src/
     ├── lib/physics/   body · shape · contact · collision · solver · world   (no Flutter)
     ├── lib/tray/      tray geometry · dice · tuning constants · a profile · the share codes
+    ├── lib/cards/     the shoe: every ordered outcome, shuffled, dealt   (no Flutter)
     ├── lib/motion/    sensor source, and a synthetic one for the harness
     ├── lib/render/    perspective camera and painter
     ├── lib/app/       the two screens, the app menu, and the haptics
-    ├── test/          119 tests, all headless
+    ├── test/          225 tests, all headless
     └── tool/          filmstrip · roll_gif · one_die · picker · appstore  (render to image files)
 ```
 
@@ -122,7 +142,7 @@ know Flutter exists.
 ## Running it
 
 ```
-make test        # 213 headless tests: geometry, integration, resting, containment, fairness
+make test        # 225 headless tests: geometry, integration, resting, containment, fairness
 make desktop     # macOS harness — phone-sized tray, simulated shake
 make ios         # build and install on the iPhone
 make android     # build and install on the Android phone
