@@ -63,3 +63,17 @@ class TrayButton extends StatelessWidget {
     );
   }
 }
+
+/// How wide a modal sheet is allowed to get.
+///
+/// The same number as the picker's rack, for the same reason rather than by
+/// coincidence: a phone is narrower than this and fills it, and on a desktop
+/// window an unconstrained sheet is a line of text you read across a foot of
+/// screen, or a QR code the size of a beer mat.
+///
+/// Here rather than in `menu.dart`, where it was, because the tutorial is a
+/// sheet too and the menu is what opens it — so a constant kept over there
+/// would have to travel back through an import cycle to reach it. This file is
+/// the chrome every screen shares and has nothing app-local of its own to
+/// import, which is what makes it the one place both can see.
+const double kSheetWidth = 440;

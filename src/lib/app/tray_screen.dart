@@ -18,6 +18,12 @@ import 'settings.dart';
 // have them too, but this is still where they are reached from.
 export 'chrome.dart';
 
+/// Throw, and the dots that count the boxes — named so the tutorial can point
+/// at them. They are the two things on this screen that a page of it is about,
+/// and neither has a label anywhere else that says what it does.
+const Key kTrayThrow = ValueKey<String>('tray-throw');
+const Key kTrayDots = ValueKey<String>('tray-dots');
+
 /// How hard a flick has to be to carry the box to the next group on its own,
 /// in screens per second. Below this the box goes wherever it is nearest to.
 const double _kFlingPages = 0.9;
@@ -431,6 +437,7 @@ class _TrayScreenState extends State<TrayScreen>
                               ),
                               if (paged)
                                 PageDots(
+                                  key: kTrayDots,
                                   current: _at,
                                   filled: List<bool>.filled(
                                     _boxes.length,
@@ -438,6 +445,7 @@ class _TrayScreenState extends State<TrayScreen>
                                   ),
                                 ),
                               TrayButton(
+                                key: kTrayThrow,
                                 label: 'Throw',
                                 onTap: _throwCurrent,
                                 emphasis: true,

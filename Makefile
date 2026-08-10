@@ -57,7 +57,7 @@ PLAY_PACKAGE ?= com.rollhippo.rollhippo
 PLAY_TRACK   ?= internal
 
 .DEFAULT_GOAL := help
-.PHONY: help all ci format format-check analyze test desktop ios android ipa upload keystore aab play-upload gif filmstrip picker cards hippo screenshots screenshots-65 screenshots-play site icon clean
+.PHONY: help all ci format format-check analyze test desktop ios android ipa upload keystore aab play-upload gif filmstrip picker cards hippo tutorial screenshots screenshots-65 screenshots-play site icon clean
 
 help:  ## Show this help
 	@# firstword, not the whole list: `-include release.env` puts that file
@@ -171,6 +171,11 @@ hippo:  ## Render the hippopotamus — every pose a roll can present it in
 	@mkdir -p $(SCRATCH)
 	cd $(SRC) && HIPPO_OUT=$(SCRATCH)/hippo.png flutter test tool/hippo.dart
 	@echo "→ $(SCRATCH)/hippo.png"
+
+tutorial:  ## Render the tutorial, page by page, over the screens it explains
+	@mkdir -p $(SCRATCH)
+	cd $(SRC) && TUTORIAL_OUT=$(SCRATCH) flutter test tool/tutorial.dart
+	@echo "→ $(SCRATCH)/tutorial-*.png"
 
 screenshots:  ## Render the store listing's screenshots, and the site's gallery
 	@# Writes into the project, not /tmp, for the same reason `icon` does: the

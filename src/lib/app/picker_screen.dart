@@ -11,6 +11,7 @@ import 'page_dots.dart';
 import 'profile_row.dart';
 import 'profiles.dart';
 import 'tray_screen.dart';
+import 'tutorial.dart';
 
 /// The most dice the tray will take.
 ///
@@ -196,7 +197,39 @@ int rollableIndex(List<List<DieSpec>> groups, int group) {
 /// — an edit is to the picker, not to the save — so keeping a change means
 /// holding a profile down and choosing Save. See [ProfileRow] and [_saveTo].
 class PickerScreen extends StatefulWidget {
-  const PickerScreen({super.key});
+  const PickerScreen({
+    super.key,
+    this.tutorial = false,
+    this.initial = kDefaultProfile,
+  });
+
+  /// What the picker opens showing.
+  ///
+  /// [kDefaultProfile] everywhere a person is looking at it, because that is
+  /// what an empty desk is. It is a parameter because the tutorial builds a
+  /// picker of its own to stand behind itself — see [tutorialBackdrop] — and
+  /// that one has to be showing the page it is currently talking about rather
+  /// than whatever the real screen underneath happens to be set to.
+  ///
+  /// Read once, in [State.initState]. Handing a different profile to a picker
+  /// that is already up does nothing: opening a profile is [_apply]'s job and
+  /// it goes through the store.
+  final Profile initial;
+
+  /// Whether to put the tutorial up over this screen on the way in.
+  ///
+  /// Passed in rather than read off `settings`, because "is this a first run"
+  /// is a fact about the *launch* and this widget is built by three other
+  /// things that are not launches: the tools in `tool/` render it into PNGs
+  /// for the store listing and the website, and the tests pump it a hundred
+  /// times a run. `main` is the one place that knows, so `main` is the one
+  /// place that answers — and the default is false, so everything else carries
+  /// on exactly as it did.
+  ///
+  /// It is only ever read once, in [State.initState]. Changing it afterwards
+  /// does nothing, which is the truth of the thing: a run cannot become a
+  /// first run.
+  final bool tutorial;
 
   @override
   State<PickerScreen> createState() => _PickerScreenState();
@@ -207,6 +240,11 @@ class _PickerScreenState extends State<PickerScreen>
   /// The three sets. The first is the one the app starts with and always has at
   /// least one die in it; the other two begin with none, and are allowed to go
   /// back to none, because an empty group is how you say you only wanted one.
+  ///
+  /// Filled from [PickerScreen.initial] in [initState], along with everything
+  /// else below that a profile carries. The values written here are what a
+  /// field initialiser has to be — something legal for the moment between the
+  /// constructor and [initState] — and not what the picker opens showing.
   final List<List<DieSpec>> _groups = <List<DieSpec>>[
     List<DieSpec>.of(kDefaultDice),
     <DieSpec>[],
@@ -279,7 +317,22 @@ class _PickerScreenState extends State<PickerScreen>
   @override
   void initState() {
     super.initState();
+    _load(widget.initial);
+    // What [_apply] does after its own [_load], minus the page controller,
+    // which has no clients yet and opens on page zero anyway.
+    _slide.value = _cards ? 1 : 0;
     profiles.addListener(_savesChanged);
+    // After the first frame rather than during it: the tutorial is a route,
+    // and pushing a route from `initState` asks the navigator to rebuild the
+    // tree that is in the middle of building this widget. The frame the picker
+    // is drawn on is the frame the sheet slides up over, so nobody sees the
+    // gap — and what is behind it is the screen the tutorial is talking about,
+    // which is the whole reason this is a sheet and not a page of its own.
+    if (widget.tutorial) {
+      WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+        if (mounted) unawaited(_tutorial());
+      });
+    }
   }
 
   @override
@@ -366,21 +419,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// [_applyScanned] gives: a profile written by some later build with
   /// four sets, or four dice on a card, loses the excess and opens.
   void _apply(Profile profile) {
-    setState(() {
-      _takeGroups(profile.groups);
-      _cardColours
-        ..clear()
-        ..addAll(profile.colours.take(kMaxCardDice));
-      // The last die always stays — a shoe with no dice in it is not a shoe —
-      // so a profile that says otherwise gets the one card mode starts
-      // with rather than a panel with nothing to point at.
-      if (_cardColours.isEmpty) _cardColours.add(kCardDie.colour);
-      _cardSelected = 0;
-      _decks = profile.decks.clamp(1, kMaxDecks);
-      _reshuffleAt = profile.reshuffleAt.clamp(0, kMaxReshuffleAt);
-      _mode = profile.mode;
-      _group = 0;
-    });
+    setState(() => _load(profile));
     // Both of these are where a profile begins: the first set, and the
     // mode it was saved in. Jumped to rather than animated — nothing is sliding
     // *from* anywhere, the screen has just become a different one.
@@ -388,8 +427,30 @@ class _PickerScreenState extends State<PickerScreen>
     if (_racks.hasClients) _racks.jumpToPage(0);
   }
 
+  /// Writes a profile into the fields, and nothing else.
+  ///
+  /// Split out of [_apply] because [initState] needs exactly this half and
+  /// none of the other: there is no [setState] to call before the first build,
+  /// and the two controllers it drives afterwards are either not built yet or
+  /// already where this would put them.
+  void _load(Profile profile) {
+    _takeGroups(profile.groups);
+    _cardColours
+      ..clear()
+      ..addAll(profile.colours.take(kMaxCardDice));
+    // The last die always stays — a shoe with no dice in it is not a shoe —
+    // so a profile that says otherwise gets the one card mode starts
+    // with rather than a panel with nothing to point at.
+    if (_cardColours.isEmpty) _cardColours.add(kCardDie.colour);
+    _cardSelected = 0;
+    _decks = profile.decks.clamp(1, kMaxDecks);
+    _reshuffleAt = profile.reshuffleAt.clamp(0, kMaxReshuffleAt);
+    _mode = profile.mode;
+    _group = 0;
+  }
+
   /// Takes a set of groups into the rack, held to the picker's limits. Call
-  /// from inside a [setState].
+  /// from inside a [setState], or from [initState] before there is one.
   void _takeGroups(List<List<DieSpec>> from) {
     for (int group = 0; group < kMaxGroups; group++) {
       final List<DieSpec> dice =
@@ -685,6 +746,17 @@ class _PickerScreenState extends State<PickerScreen>
     ),
   );
 
+  /// Puts the tutorial up. Both ways in come through here: the first launch,
+  /// from [initState], and **How to use** at the bottom of the app menu.
+  ///
+  /// The backdrop goes with it because the tutorial cannot build one for
+  /// itself. It draws the screen each page is about behind the card of text,
+  /// and two of the three screens are this file — so a tutorial that reached
+  /// for [PickerScreen] directly would be a file the picker imports importing
+  /// the picker back. `profile_row.dart` pays for the same rule with a
+  /// duplicated constant; here the cost is one function, which is cheaper.
+  Future<void> _tutorial() => showTutorial(context, backdrop: tutorialBackdrop);
+
   void _goTo(int group) => _racks.animateToPage(
     group,
     duration: const Duration(milliseconds: 260),
@@ -786,8 +858,10 @@ class _PickerScreenState extends State<PickerScreen>
             children: <Widget>[
               const SizedBox(width: _kMenuEdge),
               AppMenuButton(
+                key: kAppMenu,
                 onScanned:
                     (ScannedProfile scanned) => unawaited(_scanned(scanned)),
+                onTutorial: () => unawaited(_tutorial()),
               ),
               // Shrunk to fit rather than cut off. The longest name allowed
               // takes the title past the width of a phone, and an ellipsis
@@ -1024,6 +1098,10 @@ class _PickerScreenState extends State<PickerScreen>
   Widget _cardPanel() {
     final int size = Deck.sizeOf(_cardDice, _decks);
     return Container(
+      // The handle the two modes are dragged by, on the page that has the
+      // most to say for itself — which is why it is the thing the tutorial's
+      // first page points at. See [kCardPanel].
+      key: kCardPanel,
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
       decoration: BoxDecoration(
@@ -1168,6 +1246,7 @@ class _PickerScreenState extends State<PickerScreen>
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         return SizedBox(
+          key: kRack,
           height: _rackHeight(constraints.maxWidth),
           child: PageView(
             controller: _racks,
@@ -1388,6 +1467,7 @@ class _PickerScreenState extends State<PickerScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: FilledButton(
+        key: kRollButton,
         onPressed: anything ? _roll : null,
         style: FilledButton.styleFrom(
           backgroundColor: const Color(0xFF3F6FA8),
@@ -1411,6 +1491,30 @@ class _PickerScreenState extends State<PickerScreen>
     );
   }
 }
+
+/// The screen the tutorial draws behind itself, for a given page.
+///
+/// A real [PickerScreen] and a real [TrayScreen], not a picture of either:
+/// what a page points at has to be where it actually is, and a drawing of a
+/// screen is a second thing to keep in step with the first. They are built
+/// from [kTutorialProfile] rather than from whatever the player has set up,
+/// because the whole point is that the backdrop shows the page being
+/// *discussed* — the card page while the card page is being explained, three
+/// sets of dice while the three sets are.
+///
+/// Nothing here is touchable: the tutorial puts every one of these behind an
+/// [IgnorePointer]. The tray is still fed the accelerometer, though, so a
+/// shake on the page that says "shake to throw" throws it.
+///
+/// Handed to [showTutorial] rather than reached for from inside it — see
+/// [_PickerScreenState._tutorial], which explains what the indirection buys.
+Widget tutorialBackdrop(TutorialStage stage) => switch (stage) {
+  TutorialStage.dice => const PickerScreen(initial: kTutorialProfile),
+  TutorialStage.cards => const PickerScreen(initial: kTutorialCards),
+  TutorialStage.tray => TrayScreen(
+    groups: rollableGroups(kTutorialProfile.groups),
+  ),
+};
 
 /// One place in the rack: a die you can select, the space the next die goes in,
 /// or a slot the set has not reached yet.

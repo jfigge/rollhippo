@@ -53,6 +53,7 @@ Run from the repo root:
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
 | `make picker` | render the picker — both modes, its saves, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
+| `make tutorial` | render the tutorial — every page, over the screen that page is about, with the part it names lit — on a phone and on the shortest screen worth shipping to, into `/tmp/rollhippo/` |
 | `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders, and both platforms' launch images with it — writes into the project, not `/tmp`. The XML beside the rasters is structure, not drawing, and is not regenerated: the adaptive icon's two files, `LaunchScreen.storyboard`, and Android's `launch_background.xml` and `styles.xml`, which only place the launch image and paint the picker's colour behind it |
 | `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel. Installs with `xcrun devicectl`, **never `flutter install`** — that one uninstalls the old copy first and cannot be told not to, and an uninstalled iOS app takes its container, its `NSUserDefaults` and so every saved profile with it |
 | `make android` | `--profile` for exactly the same reason, and `adb install -r` for the other one — same trap, same cost, `shared_preferences`' XML instead of `NSUserDefaults`. On either platform, `flutter run -d <id>` when hot reload is worth more than the feel; `run` installs over the top, which is why it is safe |
@@ -91,13 +92,15 @@ src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter 
                    for the back of a card — neither of them a body)
 src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
-                   haptics (HapticEngine + HapticDriver) · settings (haptic gain · motion control)
+                   tutorial (the first run: pages you swipe, over the screen each is about) ·
+                   haptics (HapticEngine +
+                   HapticDriver) · settings (haptic gain · motion control · tutorial seen)
                    profiles (SavedProfile · ProfileStore — the saves, stored)
                    profile_row (the row of them, and the naming and delete dialogs)
 src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at
                    runtime, `tool/app_icon.dart` transcribes it
 src/test/          headless
-src/tool/          filmstrip · roll_gif · one_die · picker · hippo · app_icon · appstore — run via `flutter test`,
+src/tool/          filmstrip · roll_gif · one_die · picker · hippo · tutorial · app_icon · appstore — run via `flutter test`,
                    they write image files
 website/           Roll Hippo's whole website — index.html, docs/index.html (the user guide),
                    and images/. Hand-written, no build step. `make site` copies it to
@@ -403,3 +406,57 @@ test exists to make the change deliberate, not to make it hard.
   decides, and `throwDice` calls `readout.release()` *before* it scatters
   anything so that a held die is put back on the spot it landed on rather than
   left hanging where the formation had lifted it to.
+
+- **A first run is a fact about the launch, not about the picker.**
+  `PickerScreen` takes a `tutorial` flag and it defaults to *false*, because
+  `main` is the only thing in the repository that knows a launch has happened:
+  `tool/picker.dart` and `tool/appstore.dart` build that same screen to render
+  the store listing and the website's pictures, better than two hundred widget
+  tests pump it, and — since the tutorial gained a backdrop — the tutorial
+  itself builds two more. Every one of those would have been a first run if the
+  screen had asked `settings.tutorialSeen` for itself, the store listing would
+  have shipped with a tutorial over it, and the tutorial would have opened a
+  tutorial. So `main` reads the flag, hands down the answer, and nothing else
+  has to know. `showTutorial` is what writes it back — on the way *out*, so an
+  app killed with the tutorial open has not shown it to anybody and offers it
+  again — and it writes it whichever of the two ways it was reached, the launch
+  or **How to use** at the bottom of the app menu. There is deliberately no way
+  back to false and no switch for it: the menu entry is one tap.
+
+- **The tutorial brings its own screen, and the imports run one way.**
+  Each page is said in front of the screen it is about — the card page, the
+  dice page, or a live `TrayScreen` — with the one thing it names left undimmed
+  and everything else at two thirds black, and the card of words hung off the
+  roomier side of that hole. Three consequences, and the last is the one that
+  bites.
+
+  It is the tutorial's own picker rather than the player's, built from
+  `kTutorialProfile`, because the backdrop has to show the page being
+  *discussed*: card mode while card mode is being explained, three filled sets
+  while the three sets are. A tour that drove the real picker would be a tour
+  that rearranged your dice.
+
+  Every backdrop is laid out at all times and only one is painted, which is
+  what `Opacity` at zero does. That is not a saving — a screen taken out of the
+  tree has no rectangle to measure when the page about it arrives, and the hole
+  would open a frame late every time. The tray is the exception, built on
+  arrival rather than at the start, because it is a live simulation with a
+  haptic in front of it and one running under a page about something else taps
+  the phone about dice nobody can see.
+
+  **`lib/app/tutorial.dart` must not import `picker_screen.dart`.** The picker
+  opens the tutorial, so the edge already runs that way; the tutorial reaches
+  back through two handles instead. `tutorialBackdrop`, a function the picker
+  passes to `showTutorial`, is how it gets its screens, and `AppMenuButton`
+  takes an `onTutorial` callback so **How to use** does not have to know what
+  it opens either. The three spots that had no name before — `kCardPanel`,
+  `kRack`, `kRollButton` — are declared in `tutorial.dart` and used in
+  `picker_screen.dart`, which is the same trick in the other direction and the
+  reason they live somewhere surprising.
+
+  A spot is found by walking the element tree for a `ValueKey`, scoped to the
+  stage the page names. Not a `GlobalKey`: with two pickers on screen a global
+  key on anything the picker draws would collide the moment the second one was
+  built. And the scoping is not optional — both backdrop pickers build *both*
+  of their own pages, so there are two racks and two card panels in the tree at
+  any moment, one of each pair translated a screen width off to the side.

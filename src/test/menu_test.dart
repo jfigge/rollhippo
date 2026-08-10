@@ -104,7 +104,9 @@ void main() {
       );
 
       await openMenu(tester);
-      for (final String label in <String>['Settings', 'Scan']) {
+      // Three now: the app, somebody else's phone, and the app explaining
+      // itself. `tutorial_test.dart` is where the order of them is held.
+      for (final String label in <String>['Settings', 'Scan', 'How to use']) {
         expect(find.text(label), findsOneWidget, reason: '$label is missing');
       }
       // And not the third it used to have. Sharing is about a profile, so it

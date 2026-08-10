@@ -4,18 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../tray/tray.dart';
+import 'chrome.dart';
 import 'haptics.dart';
 import 'scan_screen.dart';
 import 'settings.dart';
 import 'tray_screen.dart';
-
-/// How wide a sheet is allowed to get.
-///
-/// The same number as the picker's rack, for the same reason rather than by
-/// coincidence: a phone is narrower than this and fills it, and on a desktop
-/// window an unconstrained sheet is a line of text you read across a foot of
-/// screen, or a QR code the size of a beer mat.
-const double _kSheetWidth = 440;
 
 /// How many steps the calibration slider has between off and [_kMaxGain].
 ///
@@ -64,12 +57,23 @@ const List<double> _kMenuBarRows = <double>[7 / 24, 12 / 24, 17 / 24];
 const double kAppMenuInset =
     (_kMenuTarget - _kMenuIcon) / 2 + _kMenuIcon * _kMenuBarInset;
 
+/// The menu button itself, so the tutorial can point at it. The one thing on
+/// the picker that is about the app rather than about the dice, and the only
+/// way to Settings — which makes it worth a page of its own.
+const Key kAppMenu = ValueKey<String>('app-menu');
+
 /// The app menu: three lines, top left.
 ///
 /// Everything in it is about the app rather than about the dice in front of
 /// you, which is why it is a menu and not four more buttons on a screen that
-/// already has enough. Two entries, and the pair of them is the whole of the
-/// test: Settings is about the phone, and Scan is about somebody else's.
+/// already has enough. Settings is about the phone, Scan is about somebody
+/// else's, and How to use is about the app itself — none of the three is about
+/// the set of dice you are looking at, which is the whole of the test.
+///
+/// How to use is last, and last is where it belongs: it is the entry a first
+/// run has already shown you and the only one you reach for when something
+/// else has not worked. The two above it are the ones somebody comes here
+/// meaning to press.
 ///
 /// Sharing used to be the third, and is not, because it is the one thing here
 /// that was never about the app. A code *is* a profile, so it belongs to a
@@ -78,17 +82,27 @@ const double kAppMenuInset =
 /// `profile_row.dart`. What is left up here needs no profile at all, which is
 /// why this button no longer takes one.
 class AppMenuButton extends StatefulWidget {
-  const AppMenuButton({super.key, required this.onScanned});
+  const AppMenuButton({
+    super.key,
+    required this.onScanned,
+    required this.onTutorial,
+  });
 
   /// Handed the profile a scanned code described, and the name that came
   /// with it. Not called if the scanner was closed without finding one.
   final ValueChanged<ScannedProfile> onScanned;
 
+  /// What **How to use** does. A callback rather than a call, because the
+  /// tutorial draws a picker behind itself and the picker is what builds this
+  /// button — so a menu that opened the tutorial itself would put a cycle
+  /// through three files. See `PickerScreen._tutorial`.
+  final VoidCallback onTutorial;
+
   @override
   State<AppMenuButton> createState() => _AppMenuButtonState();
 }
 
-enum _MenuItem { settings, scan }
+enum _MenuItem { settings, scan, tutorial }
 
 class _AppMenuButtonState extends State<AppMenuButton> {
   Future<void> _run(_MenuItem item) async {
@@ -97,6 +111,8 @@ class _AppMenuButtonState extends State<AppMenuButton> {
         await showSettingsSheet(context);
       case _MenuItem.scan:
         await _scan();
+      case _MenuItem.tutorial:
+        widget.onTutorial();
     }
   }
 
@@ -132,6 +148,7 @@ class _AppMenuButtonState extends State<AppMenuButton> {
           (BuildContext context) => <PopupMenuEntry<_MenuItem>>[
             _entry(_MenuItem.settings, Icons.tune, 'Settings'),
             _entry(_MenuItem.scan, Icons.qr_code_scanner, 'Scan'),
+            _entry(_MenuItem.tutorial, Icons.help_outline, 'How to use'),
           ],
     );
   }
@@ -197,7 +214,7 @@ Future<void> showSettingsSheet(
   context: context,
   backgroundColor: Colors.transparent,
   barrierColor: const Color(0xB3000000),
-  constraints: const BoxConstraints(maxWidth: _kSheetWidth),
+  constraints: const BoxConstraints(maxWidth: kSheetWidth),
   // Otherwise a sheet is capped at nine sixteenths of the screen, and the
   // paragraph explaining what the slider does is the part that goes missing.
   isScrollControlled: true,
@@ -364,7 +381,7 @@ Future<void> showShareSheet(
   context: context,
   backgroundColor: Colors.transparent,
   barrierColor: const Color(0xB3000000),
-  constraints: const BoxConstraints(maxWidth: _kSheetWidth),
+  constraints: const BoxConstraints(maxWidth: kSheetWidth),
   isScrollControlled: true,
   builder: (BuildContext context) => _ShareSheet(profile: profile, name: name),
 );

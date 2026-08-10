@@ -34,11 +34,20 @@ Future<void> main() async {
   // that says what you have saved, and one that arrived a frame or two after
   // the screen did would flicker on every launch.
   await profiles.load();
-  runApp(const RollHippoApp());
+  // And this is the one place that knows a launch is a launch. The picker is
+  // also built by the tools that render the store screenshots and by every
+  // widget test in the suite, and none of those is a first run — so the
+  // question is answered here and handed down, rather than asked by the screen
+  // that would have to answer it the same way every time.
+  runApp(RollHippoApp(tutorial: !settings.tutorialSeen));
 }
 
 class RollHippoApp extends StatelessWidget {
-  const RollHippoApp({super.key});
+  const RollHippoApp({super.key, this.tutorial = false});
+
+  /// Whether the picker opens with the tutorial over it. See
+  /// [Settings.tutorialSeen], which is the only thing that ever says yes.
+  final bool tutorial;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +55,7 @@ class RollHippoApp extends StatelessWidget {
       title: 'Roll Hippo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
-      home: const PickerScreen(),
+      home: PickerScreen(tutorial: tutorial),
     );
   }
 }

@@ -8,20 +8,23 @@ import '../tray/tray.dart';
 /// What the app remembers between launches.
 ///
 /// One instance, [settings], reached directly rather than handed down through
-/// the widget tree. There are two settings and a handful of places that read
-/// them, and an inherited widget threaded through the picker, the tray and a
-/// modal sheet to carry a double and a bool would be more machinery than the
-/// thing it carries.
+/// the widget tree. There are two settings and a flag, and a handful of places
+/// that read them; an inherited widget threaded through the picker, the tray
+/// and a modal sheet to carry a double and two bools would be more machinery
+/// than the thing it carries.
 ///
 /// It is a [ChangeNotifier] so the sheet that edits it and the tray that obeys
 /// it stay in step without either one owning the value.
 class Settings extends ChangeNotifier {
   static const String _hapticGainKey = 'haptic.gain';
   static const String _motionKey = 'motion.enabled';
+  static const String _tutorialKey = 'tutorial.seen';
 
   double _hapticGain = Tuning.hapticGain;
 
   bool _motion = true;
+
+  bool _tutorialSeen = false;
 
   /// The calibration multiplier applied to every wall impact. See
   /// [Tuning.hapticGain]; zero is off.
@@ -55,6 +58,28 @@ class Settings extends ChangeNotifier {
     unawaited(_save());
   }
 
+  /// Whether anybody has been shown the tutorial on this phone.
+  ///
+  /// False is a first run, and a first run is the one launch that puts
+  /// something in front of the picker before you have asked for anything. It
+  /// is read in exactly one place — `main`, which hands the answer to
+  /// [PickerScreen] rather than letting the picker decide for itself, because
+  /// a tool rendering that screen into a PNG and a test pumping it are not
+  /// launches and must not be treated as one.
+  ///
+  /// Written by `showTutorial`, whichever of the two ways it was reached.
+  /// There is no way back to false and there is deliberately no switch for it:
+  /// the tutorial is in the app menu, at the bottom, and asking for it again
+  /// is one tap.
+  bool get tutorialSeen => _tutorialSeen;
+
+  set tutorialSeen(bool value) {
+    if (value == _tutorialSeen) return;
+    _tutorialSeen = value;
+    notifyListeners();
+    unawaited(_save());
+  }
+
   /// Reads what was stored, if anything was.
   ///
   /// Awaited from `main` before the first frame, so the tray never runs a
@@ -67,16 +92,23 @@ class Settings extends ChangeNotifier {
     final double? gain = prefs.getDouble(_hapticGainKey);
     if (gain != null) _hapticGain = gain.clamp(0.0, Tuning.hapticMaxGain);
     _motion = prefs.getBool(_motionKey) ?? true;
+    // A phone with nothing written for this has never been shown the
+    // tutorial — which is true both of a genuine first run and of a launch
+    // after the preferences file has been thrown away, and offering it again
+    // is the right answer to both.
+    _tutorialSeen = prefs.getBool(_tutorialKey) ?? false;
     notifyListeners();
   }
 
   Future<void> _save() async {
     final double gain = _hapticGain;
     final bool motion = _motion;
+    final bool tutorial = _tutorialSeen;
     await _guard<void>(() async {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_hapticGainKey, gain);
       await prefs.setBool(_motionKey, motion);
+      await prefs.setBool(_tutorialKey, tutorial);
     });
   }
 
