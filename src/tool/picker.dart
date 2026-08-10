@@ -5,8 +5,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/render/die_preview.dart';
@@ -104,17 +104,17 @@ void main() {
     await _write(tester, '$dir/picker-cards.png');
   });
 
-  testWidgets('the saves, and the two dialogs about them', (
+  testWidgets('the saves, and the dialogs about them', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(kHarnessScreen);
     tester.view.physicalSize = kHarnessScreen * 2;
     tester.view.devicePixelRatio = 2.0;
 
-    // Three saves, put straight into the store rather than made through the
-    // dialog: what these pictures are for is the row and the chooser, and
-    // typing three names in through a keyboard that is not there would only
-    // be a slower way to arrive at the same screen.
+    // Several saves, put straight into the store rather than made through the
+    // dialog: what these pictures are for is the row, and typing six names in
+    // through a keyboard that is not there would only be a slower way to
+    // arrive at the same screen.
     profiles.add('Yahtzee', _saved(5));
     profiles.add('D&D', _saved(7));
     profiles.add('Craps', _saved(2));
@@ -127,13 +127,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The first thing the app does when there is anything to open.
-    await _write(tester, '$dir/picker-open.png');
-
-    await tester.tap(find.text('+ New Profile'));
-    await tester.pumpAndSettle();
-
-    // And the row underneath it, with one of them open.
+    // The row, with one of them open.
     await tester.tap(find.text('Yahtzee'));
     await tester.pumpAndSettle();
     await _write(tester, '$dir/picker-saves.png');
@@ -190,8 +184,8 @@ void main() {
   });
 }
 
-/// A profile with [dice] dice in its first set, which is enough for the
-/// chooser to have something to say under each name.
+/// A profile with [dice] dice in its first set, which is enough for one save
+/// to be told from another.
 Profile _saved(int dice) => Profile(
   mode: ProfileMode.dice,
   groups: <List<DieSpec>>[

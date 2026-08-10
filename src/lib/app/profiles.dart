@@ -85,9 +85,14 @@ class SavedProfile {
   final String name;
   final Profile profile;
 
-  /// When it was last opened. What the chooser at launch sorts nothing by and
-  /// says out loud — "used 2h ago" is how you tell two saves apart when their
-  /// names have stopped meaning much.
+  /// When it was last opened.
+  ///
+  /// Written and kept up to date, and at present read by nothing: it was the
+  /// second line of the launch chooser — "5 dice · used 2h ago" — and that
+  /// screen is gone. It stays because it is *data*, and the one thing that
+  /// cannot be recovered later is a timestamp nobody recorded. A row of
+  /// profiles sorted by what you last reached for is the obvious use, and it
+  /// costs one integer in the preferences file to keep the option open.
   final DateTime usedAt;
 
   SavedProfile copyWith({String? name, Profile? profile, DateTime? usedAt}) =>
@@ -97,11 +102,6 @@ class SavedProfile {
         profile: profile ?? this.profile,
         usedAt: usedAt ?? this.usedAt,
       );
-
-  /// The line under the name in the launch chooser: what it holds, and when you
-  /// last had it open.
-  String subtitle(DateTime now) =>
-      '${profile.summary} · used ${agoLabel(usedAt, now)}';
 
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
@@ -131,37 +131,13 @@ class SavedProfile {
   }
 }
 
-/// How long ago [then] was, in the coarsest form that is still true.
-///
-/// Coarse on purpose. Nobody is timing anything: the question this answers is
-/// "is this the one I was playing with, or the one from last month", and to
-/// that "2h ago" and "yesterday" are complete answers where a timestamp is
-/// something you have to work out.
-///
-/// The days are elapsed days rather than calendar ones, so "yesterday" means
-/// somewhere between one and two days back rather than after midnight. A clock
-/// that has gone backwards — a timezone change, a phone corrected off the
-/// network — lands on "just now", which is wrong by less than the alternatives.
-String agoLabel(DateTime then, DateTime now) {
-  final Duration gap = now.difference(then);
-  if (gap.inMinutes < 1) return 'just now';
-  if (gap.inMinutes < 60) return '${gap.inMinutes}m ago';
-  if (gap.inHours < 24) return '${gap.inHours}h ago';
-  if (gap.inDays < 2) return 'yesterday';
-  if (gap.inDays < 7) return '${gap.inDays} days ago';
-  if (gap.inDays < 14) return 'last week';
-  if (gap.inDays < 60) return '${gap.inDays ~/ 7} weeks ago';
-  if (gap.inDays < 365) return '${gap.inDays ~/ 30} months ago';
-  return 'over a year ago';
-}
-
 /// The saved profiles, and the file they live in.
 ///
 /// One instance, [profiles], reached directly rather than handed down the widget
 /// tree — the same bargain `Settings` makes and for the same reason: the picker
-/// owns the profile, the row under it lists the saves, and the chooser
-/// at launch opens one, and threading a store through all three to be read in
-/// two of them would be more machinery than the thing it carries.
+/// owns the profile and the row under it lists the saves, and threading a store
+/// through both to be read in one of them would be more machinery than the
+/// thing it carries.
 ///
 /// Newest first. A save is made *from* what is on screen, so the one you just
 /// made is the one you are looking at, and it belongs where your eye already
@@ -204,10 +180,10 @@ class ProfileStore extends ChangeNotifier {
 
   /// Reads what was stored, replacing whatever is in memory.
   ///
-  /// Awaited from `main` before the first frame, because the first thing the
-  /// app does with this is decide whether to show the chooser at all — and a
-  /// chooser that appeared a moment after the picker had already been drawn
-  /// would be a dialog over a screen the player had started using.
+  /// Awaited from `main` before the first frame, so the row of profiles is
+  /// drawn with the saves already in it. Loading it afterwards would build the
+  /// row empty and fill it in a frame or two later, which is a flicker on
+  /// every launch of the one part of this screen that says what you have.
   ///
   /// Anything unreadable is dropped rather than repaired. One save from a later
   /// build, or one line somebody has been editing by hand, costs that save and

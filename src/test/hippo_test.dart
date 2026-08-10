@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/chrome.dart';
-import 'package:rollhippo/app/profile_row.dart';
-import 'package:rollhippo/app/open_dialog.dart';
 import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/physics/shape.dart';
 import 'package:rollhippo/render/die_preview.dart';
@@ -224,8 +223,6 @@ void main() {
     ) async {
       profiles.add('Yahtzee', oneDie(DieKind.d6));
       await pumpPicker(tester);
-      await tester.tap(find.text('+ New Profile'));
-      await tester.pumpAndSettle();
       await createSave(tester, 'hippo');
       expect(chip('Hippo'), findsOneWidget);
 
@@ -251,7 +248,7 @@ void main() {
       await pumpPicker(tester);
       await tester.tap(
         find.descendant(
-          of: find.byKey(kOpenProfile),
+          of: find.byKey(kProfileRow),
           matching: find.text('Someone Else'),
         ),
       );

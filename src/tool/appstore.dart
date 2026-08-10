@@ -401,10 +401,6 @@ void main() {
     await tester.pumpWidget(_app(const PickerScreen()));
     await tester.pumpAndSettle();
 
-    // Past the chooser the app opens with when there is anything to choose.
-    await tester.tap(find.text('+ New Profile'));
-    await tester.pumpAndSettle();
-
     await _shot(
       tester,
       dir,
@@ -419,8 +415,6 @@ void main() {
     profiles.add('Yahtzee', _saved(5));
 
     await tester.pumpWidget(_app(const PickerScreen()));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('+ New Profile'));
     await tester.pumpAndSettle();
 
     // Off the save's own menu, which is where sharing lives: hold the profile

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/chrome.dart';
-import 'package:rollhippo/app/profile_row.dart';
-import 'package:rollhippo/app/picker_screen.dart';
-import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/app/menu.dart';
-import 'package:rollhippo/app/open_dialog.dart';
 import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/profile_row.dart';
+import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,14 +39,10 @@ List<DieSpec> rack(WidgetTester tester) => <DieSpec>[
     preview.spec,
 ];
 
-/// One of the profiles under the picker, by name. Scoped, because the chooser at
-/// launch lists the same names one layer up.
+/// One of the profiles under the picker, by name. Scoped, because a rename
+/// dialog puts the same name into a text field over the top of it.
 Finder profile(String name) =>
     find.descendant(of: find.byKey(kProfileRow), matching: find.text(name));
-
-/// A row of the launch chooser, by name.
-Finder chooserRow(String name) =>
-    find.descendant(of: find.byKey(kOpenProfile), matching: find.text(name));
 
 /// Which mode the picker is in, straight off the dots that say so.
 int modeOf(WidgetTester tester) =>
@@ -248,27 +243,6 @@ void main() {
     });
   });
 
-  group('how long ago', () {
-    final DateTime now = DateTime(2026, 8, 6, 14, 30);
-    String ago(Duration back) => agoLabel(now.subtract(back), now);
-
-    test('is coarse, and stays true', () {
-      expect(ago(const Duration(seconds: 20)), 'just now');
-      expect(ago(const Duration(minutes: 5)), '5m ago');
-      expect(ago(const Duration(hours: 2)), '2h ago');
-      expect(ago(const Duration(hours: 30)), 'yesterday');
-      expect(ago(const Duration(days: 3)), '3 days ago');
-      expect(ago(const Duration(days: 9)), 'last week');
-      expect(ago(const Duration(days: 30)), '4 weeks ago');
-      expect(ago(const Duration(days: 200)), '6 months ago');
-      expect(ago(const Duration(days: 900)), 'over a year ago');
-    });
-
-    test('survives a clock that has gone backwards', () {
-      expect(agoLabel(now.add(const Duration(hours: 3)), now), 'just now');
-    });
-  });
-
   group('the store', () {
     test('puts the newest save at the front', () {
       profiles.add('First', diceProfile(1));
@@ -375,8 +349,6 @@ void main() {
     ) async {
       await pumpPicker(tester);
 
-      // Nothing to choose between, so nothing was asked.
-      expect(find.byKey(kOpenProfile), findsNothing);
       expect(find.byKey(kNewProfile), findsOneWidget);
       expect(find.text('+ New'), findsOneWidget);
     });
@@ -500,7 +472,6 @@ void main() {
         profiles.add('Game ${i + 1}', diceProfile(2));
       }
       await pumpPicker(tester);
-      await tapText(tester, '+ New Profile');
 
       final Set<double> rows = <double>{};
       for (final SavedProfile save in profiles.saves) {
@@ -691,9 +662,9 @@ void main() {
         ),
       );
       await pumpPicker(tester);
-      // The chooser is up, because there is a save. Take the new one.
-      await tapText(tester, '+ New Profile');
 
+      // A save exists and none of it is on screen: the launch is the picker,
+      // at its defaults, with the row underneath offering that save.
       expect(rack(tester).length, kDefaultDice.length);
 
       await tester.tap(profile('Twenty'));
@@ -729,7 +700,6 @@ void main() {
     ) async {
       profiles.add('Yahtzee', diceProfile(5));
       await pumpPicker(tester);
-      await tapText(tester, '+ New Profile');
 
       await goToMode(tester, 1);
       expect(modeOf(tester), 1);
@@ -769,16 +739,19 @@ void main() {
       expect(find.text('Roll Hippo'), findsOneWidget);
     });
 
-    testWidgets('title one opened from the chooser, before it is touched', (
+    testWidgets('title one that was opened rather than made', (
       WidgetTester tester,
     ) async {
+      // Straight into the store rather than through the naming dialog, so
+      // that nothing has opened it: a save you have not touched is not the
+      // profile you are in, and the title has to say the plain thing until
+      // you tap it.
       profiles.add('Yahtzee', diceProfile(5));
       await pumpPicker(tester);
-
-      // The chooser has a title of its own, and it is not this one.
+      expect(find.text('Roll Hippo'), findsOneWidget);
       expect(find.text('Roll Hippo - Yahtzee'), findsNothing);
 
-      await tester.tap(chooserRow('Yahtzee'));
+      await tester.tap(profile('Yahtzee'));
       await tester.pumpAndSettle();
       expect(find.text('Roll Hippo - Yahtzee'), findsOneWidget);
     });
@@ -847,73 +820,8 @@ void main() {
       // about the row of profiles, not about the dice.
       expect(rack(tester).length, kDefaultDice.length);
     });
-  });
 
-  group('the chooser at launch', () {
-    testWidgets('lists what there is, and opens the one you pick', (
-      WidgetTester tester,
-    ) async {
-      profiles.add('Yahtzee', diceProfile(5));
-      profiles.add('D&D', diceProfile(7));
-      await pumpPicker(tester);
-
-      expect(find.byKey(kOpenProfile), findsOneWidget);
-      expect(find.text('Choose a profile to open.'), findsOneWidget);
-      expect(chooserRow('D&D'), findsOneWidget);
-      expect(chooserRow('Yahtzee'), findsOneWidget);
-      // What each one holds, and when it was last open.
-      expect(
-        find.descendant(
-          of: find.byKey(kOpenProfile),
-          matching: find.text('5 dice · used just now'),
-        ),
-        findsOneWidget,
-      );
-
-      await tester.tap(chooserRow('Yahtzee'));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(kOpenProfile), findsNothing);
-      expect(rack(tester).length, 5);
-    });
-
-    testWidgets('opens a card profile on the card page', (
-      WidgetTester tester,
-    ) async {
-      profiles.add(
-        'Catan',
-        Profile(
-          mode: ProfileMode.cards,
-          groups: <List<DieSpec>>[
-            <DieSpec>[for (int i = 0; i < 2; i++) kCardDie],
-            <DieSpec>[],
-            <DieSpec>[],
-          ],
-          colours: const <int>[kDiceWhite, 0xFFB3453F],
-          decks: 3,
-          reshuffleAt: 10,
-        ),
-      );
-      await pumpPicker(tester);
-
-      // What it holds is the shoe, because that is the page it was made on.
-      expect(
-        find.descendant(
-          of: find.byKey(kOpenProfile),
-          matching: find.textContaining('3 decks, 108 cards'),
-        ),
-        findsOneWidget,
-      );
-
-      await tester.tap(chooserRow('Catan'));
-      await tester.pumpAndSettle();
-
-      expect(modeOf(tester), 1);
-      expect(find.text('Deal'), findsOneWidget);
-      expect(find.text('(108 in the shoe)'), findsOneWidget);
-    });
-
-    testWidgets('and does it again the next time the app is started', (
+    testWidgets('open one the app has been put down and picked up on', (
       WidgetTester tester,
     ) async {
       await pumpPicker(tester);
@@ -931,33 +839,12 @@ void main() {
       expect(profiles.saves.single.profile.mode, ProfileMode.cards);
 
       await pumpPicker(tester);
-      await tester.tap(chooserRow('Catan'));
+      await tester.tap(profile('Catan'));
       await tester.pumpAndSettle();
 
       expect(modeOf(tester), 1);
       expect(find.text('Deal'), findsOneWidget);
       expect(find.text('(108 in the shoe)'), findsOneWidget);
-    });
-
-    testWidgets('a new profile is the one the app has always started at', (
-      WidgetTester tester,
-    ) async {
-      profiles.add('Yahtzee', diceProfile(5));
-      await pumpPicker(tester);
-
-      await tapText(tester, '+ New Profile');
-
-      expect(find.byKey(kOpenProfile), findsNothing);
-      expect(rack(tester).length, kDefaultDice.length);
-      // And it is nobody's save, so editing it changes none of them.
-      await tester.tap(
-        find.descendant(
-          of: find.byKey(const ValueKey<int>(0)),
-          matching: find.byKey(kAddDie),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(profiles.saves.single.profile.groups[0].length, 5);
     });
   });
 

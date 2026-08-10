@@ -31,7 +31,7 @@ Run from the repo root:
 | `make format-check` | the same files as `format`, but it reports the drift rather than fixing it |
 | `make desktop` | macOS harness. Space shakes, **R** throws, arrows tilt, **G** toggles the rotational pseudo-forces for an A/B |
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
-| `make picker` | render the picker — both modes, its saves, the chooser, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
+| `make picker` | render the picker — both modes, its saves, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
 | `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders, and both platforms' launch images with it — writes into the project, not `/tmp`. The XML beside the rasters is structure, not drawing, and is not regenerated: the adaptive icon's two files, `LaunchScreen.storyboard`, and Android's `launch_background.xml` and `styles.xml`, which only place the launch image and paint the picker's colour behind it |
 | `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel. Installs with `xcrun devicectl`, **never `flutter install`** — that one uninstalls the old copy first and cannot be told not to, and an uninstalled iOS app takes its container, its `NSUserDefaults` and so every saved profile with it |
@@ -74,7 +74,6 @@ src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardSc
                    haptics (HapticEngine + HapticDriver) · settings (haptic gain · motion control)
                    profiles (SavedProfile · ProfileStore — the saves, stored)
                    profile_row (the row of them, and the naming and delete dialogs)
-                   open_dialog (which one to open, asked once at launch)
 src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at
                    runtime, `tool/app_icon.dart` transcribes it
 src/test/          headless
@@ -109,11 +108,17 @@ volume and the inertia tensor. Adding a die means adding its vertices to
   because it is one, so every constant can be checked against a real object
   instead of tuned until it looks about right.
 - **Explicit types** on locals and collection literals — `final Vector3 field =`,
-  `<Wall>[…]`, `for (final RigidBody body in bodies)`. The codebase is consistent
-  about this; match it.
+  `<Wall>[…]`, `for (final RigidBody body in bodies)`. This is no longer a
+  request: `always_specify_types` is on, along with `prefer_final_locals`, so
+  the analyser will say so.
 - **Comments say why, at length, and are load-bearing.** Match the density of the
-  surrounding file rather than trimming to fit a house style.
-- `flutter_lints`, with infos and warnings fatal. Analysis must come back clean.
+  surrounding file rather than trimming to fit a house style. This one *is* a
+  request — no linter can check it.
+- `flutter_lints`, with infos and warnings fatal, plus the rules in
+  `src/analysis_options.yaml` and the three `strict-*` language modes. Analysis
+  must come back clean. That file explains what each rule is doing there; the
+  short version is that every one of them describes what the code already did,
+  and turning the set on found fourteen slips in 20,000 lines.
 
 ## The tuning is pinned
 
@@ -279,10 +284,14 @@ test exists to make the change deliberate, not to make it hard.
   `_apply`s `kDefaultProfile` and clears the lit profile. `kDefaultProfile` is
   the picker as `main` opens it — the state fields are initialised from it — so
   starting again by hand and starting again by launching the app land on the
-  same set-up, and the launch chooser's *+ New Profile* can open nothing at all
-  and still mean it. It asks nothing first, for the reason opening a save asks
+  same set-up. It asks nothing first, for the reason opening a save asks
   nothing: what it replaces was either kept in a profile of its own or was never
   named.
+
+  Nothing is asked at launch either. The app used to put a chooser over the
+  picker on every start that had a save behind it; the row answers the same
+  question in one tap without standing in front of the screen to do it, so a
+  first run and a hundredth now look the same.
 - **The hippopotamus is a D6 with a picture on it.** `DieKind.hippo` *is* the
   cube — the D6's numbering, the D6's inertia, the D6's fairness — and
   `render/hippo.dart` is a drawing that `paintHippo` puts inside the hull the

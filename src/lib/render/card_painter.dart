@@ -273,11 +273,24 @@ void _paintFlight(Canvas canvas, TrayCamera camera, CardTable table) {
 /// ivory can be read against it. A card is a printed die, so it is printed the
 /// same way.
 ///
-/// Three of them however many the card carries, because the list is indexed by
-/// position and a card is only ever the first one, two or three of them.
+/// One per ink the table was given, which is normally one per die on the card
+/// and is not required to be — see [_styleAt] for what happens past the end.
+/// It used to build exactly three, which was the most a card can carry and so
+/// safe, but only by knowing a limit that lives in the picker.
 List<DieStyle> _stylesOf(CardTable table) => <DieStyle>[
-  for (int i = 0; i < 3; i++) DieStyle.of(table.colourOf(i)),
+  for (final int colour in table.colours) DieStyle.of(colour),
 ];
+
+/// The style for the die in position [i], or ivory past the end of the list.
+///
+/// The same rule [CardTable.colourOf] already follows, and here for the same
+/// reason: what a card reads and what it is printed in are two lists, and
+/// nothing forces them to be the same length. [paintCardInto] is public and
+/// takes its styles from the caller, so "as many as there are faces" is not
+/// something this can be promised — only defaulted, which is what a die with
+/// no colour chosen for it is anywhere else in the app.
+DieStyle _styleAt(List<DieStyle> styles, int i) =>
+    i < styles.length ? styles[i] : DieStyle.of(kDiceWhite);
 
 /// Where a drawn card lies: along the bottom of the glass.
 ///
@@ -628,7 +641,7 @@ void _printFace(Canvas canvas, PlayingCard card, List<DieStyle> styles) {
       Offset(0, (count - 1) / 2 * pitch - i * pitch),
       side,
       card.faces[i],
-      styles[i],
+      _styleAt(styles, i),
     );
   }
 }

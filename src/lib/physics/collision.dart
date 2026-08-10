@@ -434,7 +434,7 @@ ContactPoint? _edgeContact(RigidBody a, RigidBody b, _Axis axis) {
       denominator.abs() < 1e-18
           ? 0.0
           : ((ab * br - ar * bb) / denominator).clamp(0.0, 1.0);
-  double tb = bb < 1e-18 ? 0.0 : ((ab * ta + br) / bb).clamp(0.0, 1.0);
+  final double tb = bb < 1e-18 ? 0.0 : ((ab * ta + br) / bb).clamp(0.0, 1.0);
   ta = aa < 1e-18 ? 0.0 : ((ab * tb - ar) / aa).clamp(0.0, 1.0);
 
   final Vector3 closestA = pa + da * ta;

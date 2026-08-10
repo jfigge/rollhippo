@@ -38,6 +38,59 @@ void main() {
     expect(tray.world.gravity.y, closeTo(-9.81 * Tuning.gravityScale, 1e-6));
   });
 
+  test('tilting sends the dice the way the phone was tipped', () {
+    final ManualMotionSource motion = ManualMotionSource();
+
+    // The numbers the quaternion this replaced produced, to six places. They
+    // are here rather than recomputed from the same trigonometry the source
+    // now uses, because what wants holding is that rewriting it changed
+    // nothing — not that a formula agrees with itself.
+    motion.tilt(roll: 0.6);
+    expect(motion.down.x, closeTo(-0.564642, 1e-6));
+    expect(motion.down.y, closeTo(-0.825336, 1e-6));
+    expect(motion.down.z, closeTo(0, 1e-12));
+
+    motion.tilt(roll: 0.4, pitch: 0.3);
+    expect(motion.down.x, closeTo(-0.372025, 1e-6));
+    expect(motion.down.y, closeTo(-0.879923, 1e-6));
+    expect(motion.down.z, closeTo(0.295520, 1e-6));
+
+    // Which way round that is, said as a direction rather than as a number:
+    // right-handed about +z, so a positive roll lifts the right edge of the
+    // phone and down runs towards the left of it.
+    motion.tilt(roll: 0.6);
+    expect(motion.down.x, lessThan(0));
+    motion.tilt(roll: -0.6);
+    expect(motion.down.x, greaterThan(0));
+
+    // And pitch tips the top away, carrying down out through the glass.
+    motion.tilt(pitch: 0.6);
+    expect(motion.down.z, greaterThan(0));
+    expect(motion.down.x, closeTo(0, 1e-12));
+
+    // Whatever the angle, it is still one g.
+    for (final List<double> at in <List<double>>[
+      <double>[0.9, -0.4],
+      <double>[-1.2, 1.1],
+    ]) {
+      motion.tilt(roll: at[0], pitch: at[1]);
+      expect(motion.down.length, closeTo(1, 1e-12));
+    }
+  });
+
+  test('the tray runs the dice the same way the source is tipped', () {
+    final ManualMotionSource motion = ManualMotionSource();
+    motion.tilt(roll: 0.6);
+
+    final DiceTray tray = makeTray();
+    tray.update(motion.sample(1 / 60), 1 / 60);
+    expect(
+      tray.world.gravity.x,
+      lessThan(0),
+      reason: 'the tray tips the opposite way to the phone it is in',
+    );
+  });
+
   test('tilting turns gravity without changing how strong it is', () {
     final ManualMotionSource motion = ManualMotionSource();
     motion.tilt(roll: 0.6);

@@ -1,28 +1,58 @@
-# This file configures the analyzer, which statically analyzes Dart code to
-# check for errors, warnings, and lints.
+# What the analyser is held to, beyond the defaults.
 #
-# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
-# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
-# invoked from the command line by running `flutter analyze`.
+# `flutter_lints` is the floor. Everything below it is either a convention this
+# repository already follows without exception — in which case the point of
+# naming it is that the next person, or the next model, cannot quietly stop
+# following it — or a class of mistake that costs nothing to rule out.
+#
+# The whole set was turned on against 20,000 lines of existing code and found
+# fourteen things, all of them slips rather than decisions. That is the bar for
+# adding a rule here: it should describe what the code already does. A lint
+# that would need the code rewritten to satisfy it is a change of style, and a
+# change of style is not the analyser's to make.
 
-# The following line activates a set of recommended lints for Flutter apps,
-# packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
-linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at https://dart.dev/lints.
-  #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
-  rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+analyzer:
+  language:
+    # The three strict modes. They close the holes `dynamic` opens in an
+    # otherwise sound type system: an implicit downcast, an inference that
+    # falls back to `dynamic` rather than failing, and a generic used bare.
+    # None of them fires here, which is the argument for keeping them on —
+    # they cost nothing until the day something slips, and the physics is
+    # exactly the sort of numeric code where a silent `num` would hurt.
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+linter:
+  rules:
+    # "Explicit types on locals and collection literals" — see CLAUDE.md, which
+    # asks for `final Vector3 field =` and `<Wall>[…]` and is followed
+    # everywhere. This is that sentence, enforced.
+    - always_specify_types
+
+    # And the other half of the same habit: a local that is never reassigned
+    # says so. `collision.dart` is where it matters most, because there a
+    # variable that *is* reassigned — `ta`, solved twice — is worth spotting
+    # against the ones that are not.
+    - prefer_final_locals
+    - prefer_final_in_for_each
+
+    # Imports and exports in one order, so a new one has an obvious place to go
+    # rather than landing wherever the editor put the cursor.
+    - directives_ordering
+
+    # A future nobody waits for should say so. This codebase fires several on
+    # purpose — a haptic tap, a settings write, a sheet being shown — and each
+    # is already wrapped in `unawaited` with a note about why. The rule is what
+    # stops the next one being an omission that looks identical.
+    - unawaited_futures
+
+    # Four ways to be wrong that are cheap to rule out. The third is here
+    # because `DieSpec` and `Profile` both write `==` by hand, and a `==` that
+    # does not check the other side's type is a comparison that throws.
+    - avoid_dynamic_calls
+    - cast_nullable_to_non_nullable
+    - test_types_in_equals
+    - throw_in_finally

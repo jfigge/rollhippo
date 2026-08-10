@@ -1,15 +1,17 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/card_screen.dart';
 import 'package:rollhippo/app/chrome.dart';
-import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
 import 'package:rollhippo/render/die_preview.dart';
+import 'package:rollhippo/render/tray_painter.dart';
 import 'package:rollhippo/tray/tray.dart';
 
 /// Two of the palette, named so that a test reads as what it is doing.
@@ -650,5 +652,48 @@ void main() {
       expect(table.deck.remaining, 6);
       expect(table.deck.shown, isNull, reason: 'back to the starting position');
     }, variant: harness);
+  });
+
+  group('printing a card', () {
+    /// Prints [card] in [styles] onto a canvas nobody looks at. What is being
+    /// asked is whether it can be done at all.
+    void paint(PlayingCard card, List<DieStyle> styles) {
+      final ui.PictureRecorder recorder = ui.PictureRecorder();
+      paintCardInto(
+        Canvas(recorder),
+        const Rect.fromLTWH(0, 0, 100, 140),
+        card,
+        styles,
+      );
+      recorder.endRecording().dispose();
+    }
+
+    test('takes fewer inks than it has dice, and prints the rest ivory', () {
+      // [paintCardInto] is public and its styles come from the caller, so the
+      // list is not held to the length of the card. It used to be indexed
+      // straight into, against a list built three long because three is what
+      // the picker allows — a limit that lives a layer away and could move
+      // without this noticing.
+      expect(
+        () => paint(const PlayingCard(<int>[1, 2, 3]), <DieStyle>[
+          DieStyle.of(kDicePalette[2]),
+        ]),
+        returnsNormally,
+      );
+      expect(
+        () => paint(const PlayingCard(<int>[6]), const <DieStyle>[]),
+        returnsNormally,
+      );
+    });
+
+    test('and one per die when it is given them', () {
+      expect(
+        () => paint(const PlayingCard(<int>[4, 5]), <DieStyle>[
+          DieStyle.of(kDicePalette[1]),
+          DieStyle.of(kDicePalette[5]),
+        ]),
+        returnsNormally,
+      );
+    });
   });
 }

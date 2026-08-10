@@ -338,9 +338,31 @@ class ManualMotionSource implements MotionSource {
   }
 
   /// Rolls and pitches the phone, in radians.
+  ///
+  /// [pitch] tips the top of the phone away from you, which carries "down"
+  /// out through the glass; [roll] then swings whatever is left of it around
+  /// the face of the screen, right-handed about +z. So a positive roll lifts
+  /// the right edge and the dice run to the left, which is what lifting the
+  /// right edge of a real tray does.
+  ///
+  /// Written out rather than composed from a quaternion, and it is the same
+  /// answer to the last decimal — `gravity_test.dart` holds it there. A
+  /// quaternion here was the one place in the codebase that turned a vector
+  /// the *other* way round: `Quaternion.rotated` applies `q⁻¹ v q` where
+  /// `asRotationMatrix` builds `q v q⁻¹`, and everything else is on the matrix
+  /// side. It never mattered, because nothing composed with this one — which
+  /// is exactly the kind of thing that stops being true quietly. Three lines
+  /// of trigonometry belong to neither convention and cannot drift into the
+  /// mirror image of themselves.
   void tilt({double roll = 0, double pitch = 0}) {
-    final Quaternion q = Quaternion.euler(0, pitch, roll);
-    down.setFrom(q.rotated(Vector3(0, -1, 0)));
+    // What is left of "down" in the plane of the screen once pitch has taken
+    // its share out through the glass.
+    final double inPlane = math.cos(pitch);
+    down.setValues(
+      -math.sin(roll) * inPlane,
+      -math.cos(roll) * inPlane,
+      math.sin(pitch),
+    );
   }
 
   /// Runs [seconds] of a hand shake: a few hertz, a few centimetres, with the

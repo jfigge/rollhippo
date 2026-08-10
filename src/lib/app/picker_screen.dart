@@ -6,11 +6,10 @@ import '../cards/deck.dart';
 import '../render/die_preview.dart';
 import '../tray/tray.dart';
 import 'card_screen.dart';
+import 'menu.dart';
+import 'page_dots.dart';
 import 'profile_row.dart';
 import 'profiles.dart';
-import 'menu.dart';
-import 'open_dialog.dart';
-import 'page_dots.dart';
 import 'tray_screen.dart';
 
 /// The most dice the tray will take.
@@ -143,10 +142,9 @@ const List<DieSpec> kDefaultDice = <DieSpec>[
 
 /// An empty desk: the whole picker as the app opens it, both modes and all.
 ///
-/// The state below starts here, [_PickerScreenState._reset] comes back to it,
-/// and the launch chooser's *+ New Profile* opens nothing precisely because the
-/// picker is already sitting at it. One constant for all three, so that
-/// starting again is the same set-up however you got there.
+/// The state below starts here and [_PickerScreenState._reset] comes back to
+/// it. One constant for both, so that starting again by hand and starting
+/// again by launching the app land on the same set-up.
 const Profile kDefaultProfile = Profile(
   mode: ProfileMode.dice,
   groups: <List<DieSpec>>[kDefaultDice, <DieSpec>[], <DieSpec>[]],
@@ -282,18 +280,6 @@ class _PickerScreenState extends State<PickerScreen>
   void initState() {
     super.initState();
     profiles.addListener(_savesChanged);
-    // Only if there is something to choose between. A first run has no saves,
-    // so there is no question to ask and the picker is simply there — which is
-    // what the app has always done.
-    //
-    // After the first frame rather than during this one: a dialog needs a
-    // navigator to put it in, and the screen it is going to sit on top of has
-    // to have been built for that to exist.
-    if (profiles.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => unawaited(_chooseAtLaunch()),
-      );
-    }
   }
 
   @override
@@ -416,16 +402,13 @@ class _PickerScreenState extends State<PickerScreen>
     if (_groups[0].isEmpty) _groups[0] = List<DieSpec>.of(kDefaultDice);
   }
 
-  /// Which profile to open, asked once, before anything has been touched.
-  Future<void> _chooseAtLaunch() async {
-    final SavedProfile? save = await showOpenProfileDialog(context);
-    // Null is New: the picker is already sitting at [kDefaultProfile], which is
-    // exactly what a new profile is, so there is nothing to do. [_reset] is the
-    // same state, reached later on.
-    if (save == null || !mounted) return;
-    _open(save);
-  }
-
+  /// Opens a save: a tap on its profile in the row, and nothing else.
+  ///
+  /// The app used to ask which one to open before it would show you anything,
+  /// as a dialog over the picker on every launch that had a save behind it.
+  /// The row underneath answers the same question in one tap without standing
+  /// in front of the screen to do it, so the launch is now the picker, every
+  /// time — a first run and a hundredth look the same.
   void _open(SavedProfile save) {
     _apply(save.profile);
     profiles.touch(save.id);
@@ -449,8 +432,7 @@ class _PickerScreenState extends State<PickerScreen>
   ///
   /// Nothing is lit afterwards, and the title goes back to the plain one,
   /// because what is on screen has come from no save — which is the same thing
-  /// a first run is, and the same thing the launch chooser's *+ New Profile*
-  /// leaves you looking at. It asks first about nothing at all, for the reason
+  /// a first run is. It asks first about nothing at all, for the reason
   /// [_apply] gives: what it replaces was either kept in a profile of its own
   /// or was never named. The saves themselves are not touched.
   void _reset() {

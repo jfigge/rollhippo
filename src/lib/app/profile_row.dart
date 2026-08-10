@@ -242,10 +242,10 @@ class _ProfileState extends State<_Profile> {
 
   /// Brings the open save into view.
   ///
-  /// Because a save is not always opened from the block. The chooser at launch
-  /// opens one by name, and with enough saves the profile that lights up as a
-  /// result can be below the fold of a block nobody has scrolled — a highlight
-  /// you cannot see is the same as no highlight at all.
+  /// Because a save is not always opened from the block. A scanned code opens
+  /// one by name, and with enough saves the profile that lights up as a result
+  /// can be below the fold of a block nobody has scrolled — a highlight you
+  /// cannot see is the same as no highlight at all.
   ///
   /// After the frame, because it is the frame this profile is being laid out in
   /// that decides where it has ended up.

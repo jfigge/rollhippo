@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'profile.dart';
 import 'dice.dart';
+import 'profile.dart';
 
 /// What every Roll Hippo share code starts with.
 ///

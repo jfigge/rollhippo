@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/motion/motion.dart';

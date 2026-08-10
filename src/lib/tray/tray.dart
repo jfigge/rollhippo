@@ -11,8 +11,8 @@ import 'reading.dart';
 import 'readout.dart';
 import 'tuning.dart';
 
-export 'profile.dart';
 export 'dice.dart';
+export 'profile.dart';
 export 'reading.dart';
 export 'readout.dart';
 export 'share_code.dart';

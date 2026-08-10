@@ -45,8 +45,7 @@ class Profile {
 
   /// What this profile comes to, in the fewest words that are still true.
   ///
-  /// One line for a list row to hang under a name — see `SavedProfile.subtitle`
-  /// — and for the Share sheet to print under its code. It describes the mode
+  /// One line for the Share sheet to print under its code. It describes the mode
   /// the profile was saved in, because that is the half of it that would
   /// happen if you opened it and pressed the button.
   String get summary {

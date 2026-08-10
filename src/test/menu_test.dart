@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/page_dots.dart';
+import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The dice one group's rack is showing.
 ///
