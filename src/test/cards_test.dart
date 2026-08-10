@@ -370,7 +370,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
 
       expect(dotsOf(tester, kModeDots).current, 1);
       // Two dice by default, and only three places for them.
@@ -399,7 +399,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
 
       await tester.tap(addOf(kCardPage));
       await tester.pump();
@@ -443,7 +443,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
 
       expect(find.text('(72 in the shoe)'), findsOneWidget);
       await tester.tap(find.text('3'));
@@ -455,7 +455,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
 
       // DieSpec is compared field by field: it has no `==` of its own, and a
       // spec built fresh every build would never be the same instance twice.
@@ -479,7 +479,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
 
       await tester.tap(dieOf(kCardPage).at(1));
       await tester.pump();
@@ -510,7 +510,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
 
       await tester.tap(swatchOf(kCardPage, violet));
       await tester.pump();
@@ -539,7 +539,7 @@ void main() {
       expect(find.text('Roll'), findsOneWidget);
       expect(find.text('Deal'), findsNothing);
 
-      await swipePanel(tester, find.text('Die 1 — D6'), -300);
+      await swipePanel(tester, find.text('Die 1'), -300);
       expect(find.text('Roll'), findsNothing);
 
       await tester.tap(find.text('Deal'));

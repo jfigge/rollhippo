@@ -187,7 +187,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tester.tap(find.byType(DiePreview).at(1));
       await tester.pump();
-      expect(find.text('Die 2 — D6'), findsOneWidget);
+      expect(find.text('Die 2'), findsOneWidget);
 
       await swipeLeft(tester);
       expect(find.text(kEmptyEditor), findsOneWidget);
@@ -195,7 +195,7 @@ void main() {
       await tester.drag(find.byType(PageView), const Offset(300, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Die 2 — D6'), findsOneWidget);
+      expect(find.text('Die 2'), findsOneWidget);
     });
   });
 

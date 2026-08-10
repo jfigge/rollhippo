@@ -81,7 +81,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       expect(rack(tester).length, kDefaultDice.length);
-      expect(find.text('Die 1 — D6'), findsOneWidget);
+      expect(find.text('Die 1'), findsOneWidget);
     });
 
     testWidgets('a colour lands on the selected die and nowhere else', (
@@ -89,7 +89,7 @@ void main() {
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapDie(tester, 1);
-      expect(find.text('Die 2 — D6'), findsOneWidget);
+      expect(find.text('Die 2'), findsOneWidget);
 
       const int red = 0xFFB3453F;
       await tester.tap(swatch(kDicePage, red));
@@ -110,7 +110,7 @@ void main() {
 
       expect(rack(tester)[0].kind, DieKind.d4);
       expect(rack(tester)[1].kind, DieKind.d20);
-      expect(find.text('Die 1 — D4'), findsOneWidget);
+      expect(find.text('Die 1'), findsOneWidget);
     });
 
     testWidgets('a new die arrives selected, matching the one before it', (
@@ -123,7 +123,7 @@ void main() {
 
       expect(rack(tester).length, 3);
       expect(rack(tester)[2].kind, DieKind.d12);
-      expect(find.text('Die 3 — D12'), findsOneWidget);
+      expect(find.text('Die 3'), findsOneWidget);
 
       // The editor now points at the new die, so this only moves that one.
       await tapText(tester, 'D8');
@@ -150,7 +150,7 @@ void main() {
       await tapRemove(tester);
 
       expect(rack(tester).length, 1);
-      expect(find.text('Die 1 — D6'), findsOneWidget);
+      expect(find.text('Die 1'), findsOneWidget);
 
       // The last die is the set, and cannot be taken away.
       await tapRemove(tester);

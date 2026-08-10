@@ -214,8 +214,6 @@ void main() {
       await tester.tap(chip('Hippo'));
       await tester.pumpAndSettle();
       expect(rack(tester).first.kind, DieKind.hippo);
-      // And the die says what it is, in the line above the chips.
-      expect(chip('Die 1 — Hippo'), findsOneWidget);
     });
 
     testWidgets('and goes back in when you open something else', (

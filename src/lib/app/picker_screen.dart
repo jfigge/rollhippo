@@ -1306,13 +1306,13 @@ class _PickerScreenState extends State<PickerScreen>
             children: <Widget>[
               Expanded(
                 child: Text(
-                  empty
-                      ? 'No dice yet'
-                      : 'Die ${_selected + 1} — ${spec.kind.label}',
+                  empty ? 'No dice yet' : 'Die ${_selected + 1}',
                   // Short, and held to one line come what may: this title is
                   // the one thing in the card whose length changes, and a
                   // second line of it would push everything below the card
-                  // down the screen under a finger mid-swipe.
+                  // down the screen under a finger mid-swipe. It does not name
+                  // the kind: the lit chip below already says which one it is,
+                  // and saying it twice only made the line longer.
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
