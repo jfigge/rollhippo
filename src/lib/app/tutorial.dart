@@ -247,10 +247,10 @@ const List<TutorialPage> kTutorialPages = <TutorialPage>[
     stage: TutorialStage.tray,
     spot: kTrayThrow,
     body:
-        'Shake the phone to throw the dice, or to turn the next card over. '
-        'Throw — Draw, on the cards — at the top of the screen does the same '
-        'thing without moving the phone. The dice behind this card are real: '
-        'shake it now and they will go.',
+        'Shake the phone to throw the dice — the ones behind this card are '
+        'real, so try it now. Throw, at the top of the screen, does the same '
+        'without moving the phone. On the cards it is Draw, and a shake deals '
+        'nothing unless you ask for it in Settings: a dealt card is gone.',
   ),
   TutorialPage(
     icon: Icons.swipe_outlined,

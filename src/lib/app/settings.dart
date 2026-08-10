@@ -8,21 +8,24 @@ import '../tray/tray.dart';
 /// What the app remembers between launches.
 ///
 /// One instance, [settings], reached directly rather than handed down through
-/// the widget tree. There are two settings and a flag, and a handful of places
-/// that read them; an inherited widget threaded through the picker, the tray
-/// and a modal sheet to carry a double and two bools would be more machinery
-/// than the thing it carries.
+/// the widget tree. There are three settings and a flag, and a handful of
+/// places that read them; an inherited widget threaded through the picker, the
+/// tray and a modal sheet to carry a double and three bools would be more
+/// machinery than the thing it carries.
 ///
 /// It is a [ChangeNotifier] so the sheet that edits it and the tray that obeys
 /// it stay in step without either one owning the value.
 class Settings extends ChangeNotifier {
   static const String _hapticGainKey = 'haptic.gain';
   static const String _motionKey = 'motion.enabled';
+  static const String _shakeDrawKey = 'cards.shake';
   static const String _tutorialKey = 'tutorial.seen';
 
   double _hapticGain = Tuning.hapticGain;
 
   bool _motion = true;
+
+  bool _shakeToDraw = false;
 
   bool _tutorialSeen = false;
 
@@ -54,6 +57,32 @@ class Settings extends ChangeNotifier {
   set motion(bool value) {
     if (value == _motion) return;
     _motion = value;
+    notifyListeners();
+    unawaited(_save());
+  }
+
+  /// Whether a shake deals a card, on the card table only.
+  ///
+  /// **Off**, and off is the default, which is the one setting here that does
+  /// not simply mirror what the app used to do. A shake on the tray and a
+  /// shake on the card table are not the same kind of act. Shaking dice is the
+  /// simulation — the accelerometer is gravity, the dice tumble because the
+  /// box moved, and a throw you did not mean is undone by throwing again. A
+  /// shoe has memory. Dealing a card takes it off the shoe for good, `spent`
+  /// goes up, and what is left to come has genuinely changed — which is the
+  /// whole reason to play with a shoe rather than dice, and the whole reason
+  /// an accidental one cannot be waved away. A phone handed across a table is
+  /// a shake, and half a dozen of them is half a dozen cards nobody drew.
+  ///
+  /// So the gesture is still there for anyone who wants it, and it is asked
+  /// for rather than assumed. It means nothing while [motion] is off — a
+  /// still phone is never shaken — which is why the sheet draws it underneath
+  /// that switch rather than beside it.
+  bool get shakeToDraw => _shakeToDraw;
+
+  set shakeToDraw(bool value) {
+    if (value == _shakeToDraw) return;
+    _shakeToDraw = value;
     notifyListeners();
     unawaited(_save());
   }
@@ -92,6 +121,12 @@ class Settings extends ChangeNotifier {
     final double? gain = prefs.getDouble(_hapticGainKey);
     if (gain != null) _hapticGain = gain.clamp(0.0, Tuning.hapticMaxGain);
     _motion = prefs.getBool(_motionKey) ?? true;
+    // Off unless somebody said otherwise, which includes every phone that had
+    // the app before this setting existed. That is deliberate: a build that
+    // silently kept dealing on a shake for the people who already had it would
+    // be leaving the bug in place for exactly the players most likely to hit
+    // it. It is one switch away for anyone who misses it.
+    _shakeToDraw = prefs.getBool(_shakeDrawKey) ?? false;
     // A phone with nothing written for this has never been shown the
     // tutorial — which is true both of a genuine first run and of a launch
     // after the preferences file has been thrown away, and offering it again
@@ -103,11 +138,13 @@ class Settings extends ChangeNotifier {
   Future<void> _save() async {
     final double gain = _hapticGain;
     final bool motion = _motion;
+    final bool shake = _shakeToDraw;
     final bool tutorial = _tutorialSeen;
     await _guard<void>(() async {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_hapticGainKey, gain);
       await prefs.setBool(_motionKey, motion);
+      await prefs.setBool(_shakeDrawKey, shake);
       await prefs.setBool(_tutorialKey, tutorial);
     });
   }

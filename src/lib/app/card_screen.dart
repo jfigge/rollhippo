@@ -23,9 +23,15 @@ const double _kDrawCooldown = 1.1;
 ///
 /// Nothing here is simulated. A card is not a rigid body and there is nothing
 /// to throw — the shoe is shuffled, the top card is turned over, and the only
-/// thing the accelerometer is asked for is whether the phone was shaken. With
-/// motion control off it is not asked even that, and Draw is the whole of the
-/// interface. See [Settings.motion].
+/// thing the accelerometer is ever asked for is whether the phone was shaken.
+///
+/// And by default it is not asked even that: **Draw is the whole of the
+/// interface here unless somebody has asked for the shake**, which the tray
+/// never requires anybody to do. The two gestures are not the same act. A
+/// shake on the tray *is* the simulation and an unwanted throw is undone by
+/// throwing again; a shake here is a trigger, and what it triggers takes a
+/// card off the shoe for good. See [Settings.shakeToDraw], which is where the
+/// rest of that argument is written down.
 class CardScreen extends StatefulWidget {
   const CardScreen({
     super.key,
@@ -75,7 +81,15 @@ class _CardScreenState extends State<CardScreen>
   @override
   void initState() {
     super.initState();
-    _motion = motionSourceFor(device: onDevice, motion: settings.motion);
+    // Two settings, one source, and no new flag anywhere below this line. The
+    // rule the tray keeps — motion off is a *source*, not something the screen
+    // tests — is the rule that makes this a one-line change: a table that has
+    // not been asked for the shake is handed a phone lying perfectly still, so
+    // `isShake` is never true and nothing under here has to know why.
+    _motion = motionSourceFor(
+      device: onDevice,
+      motion: settings.motion && settings.shakeToDraw,
+    );
     _ticker = createTicker(_onTick)..start();
   }
 
@@ -103,6 +117,11 @@ class _CardScreenState extends State<CardScreen>
     // The whole of what the sensors are for here. Sampled every frame whether
     // or not it is wanted, because the source averages over the interval since
     // it was last asked and skipping frames would hand it one enormous one.
+    //
+    // No test of the setting: by the time a frame gets here the answer is in
+    // the source. A table nobody asked the shake for is being handed
+    // [MotionFrame.still] sixty times a second, and a still phone is never a
+    // shake.
     final MotionFrame motion = _motion.sample(dt);
     if (isShake(motion) && _since >= _kDrawCooldown) _draw();
 

@@ -8,6 +8,7 @@ import 'package:rollhippo/app/card_screen.dart';
 import 'package:rollhippo/app/chrome.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
 import 'package:rollhippo/render/die_preview.dart';
@@ -562,7 +563,16 @@ void main() {
       int dice = 2,
       int decks = 1,
       int reshuffleAt = 0,
+      bool shake = false,
     }) async {
+      // Off unless a case says otherwise, which is what a phone does. The
+      // screen reads it once, in `initState`, so it has to be set before the
+      // pump — and put back afterwards, because [settings] is one object for
+      // the whole run.
+      final bool was = settings.shakeToDraw;
+      addTearDown(() => settings.shakeToDraw = was);
+      settings.shakeToDraw = shake;
+
       await tester.binding.setSurfaceSize(kHarnessScreen);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
@@ -621,10 +631,32 @@ void main() {
       expect(table.deck.shown, isNotNull);
     }, variant: harness);
 
-    testWidgets('a shake deals one card, not a fistful', (
+    testWidgets('a shake deals nothing, because a dealt card is gone', (
       WidgetTester tester,
     ) async {
+      // The default, and the reason for it: a shake on the tray is the
+      // simulation and an unmeant throw is undone by throwing again, where a
+      // dealt card is off the shoe for good. A phone handed across a table is
+      // a shake, and this is the screen where that costs something.
       final CardTable table = await open(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      for (int i = 0; i < 90; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(table.deck.remaining, 36, reason: 'nobody asked for the shake');
+      expect(table.deck.shown, isNull);
+
+      // And the button still works, which is the whole interface here.
+      await tester.tap(find.text('Draw'));
+      await tester.pump();
+      expect(table.deck.remaining, 35);
+    }, variant: harness);
+
+    testWidgets('and one card when it is asked for, not a fistful', (
+      WidgetTester tester,
+    ) async {
+      final CardTable table = await open(tester, shake: true);
 
       // Space is the harness's shake, and it runs for the better part of a
       // second — every frame of which would be a card without the wait.

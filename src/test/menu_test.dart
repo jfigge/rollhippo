@@ -38,6 +38,11 @@ Future<void> swipeLeft(WidgetTester tester) async {
 PageDots dotsOf(WidgetTester tester) =>
     tester.widget<PageDots>(find.byKey(kGroupDots));
 
+/// The two switches in the settings sheet, in the order they are drawn:
+/// motion control, and the shake-to-deal that hangs underneath it.
+final Finder motionSwitch = find.byType(Switch).first;
+final Finder shakeSwitch = find.byType(Switch).at(1);
+
 /// The calibration slider, which is the one inside the sheet — the picker
 /// underneath it has a slider of its own for the cut in card mode.
 final Finder gainSlider = find.descendant(
@@ -215,19 +220,77 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Motion control'), findsOneWidget);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      // The first of the two switches. The second is Shake to deal, which
+      // lives underneath this one and is the group below.
+      expect(tester.widget<Switch>(motionSwitch).value, isTrue);
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(motionSwitch);
       await tester.pumpAndSettle();
 
       expect(settings.motion, isFalse);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(tester.widget<Switch>(motionSwitch).value, isFalse);
       // And the paragraph under it says what that now means.
       expect(
         find.textContaining('a shake does nothing'),
         findsOneWidget,
         reason: 'the explanation has to follow the switch',
       );
+    });
+
+    testWidgets('carries the shake-to-deal switch underneath it', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.shakeToDraw;
+      addTearDown(() => settings.shakeToDraw = was);
+      await pumpPicker(tester);
+      settings.motion = true;
+      settings.shakeToDraw = false;
+
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Shake to deal a card'), findsOneWidget);
+      expect(
+        tester.widget<Switch>(shakeSwitch).value,
+        isFalse,
+        reason: 'off is the default, and the point of the setting',
+      );
+      // Underneath the switch it depends on, not beside it.
+      expect(
+        tester.getTopLeft(find.text('Shake to deal a card')).dy,
+        greaterThan(tester.getTopLeft(find.text('Motion control')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Shake to deal a card')).dx,
+        greaterThan(tester.getTopLeft(find.text('Motion control')).dx),
+        reason: 'and indented under it, because it is a narrowing of it',
+      );
+
+      await tester.tap(shakeSwitch);
+      await tester.pumpAndSettle();
+      expect(settings.shakeToDraw, isTrue);
+    });
+
+    testWidgets('and that switch goes quiet when motion itself is off', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.shakeToDraw;
+      addTearDown(() => settings.shakeToDraw = was);
+      await pumpPicker(tester);
+      settings.motion = false;
+      settings.shakeToDraw = false;
+
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      // A still phone is never shaken, so the control has nothing to say.
+      // Tapping it does nothing at all rather than setting something that
+      // would not take effect.
+      await tester.tap(shakeSwitch, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(settings.shakeToDraw, isFalse);
     });
 
     testWidgets('decides what the screens are driven by', (
@@ -312,6 +375,29 @@ void main() {
       offline.hapticGain = 1.5;
       await tester.pumpAndSettle();
       expect(offline.hapticGain, 1.5, reason: 'still works, just forgets');
+    });
+
+    testWidgets('shake-to-deal is off on a phone that has never been asked', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.shakeToDraw;
+      addTearDown(() => settings.shakeToDraw = was);
+
+      // Including a phone that had the app before the setting existed: there
+      // is nothing written for the key, and the answer is no. A build that
+      // silently kept dealing on a shake for those players would be leaving
+      // the bug where it was for the people most likely to meet it.
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final Settings fresh = Settings();
+      expect(fresh.shakeToDraw, isFalse);
+      await fresh.load();
+      expect(fresh.shakeToDraw, isFalse);
+
+      settings.shakeToDraw = true;
+      await tester.pumpAndSettle();
+      final Settings relaunched = Settings();
+      await relaunched.load();
+      expect(relaunched.shakeToDraw, isTrue, reason: 'asked for, and kept');
     });
 
     testWidgets('a stored value from another build is clamped, not trusted', (

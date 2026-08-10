@@ -94,7 +94,7 @@ src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardSc
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
                    tutorial (the first run: pages you swipe, over the screen each is about) ·
                    haptics (HapticEngine +
-                   HapticDriver) · settings (haptic gain · motion control · tutorial seen)
+                   HapticDriver) · settings (haptic gain · motion · shake to deal · tutorial)
                    profiles (SavedProfile · ProfileStore — the saves, stored)
                    profile_row (the row of them, and the naming and delete dialogs)
 src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at
@@ -319,6 +319,18 @@ test exists to make the change deliberate, not to make it hard.
   to *test* the setting rather than obey the source is doing it wrong — with
   one exception, the unthrown group's prompt, which has to name a gesture that
   still works.
+
+  **`Settings.shakeToDraw` is the second setting through the same door, and
+  the reason the door was worth having.** The card table asks for
+  `settings.motion && settings.shakeToDraw`, so a table nobody asked the shake
+  for is handed the same still phone the tray gets with motion off — one line
+  in `CardScreen.initState`, and not a test of the flag anywhere below it. It
+  is **off by default**, and it is the one setting here that does not restore
+  what the app used to do. A shake on the tray *is* the simulation, and an
+  unmeant throw is undone by throwing again; a shake on the cards is a
+  trigger, and what it triggers takes a card off the shoe for good. That a
+  shoe has memory is the whole point of the mode, which is exactly what makes
+  an accidental deal unfixable — and a phone handed across a table is a shake.
 
 - **There are two share codes, and they are different things.** `RH1:` is a set
   of dice — `encodeGroups`/`decodeGroups` — and is now only what a save's dice

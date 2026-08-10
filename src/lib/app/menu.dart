@@ -207,7 +207,13 @@ class _MenuBarsPainter extends CustomPainter {
   bool shouldRepaint(_MenuBarsPainter oldDelegate) => false;
 }
 
-/// The settings panel.
+/// The settings panel: what the phone does, in three switches and a slider.
+///
+/// The first two are a pair rather than two entries in a list. Motion control
+/// is the larger — whether the phone's own movement plays at all — and Shake
+/// to deal is drawn underneath and inside it, because it only means anything
+/// while the first is on and because it is the one control here that is off
+/// until asked for. See [Settings.shakeToDraw].
 Future<void> showSettingsSheet(
   BuildContext context,
 ) => showModalBottomSheet<void>(
@@ -289,16 +295,75 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     ? 'Tilt to pour the dice down the screen, shake to throw '
                         'them. Turn this off and the tray is handed a phone '
                         'held perfectly still: down is down the screen and '
-                        'stays there, and Throw — or Draw, on the cards — is '
-                        'the only way to roll.'
+                        'stays there, and Throw is the only way to roll.'
                     : 'Off. The tray ignores the phone: down is down the '
                         'screen and stays there, and a shake does nothing. '
-                        'Throw — or Draw, on the cards — is the only way to '
-                        'roll, and it works exactly as it always did.',
+                        'Throw is the only way to roll, and it works exactly '
+                        'as it always did.',
                 style: const TextStyle(
                   color: Color(0x99BFD0E4),
                   fontSize: 13,
                   height: 1.45,
+                ),
+              ),
+              // Underneath the switch it depends on, and indented under it,
+              // because it is a narrowing of that setting rather than a
+              // setting beside it: with motion off there is no shake to deal
+              // on, so the control has nothing to say and says nothing —
+              // faded and deaf, which is the same bargain the picker's editor
+              // makes with an empty group.
+              const SizedBox(height: 16),
+              IgnorePointer(
+                ignoring: !settings.motion,
+                child: Opacity(
+                  opacity: settings.motion ? 1 : 0.38,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            const Expanded(
+                              child: Text(
+                                'Shake to deal a card',
+                                style: TextStyle(
+                                  color: Color(0xFFE8EEF6),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: settings.shakeToDraw,
+                              activeThumbColor: const Color(0xFF6E9AD0),
+                              activeTrackColor: const Color(0xFF3F6FA8),
+                              inactiveThumbColor: const Color(0xAABFD0E4),
+                              inactiveTrackColor: const Color(0x14FFFFFF),
+                              onChanged: (bool on) => settings.shakeToDraw = on,
+                            ),
+                          ],
+                        ),
+                        const Text(
+                          // What it costs, said plainly, because this is the
+                          // one switch in the app whose downside is not
+                          // obvious from the label. Everything else here is
+                          // undone by doing it again.
+                          'Off, and worth leaving off. A shake throws the '
+                          'dice, and a throw you did not mean is undone by '
+                          'throwing again — but a dealt card is gone until '
+                          'the shoe is cut, and a phone handed across a table '
+                          'is a shake. Draw turns the next card over either '
+                          'way.',
+                          style: TextStyle(
+                            color: Color(0x99BFD0E4),
+                            fontSize: 13,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 18),
