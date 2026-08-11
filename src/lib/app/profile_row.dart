@@ -3,6 +3,7 @@ import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
 
+import 'haptics.dart';
 import 'profiles.dart';
 
 /// How tall one profile is, and the air between one and the next.
@@ -266,7 +267,12 @@ class _ProfileState extends State<_Profile> {
   Widget build(BuildContext context) {
     final bool selected = widget.selected;
     return GestureDetector(
-      onTap: widget.onTap,
+      // A profile is the one control on this screen that replaces everything
+      // above it in a single tap, so it says so in the hand as well.
+      onTap: () {
+        uiHaptic(HapticLevel.light);
+        widget.onTap();
+      },
       // Both, because both mean "what else can I do with this one". A phone
       // has the long press; the desktop harness has the second button, and a
       // right click that did nothing would read as a bug rather than as a
@@ -360,7 +366,13 @@ class _NewProfile extends StatelessWidget {
       button: true,
       label: 'Save this profile',
       child: GestureDetector(
-        onTap: onTap,
+        // Answered exactly as the profiles beside it are, which is the whole
+        // bargain this one makes: it sits in their row and carries their
+        // gestures.
+        onTap: () {
+          uiHaptic(HapticLevel.light);
+          onTap();
+        },
         // The hold and the right click, both, exactly as a save answers them.
         onLongPress: () => unawaited(_menu(context)),
         onSecondaryTap: () => unawaited(_menu(context)),
@@ -495,11 +507,18 @@ Future<_ProfileAction?> _showProfileMenu(BuildContext context) {
 Future<T?> _showChipMenu<T>(
   BuildContext context,
   List<PopupMenuEntry<T>> items,
-) {
+) async {
   final RenderBox profile = context.findRenderObject()! as RenderBox;
   final RenderBox overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-  return showMenu<T>(
+  // Both taps are fired from here rather than from the two callers, for the
+  // reason this function exists at all: the dashed profile's menu must not
+  // arrive as a different object to every other profile's, and it must not
+  // arrive feeling different either. The firmer one is the menu opening,
+  // which on this row is the answer to a long press and so the only sign the
+  // press was long enough. See [uiHaptic].
+  uiHaptic(HapticLevel.medium);
+  final T? action = await showMenu<T>(
     context: context,
     position: RelativeRect.fromRect(
       Rect.fromPoints(
@@ -522,6 +541,11 @@ Future<T?> _showChipMenu<T>(
     ),
     items: items,
   );
+  // Only for a choice. A menu dismissed by tapping the screen beside it is a
+  // menu nobody took anything out of, and a tap for that would be the app
+  // confirming a decision that was not made.
+  if (action != null) uiHaptic(HapticLevel.light);
+  return action;
 }
 
 /// One line of it. Delete is the only entry that is red, and it is the only one

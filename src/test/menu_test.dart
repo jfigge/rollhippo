@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rollhippo/app/haptics.dart';
 import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
@@ -79,6 +80,19 @@ final Finder addDie = find.descendant(
 ///
 /// [settings] is one object for the whole app, so a test that drags the slider
 /// leaves it dragged for whatever runs next.
+/// Puts a recorder in front of the phone's actuator for the length of one
+/// test, and hands it back.
+///
+/// The interface's taps do not go through a [HapticEngine] — there is no
+/// impulse behind a button press to weigh — so there is no engine to hand a
+/// driver to. See [uiHaptic].
+RecordedHaptics recordHaptics() {
+  final RecordedHaptics driver = RecordedHaptics();
+  debugUiHaptics = driver;
+  addTearDown(() => debugUiHaptics = null);
+  return driver;
+}
+
 Future<void> pumpPicker(WidgetTester tester) async {
   final double was = settings.hapticGain;
   final bool motion = settings.motion;
@@ -169,6 +183,42 @@ void main() {
         closeTo(slot.left, 0.01),
         reason: 'the three lines no longer start where the rack does',
       );
+    });
+  });
+
+  group('the taps the menu makes', () {
+    testWidgets('one as it opens, and a lighter one as an entry is taken', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      settings.hapticGain = Tuning.hapticGain;
+      final RecordedHaptics taps = recordHaptics();
+
+      await openMenu(tester);
+      // The firmer of the two. A menu arriving is the moment nothing else on
+      // the screen confirms — see [uiHaptic], where the pair is argued.
+      expect(taps.fired, <HapticLevel>[HapticLevel.medium]);
+
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(taps.fired, <HapticLevel>[HapticLevel.medium, HapticLevel.light]);
+    });
+
+    testWidgets('and none of them with the calibration turned off', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      settings.hapticGain = 0;
+      final RecordedHaptics taps = recordHaptics();
+
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      // That dial is described against the tray, and it is still the only
+      // switch there is: nobody who has turned it down to nothing expects the
+      // menus to go on tapping.
+      expect(taps.fired, isEmpty);
     });
   });
 

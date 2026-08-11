@@ -6,6 +6,7 @@ import '../cards/deck.dart';
 import '../render/die_preview.dart';
 import '../tray/tray.dart';
 import 'card_screen.dart';
+import 'haptics.dart';
 import 'menu.dart';
 import 'page_dots.dart';
 import 'profile_row.dart';
@@ -314,6 +315,24 @@ class _PickerScreenState extends State<PickerScreen>
   /// can: emptying group two is the only way to say you have finished with it.
   int get _floor => _group == 0 ? 1 : 0;
 
+  /// What the die panel calls itself: which set it is about, out of how many
+  /// sets there are to be about.
+  ///
+  /// Only ever asked of a group with dice in it — an empty one has no die to
+  /// edit and the panel says so instead — so the numerator is never larger
+  /// than the denominator. Both numbers are counted the way the tray counts:
+  /// an empty group is not a set you left blank, it is one you never started,
+  /// so it is neither a box on the tray nor a number here. Hence
+  /// [rollableIndex] for the position and the filled groups for the total,
+  /// which means a set with an empty group before it is numbered as the swipe
+  /// on the tray will number it rather than by which page of the picker it
+  /// happens to sit on.
+  String get _setTitle {
+    final int count =
+        _groups.where((List<DieSpec> group) => group.isNotEmpty).length;
+    return 'Dice - Set ${rollableIndex(_groups, _group) + 1}/$count';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -544,6 +563,30 @@ class _PickerScreenState extends State<PickerScreen>
     return save == null ? 'Roll Hippo' : 'Roll Hippo - ${save.name}';
   }
 
+  /// The tap a set-up control answers a press with.
+  ///
+  /// [HapticLevel.light], the same one a profile and a menu entry get and for
+  /// the reason [uiHaptic] gives for it: the screen answers as well — a swatch
+  /// lights, a chip moves, the ring steps along the rack, a die appears in it
+  /// — so the tap is an acknowledgement rather than the only sign the press
+  /// was understood.
+  ///
+  /// Fired from the handlers rather than from the widgets, which is what puts
+  /// it behind every one of their guards. A plus on a full rack and a minus on
+  /// the last die of a set are presses the app is declining, and a tap for one
+  /// of those would say the opposite of what the screen is saying: a full rack
+  /// draws no plus and the minus greys out, so a declined press is one that
+  /// landed on something already refusing it.
+  ///
+  /// What it is *not* behind is a comparison against the value already there.
+  /// A press is a deliberate act and is answered as one, so the lit swatch and
+  /// the chip already chosen tap back like any other — the press happened, and
+  /// "that one" is a thing worth being able to say twice. The one control that
+  /// does compare is the slider, and it is the one that is dragged rather than
+  /// pressed: see [_setReshuffleAt], where a gesture that is a single act to
+  /// the hand arrives here dozens of times.
+  void _edited() => uiHaptic(HapticLevel.light);
+
   /// Adds a die to the card, matching the one before it and arriving selected.
   ///
   /// The same bargain [_addTo] makes in dice mode, for the same two reasons: the
@@ -551,6 +594,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// common thing is for it to be different.
   void _addCardDie() {
     if (_cardDice >= kMaxCardDice) return;
+    _edited();
     setState(() {
       _cardColours.add(_cardColours.last);
       _cardSelected = _cardColours.length - 1;
@@ -565,21 +609,58 @@ class _PickerScreenState extends State<PickerScreen>
   /// One die always stays — a shoe with no dice in it is not a shoe.
   void _removeCardDie() {
     if (_cardDice <= 1) return;
+    _edited();
     setState(() {
       _cardColours.removeAt(_cardSelected);
       _cardSelected = _cardSelected.clamp(0, _cardColours.length - 1);
     });
   }
 
-  void _selectCardDie(int index) => setState(() => _cardSelected = index);
+  /// Points the swatches at one die of the card. Answered in the hand exactly
+  /// as the rack next door is, and for the reason given there — see [_select].
+  void _selectCardDie(int index) {
+    _edited();
+    setState(() => _cardSelected = index);
+  }
 
   /// Paints the selected die of the card.
   ///
   /// No guard, where [_set] needs one: a group of real dice can be emptied and
   /// leave its editor talking about nothing, and card mode cannot — the last
   /// die always stays — so there is always a die here for a swatch to land on.
-  void _setCardColour(int colour) =>
-      setState(() => _cardColours[_cardSelected] = colour);
+  void _setCardColour(int colour) {
+    _edited();
+    setState(() => _cardColours[_cardSelected] = colour);
+  }
+
+  /// How many decks are shuffled together into the shoe.
+  void _setDecks(int decks) {
+    _edited();
+    setState(() => _decks = decks);
+  }
+
+  /// How little is left when the shoe goes back together.
+  ///
+  /// The one control here that is dragged rather than pressed, which is what
+  /// the guard is for: [Slider.onChanged] fires on every pointer move rather
+  /// than on every step it crosses, so a tap taken straight off it would be a
+  /// buzz for as long as your thumb was down — and would go on buzzing at
+  /// either end of the scale, where the value has nowhere left to go.
+  /// Compared against the step it is already on, it is a tap per change
+  /// instead.
+  ///
+  /// Which is one per division for a thumb moving slowly, and that is the
+  /// point: the figure is small and under your hand, and feeling it count is
+  /// how you land on one without watching it. A thumb thrown across the whole
+  /// scale crosses several divisions between one move and the next and gets a
+  /// single tap for them, which is the right answer as well — that gesture was
+  /// not aimed at a number.
+  void _setReshuffleAt(double value) {
+    final int at = value.round();
+    if (at == _reshuffleAt) return;
+    _edited();
+    setState(() => _reshuffleAt = at);
+  }
 
   /// Commits to a mode and lets the block coast the rest of the way there.
   void _goToMode(int index) {
@@ -618,6 +699,7 @@ class _PickerScreenState extends State<PickerScreen>
   void _addTo(int group) {
     final List<DieSpec> dice = _groups[group];
     if (dice.length >= kMaxDice) return;
+    _edited();
     setState(() {
       // A new die matches the one before it, because the common thing to want
       // is another of what you already have — and it arrives selected, since
@@ -630,6 +712,7 @@ class _PickerScreenState extends State<PickerScreen>
 
   void _removeSelected() {
     if (_dice.length <= _floor) return;
+    _edited();
     setState(() {
       _dice.removeAt(_selected);
       // Emptied, there is no die to be pointed at and no range to clamp into.
@@ -641,8 +724,18 @@ class _PickerScreenState extends State<PickerScreen>
 
   /// Points the editor at die [index] of [group], and takes the group for the
   /// same reason [_addTo] does: a tap lands on the rack it was drawn in.
-  void _select(int group, int index) =>
-      setState(() => _selectedIn[group] = index);
+  ///
+  /// Answered in the hand as well, though this is the one press here that
+  /// changes nothing about the set. What it changes is what everything below
+  /// it is *about*, and it says so with a ring one slot wide — the smallest
+  /// answer anything on this screen gives, on a rack where the die you have
+  /// just pressed is under your thumb and hardest to see. A rack where the
+  /// plus taps back and the die beside it does not would read as the press
+  /// having missed rather than as a distinction being drawn.
+  void _select(int group, int index) {
+    _edited();
+    setState(() => _selectedIn[group] = index);
+  }
 
   /// The guard is for an empty group, where there is no die for the editor to
   /// be talking about. Nothing can reach this — the controls are behind an
@@ -650,6 +743,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// and a stand-in that could be written back would be a trap.
   void _set(DieSpec spec) {
     if (_dice.isEmpty) return;
+    _edited();
     setState(() => _dice[_selected] = spec);
   }
 
@@ -1178,7 +1272,7 @@ class _PickerScreenState extends State<PickerScreen>
                   child: _Chip(
                     label: '$n',
                     selected: n == _decks,
-                    onTap: () => setState(() => _decks = n),
+                    onTap: () => _setDecks(n),
                   ),
                 ),
             ],
@@ -1205,8 +1299,7 @@ class _PickerScreenState extends State<PickerScreen>
                     divisions: kMaxReshuffleAt,
                     activeColor: const Color(0xFF3F6FA8),
                     inactiveColor: const Color(0x22FFFFFF),
-                    onChanged:
-                        (double v) => setState(() => _reshuffleAt = v.round()),
+                    onChanged: _setReshuffleAt,
                   ),
                 ),
               ),
@@ -1385,13 +1478,23 @@ class _PickerScreenState extends State<PickerScreen>
             children: <Widget>[
               Expanded(
                 child: Text(
-                  empty ? 'No dice yet' : 'Die ${_selected + 1}',
+                  empty ? 'No dice yet' : _setTitle,
                   // Short, and held to one line come what may: this title is
                   // the one thing in the card whose length changes, and a
                   // second line of it would push everything below the card
                   // down the screen under a finger mid-swipe. It does not name
                   // the kind: the lit chip below already says which one it is,
                   // and saying it twice only made the line longer.
+                  //
+                  // It no longer names the die either. "Die 2" was the same
+                  // repetition one step further on — the rack above has a ring
+                  // round that die, which is where a selection is worth
+                  // reading — while which *set* the panel belongs to was
+                  // written down nowhere: the dots below say which page you
+                  // are on, not how many of the three you have put anything
+                  // in. So the line is spent on the thing that was missing,
+                  // and the panel is titled for the set the way the card
+                  // panel is titled for the cards.
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

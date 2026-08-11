@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rollhippo/app/haptics.dart';
 import 'package:rollhippo/app/picker_screen.dart';
+import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/physics/shape.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
@@ -58,6 +60,34 @@ Future<void> tapText(WidgetTester tester, String label) async {
   await tester.pump();
 }
 
+/// Which slot of the first set has the ring round it: the die the panel below
+/// is pointed at.
+///
+/// The panel's title used to say so in words — "Die 2" — and now names the set
+/// instead, so the ring is the only place a selection is written down, which
+/// is the whole reason the title stopped saying it. Read off the border rather
+/// than through a key, because the ring is what a player is going by too.
+int selectedDie(WidgetTester tester) => tester
+    .widgetList<Container>(
+      find.descendant(
+        of: find.byKey(const ValueKey<int>(0)),
+        matching: find.byType(Container),
+      ),
+    )
+    .toList()
+    .indexWhere((Container slot) => _edgeOf(slot) == const Color(0xFF6E9AD0));
+
+/// Puts a recorder in front of the phone's actuator for one test, and hands
+/// it back. The picker's own taps do not go through a [HapticEngine] — there
+/// is no impulse behind a press to weigh — so there is no engine to hand a
+/// driver to. See [uiHaptic].
+RecordedHaptics recordHaptics() {
+  final RecordedHaptics driver = RecordedHaptics();
+  debugUiHaptics = driver;
+  addTearDown(() => debugUiHaptics = null);
+  return driver;
+}
+
 /// The rack's plus: the empty slot the next die would land in, which is where
 /// adding one is done.
 ///
@@ -81,7 +111,9 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
       expect(rack(tester).length, kDefaultDice.length);
-      expect(find.text('Die 1'), findsOneWidget);
+      expect(selectedDie(tester), 0);
+      // One set with anything in it, and you are on it.
+      expect(find.text('Dice - Set 1/1'), findsOneWidget);
     });
 
     testWidgets('a colour lands on the selected die and nowhere else', (
@@ -89,7 +121,7 @@ void main() {
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tapDie(tester, 1);
-      expect(find.text('Die 2'), findsOneWidget);
+      expect(selectedDie(tester), 1);
 
       const int red = 0xFFB3453F;
       await tester.tap(swatch(kDicePage, red));
@@ -110,7 +142,7 @@ void main() {
 
       expect(rack(tester)[0].kind, DieKind.d4);
       expect(rack(tester)[1].kind, DieKind.d20);
-      expect(find.text('Die 1'), findsOneWidget);
+      expect(selectedDie(tester), 0);
     });
 
     testWidgets('a new die arrives selected, matching the one before it', (
@@ -123,7 +155,7 @@ void main() {
 
       expect(rack(tester).length, 3);
       expect(rack(tester)[2].kind, DieKind.d12);
-      expect(find.text('Die 3'), findsOneWidget);
+      expect(selectedDie(tester), 2);
 
       // The editor now points at the new die, so this only moves that one.
       await tapText(tester, 'D8');
@@ -150,11 +182,87 @@ void main() {
       await tapRemove(tester);
 
       expect(rack(tester).length, 1);
-      expect(find.text('Die 1'), findsOneWidget);
+      expect(selectedDie(tester), 0);
 
       // The last die is the set, and cannot be taken away.
       await tapRemove(tester);
       expect(rack(tester).length, 1);
+    });
+  });
+
+  group('the taps the editor makes', () {
+    testWidgets('one for every press on the rack or the panel, all light', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      final RecordedHaptics taps = recordHaptics();
+
+      // Every one of these is the same kind of act — a press that arranges
+      // the set, or says which die the arranging is about — so they are
+      // answered the same way, and none of them is the firmer tap: the rack
+      // and the chips say what happened, and the hand is only agreeing. See
+      // [uiHaptic].
+      await tapDie(tester, 1);
+      await tester.tap(swatch(kDicePage, 0xFFB3453F));
+      await tester.pump();
+      await tapText(tester, 'D8');
+      await tapAdd(tester);
+      await tapRemove(tester);
+
+      expect(taps.fired, List<HapticLevel>.filled(5, HapticLevel.light));
+    });
+
+    testWidgets('including the one press that changes nothing about the set', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      final RecordedHaptics taps = recordHaptics();
+
+      // Selecting moves a ring one slot wide and nothing else, on the part of
+      // the screen a thumb is covering. It is the press with least to show for
+      // itself, which is why it is answered rather than in spite of it.
+      await tapDie(tester, 1);
+      expect(selectedDie(tester), 1);
+      expect(rack(tester).length, 2, reason: 'nothing about the set moved');
+      expect(taps.fired, <HapticLevel>[HapticLevel.light]);
+
+      // And the die already selected is still a press, and still says so.
+      await tapDie(tester, 1);
+      expect(taps.fired.length, 2);
+    });
+
+    testWidgets('and none for a press it turns down', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await tapRemove(tester);
+      final RecordedHaptics taps = recordHaptics();
+
+      // One die left, which is the set: Remove is greyed out and does nothing.
+      // A tap for it would be the phone agreeing to something it declined.
+      await tapRemove(tester);
+      expect(rack(tester).length, 1);
+      expect(taps.fired, isEmpty);
+    });
+
+    testWidgets('and none at all with the calibration turned off', (
+      WidgetTester tester,
+    ) async {
+      final double was = settings.hapticGain;
+      addTearDown(() => settings.hapticGain = was);
+      settings.hapticGain = 0;
+
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      final RecordedHaptics taps = recordHaptics();
+
+      await tester.tap(swatch(kDicePage, 0xFFB3453F));
+      await tester.pump();
+      await tapText(tester, 'D8');
+
+      // The slider is described against the tray and is still the only switch
+      // there is. Off is a word with one meaning.
+      expect(rack(tester)[0].kind, DieKind.d8);
+      expect(taps.fired, isEmpty);
     });
   });
 
@@ -246,4 +354,13 @@ void main() {
 Color? _fillOf(Container container) {
   final Decoration? decoration = container.decoration;
   return decoration is BoxDecoration ? decoration.color : null;
+}
+
+/// The colour a [Container] is edged with — every slot in the rack has a
+/// border, and only the selected one has that border in blue.
+Color? _edgeOf(Container container) {
+  final Decoration? decoration = container.decoration;
+  final BoxBorder? border =
+      decoration is BoxDecoration ? decoration.border : null;
+  return border is Border ? border.top.color : null;
 }

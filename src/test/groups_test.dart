@@ -43,6 +43,12 @@ Future<void> swipeLeft(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Back the other way, and settled for the same reason.
+Future<void> swipeRight(WidgetTester tester) async {
+  await tester.drag(find.byType(PageView), const Offset(300, 0));
+  await tester.pumpAndSettle();
+}
+
 /// The plus in one group's rack: the empty slot another die would land in.
 ///
 /// Per group, because every rack with room in it draws one and the page view
@@ -90,6 +96,32 @@ bool enabled(WidgetTester tester, Finder label) =>
 
 const String kEmptyEditor = 'No dice yet';
 
+/// Which slot of a group's rack has the ring round it: the die that group's
+/// panel is pointed at.
+///
+/// The panel's title used to name the die in words, and names the set now, so
+/// the ring is where a selection is written down — and it is written down per
+/// group, which is what makes it worth asking of one.
+int selectedIn(WidgetTester tester, int group) => tester
+    .widgetList<Container>(
+      find.descendant(
+        of: find.byKey(ValueKey<int>(group)),
+        matching: find.byType(Container),
+      ),
+    )
+    .toList()
+    .indexWhere((Container slot) => _edgeOf(slot) == kSelectedRing);
+
+/// The blue a selected slot is edged with — see `_RackSlot`.
+const Color kSelectedRing = Color(0xFF6E9AD0);
+
+Color? _edgeOf(Container container) {
+  final Decoration? decoration = container.decoration;
+  final BoxBorder? border =
+      decoration is BoxDecoration ? decoration.border : null;
+  return border is Border ? border.top.color : null;
+}
+
 void main() {
   group('three groups', () {
     testWidgets('start as one set of dice and two empty ones', (
@@ -135,6 +167,43 @@ void main() {
       expect(rackOf(tester, 1), isEmpty);
       expect(dotsOf(tester).filled, <bool>[true, false, false]);
       expect(find.text(kEmptyEditor), findsOneWidget);
+    });
+
+    testWidgets('the panel is titled for the set, out of the sets in use', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      // One set with anything in it, so it is the only one to be on.
+      expect(find.text('Dice - Set 1/1'), findsOneWidget);
+
+      await swipeLeft(tester);
+      await tapAdd(tester, 1);
+      expect(find.text('Dice - Set 2/2'), findsOneWidget);
+
+      await swipeLeft(tester);
+      await tapAdd(tester, 2);
+      expect(find.text('Dice - Set 3/3'), findsOneWidget);
+
+      // And the first set is one of three now, without having been touched:
+      // the title is about the set you are on, not about its own dice.
+      await swipeRight(tester);
+      await swipeRight(tester);
+      expect(find.text('Dice - Set 1/3'), findsOneWidget);
+    });
+
+    testWidgets('a set nobody started is neither counted nor numbered', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await swipeLeft(tester);
+      await swipeLeft(tester);
+      await tapAdd(tester, 2);
+
+      // Two sets have dice in them and the middle one has not been started, so
+      // this is the second of two — which is the box the tray will give it,
+      // rather than the page of the picker it happens to be drawn on.
+      expect(dotsOf(tester).filled, <bool>[true, false, true]);
+      expect(find.text('Dice - Set 2/2'), findsOneWidget);
     });
 
     testWidgets('the first group always keeps a die', (
@@ -187,7 +256,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await tester.tap(find.byType(DiePreview).at(1));
       await tester.pump();
-      expect(find.text('Die 2'), findsOneWidget);
+      expect(selectedIn(tester, 0), 1);
 
       await swipeLeft(tester);
       expect(find.text(kEmptyEditor), findsOneWidget);
@@ -195,7 +264,7 @@ void main() {
       await tester.drag(find.byType(PageView), const Offset(300, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Die 2'), findsOneWidget);
+      expect(selectedIn(tester, 0), 1);
     });
   });
 

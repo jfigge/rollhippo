@@ -143,7 +143,15 @@ class _AppMenuButtonState extends State<AppMenuButton> {
       ),
       padding: EdgeInsets.zero,
       icon: const _MenuBars(),
-      onSelected: (_MenuItem item) => unawaited(_run(item)),
+      // The card arriving is the moment worth confirming, and it is the
+      // firmer of the two taps — see [uiHaptic], which is where the pair is
+      // explained. The entry you then pick out of it is the lighter one,
+      // because taking it does something you can see.
+      onOpened: () => uiHaptic(HapticLevel.medium),
+      onSelected: (_MenuItem item) {
+        uiHaptic(HapticLevel.light);
+        unawaited(_run(item));
+      },
       itemBuilder:
           (BuildContext context) => <PopupMenuEntry<_MenuItem>>[
             _entry(_MenuItem.settings, Icons.tune, 'Settings'),
@@ -409,7 +417,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 'How hard the tray taps back when a die hits the side. The tap '
                 'follows the impact, so a D20 slamming into a wall is felt and '
                 'a die nudging its neighbour is not — this only sets how much '
-                'of that reaches your hand. Drag the slider to feel it.',
+                'of that reaches your hand. Drag the slider to feel it. Off is '
+                'off for the whole app, menus and profiles included.',
                 style: TextStyle(
                   color: Color(0x99BFD0E4),
                   fontSize: 13,

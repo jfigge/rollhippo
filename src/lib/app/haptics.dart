@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../tray/tray.dart';
+import 'chrome.dart';
+import 'settings.dart';
 
 /// The impact the calibration slider plays back, in newton-seconds.
 ///
@@ -91,6 +94,43 @@ class RecordedHaptics implements HapticDriver {
 /// accelerometer it does not have either. Pass `onDevice`.
 HapticDriver hapticsFor({required bool device}) =>
     device ? const SystemHaptics() : const SilentHaptics();
+
+/// What [uiHaptic] fires through, or null for the real thing.
+///
+/// Resolved at the moment of the tap rather than kept in a field, because
+/// [onDevice] reads `defaultTargetPlatform` and a widget test moves that about
+/// underneath it. A driver picked once and held would be whatever the first
+/// tap in a suite happened to ask for.
+@visibleForTesting
+HapticDriver? debugUiHaptics;
+
+/// The tap the interface answers a press with.
+///
+/// Not [HapticEngine], and the difference is what the number behind the tap
+/// is. A tray tap is a measurement — `lastWallImpulse`, in newton-seconds,
+/// weighed against a floor and four bands — so how hard it feels is derived
+/// from something that actually happened. A press has no impulse behind it at
+/// all. It is an acknowledgement at a strength somebody chose, and there is
+/// nothing here for the gap or the escalation rule to do: two menus cannot
+/// open in the same frame, and a menu and the entry taken out of it are two
+/// gestures with a whole decision between them.
+///
+/// Two strengths, and which is which is deliberate. Picking an entry is
+/// [HapticLevel.light], because the screen answers you anyway — a sheet
+/// opens, a profile is written, something visibly happens. Opening a menu is
+/// one step up, because it is the gesture where *nothing else* confirms that
+/// the phone understood: a long press has no moment of contact of its own, and
+/// the tap under your thumb is what says the press was long enough.
+///
+/// Silent while [Settings.hapticGain] is off. That dial is calibrated against
+/// the tray and says so, and the fractions in between do not scale these —
+/// there is no impulse to scale. But "Off" is a word with one meaning, and a
+/// phone that went on tapping through every menu after it had been turned down
+/// to nothing would read as a bug rather than as a distinction.
+void uiHaptic(HapticLevel level) {
+  if (settings.hapticGain <= 0) return;
+  (debugUiHaptics ?? hapticsFor(device: onDevice)).fire(level);
+}
 
 /// Turns wall impacts into taps you can feel.
 ///

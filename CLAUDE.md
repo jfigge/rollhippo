@@ -93,8 +93,8 @@ src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter 
 src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
                    tutorial (the first run: pages you swipe, over the screen each is about) ·
-                   haptics (HapticEngine +
-                   HapticDriver) · settings (haptic gain · motion · shake to deal · tutorial)
+                   haptics (HapticEngine + HapticDriver, for the tray · uiHaptic, for
+                   the interface) · settings (haptic gain · motion · shake to deal · tutorial)
                    profiles (SavedProfile · ProfileStore — the saves, stored)
                    profile_row (the row of them, and the naming and delete dialogs)
 src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/chrome.dart';
+import 'package:rollhippo/app/haptics.dart';
 import 'package:rollhippo/app/menu.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
@@ -132,6 +133,15 @@ ScannedProfile sharedCode(WidgetTester tester) =>
     decodeProfile(
       tester.widget<ShareCodeView>(find.byType(ShareCodeView)).code,
     )!;
+
+/// Puts a recorder in front of the phone's actuator for one test, and hands it
+/// back. The row's taps do not go through a [HapticEngine]; see [uiHaptic].
+RecordedHaptics recordHaptics() {
+  final RecordedHaptics driver = RecordedHaptics();
+  debugUiHaptics = driver;
+  addTearDown(() => debugUiHaptics = null);
+  return driver;
+}
 
 /// Makes a save called [name] out of whatever is on screen, the way a thumb
 /// would: the dashed profile, the dialog, the name, Create.
@@ -793,6 +803,57 @@ void main() {
         profiles.saves.single.profile.groups[0].length,
         kDefaultDice.length,
       );
+    });
+
+    testWidgets('answer a tap and a hold in the hand as well', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      await createSave(tester, 'Yahtzee');
+      final RecordedHaptics taps = recordHaptics();
+
+      // Opening one replaces everything above it, so it says so.
+      await tester.tap(profile('Yahtzee'));
+      await tester.pumpAndSettle();
+      expect(taps.fired, <HapticLevel>[HapticLevel.light]);
+
+      // The hold is the firmer tap, and on this row it is the only sign the
+      // press was long enough — there is no moment of contact to feel.
+      taps.clear();
+      await tester.longPress(profile('Yahtzee'));
+      await tester.pumpAndSettle();
+      expect(taps.fired, <HapticLevel>[HapticLevel.medium]);
+
+      // A menu tapped away from rather than chosen out of confirms nothing.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(taps.fired, <HapticLevel>[HapticLevel.medium]);
+
+      taps.clear();
+      await tester.longPress(profile('Yahtzee'));
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Save');
+      expect(taps.fired, <HapticLevel>[HapticLevel.medium, HapticLevel.light]);
+    });
+
+    testWidgets('and so does the dashed one, which is one of them', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+      final RecordedHaptics taps = recordHaptics();
+
+      // A tap on it is the naming dialog rather than a save being opened, and
+      // it is still a chip in the row being pressed.
+      await tester.tap(find.byKey(kNewProfile));
+      await tester.pumpAndSettle();
+      expect(taps.fired, <HapticLevel>[HapticLevel.light]);
+      await tapText(tester, 'Cancel');
+
+      taps.clear();
+      await tester.longPress(find.byKey(kNewProfile));
+      await tester.pumpAndSettle();
+      await tapText(tester, 'Reset');
+      expect(taps.fired, <HapticLevel>[HapticLevel.medium, HapticLevel.light]);
     });
 
     testWidgets('deleting is asked about first, and can be called off', (

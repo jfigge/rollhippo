@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rollhippo/app/card_screen.dart';
 import 'package:rollhippo/app/chrome.dart';
+import 'package:rollhippo/app/haptics.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/settings.dart';
@@ -52,6 +53,20 @@ Finder swatchOf(Key page, int colour) => find.descendant(
   }),
 );
 
+/// Puts a recorder in front of the phone's actuator for one test, and hands it
+/// back. The panel's taps do not go through a [HapticEngine]; see [uiHaptic].
+RecordedHaptics recordHaptics() {
+  final RecordedHaptics driver = RecordedHaptics();
+  debugUiHaptics = driver;
+  addTearDown(() => debugUiHaptics = null);
+  return driver;
+}
+
+/// The cut, as the slider has it. Read off the widget rather than off the
+/// label beside it, because it is the number the shoe is built from.
+int reshuffleAt(WidgetTester tester) =>
+    tester.widget<Slider>(find.byKey(kReshuffleSlider)).value.round();
+
 PageDots dotsOf(WidgetTester tester, Key key) =>
     tester.widget<PageDots>(find.byKey(key));
 
@@ -59,6 +74,11 @@ PageDots dotsOf(WidgetTester tester, Key key) =>
 /// modes are built at once and both have one, so it has to say which.
 Finder addOf(Key page) =>
     find.descendant(of: find.byKey(page), matching: find.byKey(kAddDie));
+
+/// The dice panel's title, which is what there is to drag it by. It names the
+/// set the panel is about — one set with dice in it, on an untouched picker —
+/// where card mode's says 'Cards'.
+final Finder dicePanel = find.text('Dice - Set 1/1');
 
 /// Drags the panel — the one thing on the picker that switches modes.
 Future<void> swipePanel(WidgetTester tester, Finder onPanel, double dx) async {
@@ -371,7 +391,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
 
       expect(dotsOf(tester, kModeDots).current, 1);
       // Two dice by default, and only three places for them.
@@ -400,7 +420,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
 
       await tester.tap(addOf(kCardPage));
       await tester.pump();
@@ -444,7 +464,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
 
       expect(find.text('(72 in the shoe)'), findsOneWidget);
       await tester.tap(find.text('3'));
@@ -456,7 +476,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
 
       // DieSpec is compared field by field: it has no `==` of its own, and a
       // spec built fresh every build would never be the same instance twice.
@@ -480,7 +500,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
 
       await tester.tap(dieOf(kCardPage).at(1));
       await tester.pump();
@@ -511,7 +531,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
 
       await tester.tap(swatchOf(kCardPage, violet));
       await tester.pump();
@@ -540,7 +560,7 @@ void main() {
       expect(find.text('Roll'), findsOneWidget);
       expect(find.text('Deal'), findsNothing);
 
-      await swipePanel(tester, find.text('Die 1'), -300);
+      await swipePanel(tester, dicePanel, -300);
       expect(find.text('Roll'), findsNothing);
 
       await tester.tap(find.text('Deal'));
@@ -550,6 +570,74 @@ void main() {
       expect(find.byType(CardScreen), findsOneWidget);
       expect(find.text('Draw'), findsOneWidget);
       expect(find.text('Throw'), findsNothing);
+    });
+  });
+
+  group('the taps the card panel makes', () {
+    testWidgets('one for every press on the rack or the panel, all light', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await swipePanel(tester, dicePanel, -300);
+      final RecordedHaptics taps = recordHaptics();
+
+      // The same presses the dice editor answers, and the two this panel has
+      // that it does not: how many decks are in the shoe, and how deep it is
+      // cut. All of them are the set-up being arranged — or being pointed at,
+      // which the rack's own tap is — so all are answered the same way.
+      await tester.tap(dieOf(kCardPage).at(1));
+      await tester.pump();
+      await tester.tap(swatchOf(kCardPage, violet));
+      await tester.pump();
+      await tester.tap(addOf(kCardPage));
+      await tester.pump();
+      await tester.tap(
+        find.descendant(of: find.byKey(kCardPage), matching: find.text('3')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(kCardPage),
+          matching: find.text('Remove'),
+        ),
+      );
+      await tester.pump();
+
+      expect(taps.fired, List<HapticLevel>.filled(5, HapticLevel.light));
+    });
+
+    testWidgets('and the cut counts, without buzzing at the end of its run', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await swipePanel(tester, dicePanel, -300);
+      final RecordedHaptics taps = recordHaptics();
+
+      final Rect slider = tester.getRect(find.byKey(kReshuffleSlider));
+      final double y = slider.center.dy;
+
+      // One end of the scale to the other. It counts — and it counts steps
+      // rather than pointer moves, which is the whole of the guard: a tap
+      // taken straight off `Slider.onChanged` would arrive far more often
+      // than there are divisions to arrive for.
+      await tester.dragFrom(
+        Offset(slider.left + 2, y),
+        Offset(slider.width, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(reshuffleAt(tester), kMaxReshuffleAt);
+      expect(taps.fired, isNotEmpty);
+      expect(taps.fired, everyElement(HapticLevel.light));
+      expect(taps.fired.length, lessThanOrEqualTo(kMaxReshuffleAt));
+
+      // And a thumb still moving with the slider already against its stop taps
+      // nothing at all. That is the case a bare tap-per-move would buzz
+      // through for as long as the drag lasted, with the number not moving.
+      taps.clear();
+      await tester.dragFrom(Offset(slider.right - 2, y), const Offset(60, 0));
+      await tester.pumpAndSettle();
+      expect(reshuffleAt(tester), kMaxReshuffleAt);
+      expect(taps.fired, isEmpty);
     });
   });
 
