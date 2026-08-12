@@ -14,6 +14,30 @@ HERD     ?= $(CURDIR)/../../../js/projects/hippoherd
 # attached", which is the usual case; name one when there are two.
 ANDROID_DEVICE ?=
 
+# `adb` itself, which is not on the PATH and is not going to be. Homebrew's
+# android-commandlinetools cask unpacks platform-tools/ and links none of it,
+# so a shell that has never been told where the SDK is cannot run adb — which
+# is how `android` came to build a 105 MB APK and then die on
+# `adb: command not found`, having done all of the work and none of the point.
+#
+# The location is already written down, though. `sdk.dir` in
+# src/android/local.properties is what Gradle reads, and it is how
+# `flutter devices` finds the phone two lines earlier in that same recipe —
+# so the id lookup has always worked from the very shell that could not then
+# install to it. Read it from there first, then the two variables Google
+# documents, and only fall back to a bare `adb` for a machine that does have
+# one on the PATH.
+#
+# `wildcard` is doing the choosing: it drops every candidate that does not
+# exist — including the `/platform-tools/adb` that an unset variable leaves
+# behind — and `firstword` takes what survives, or the fallback if nothing did.
+ADB ?= $(firstword \
+         $(wildcard \
+           $(shell sed -n 's/^sdk\.dir=//p' $(SRC)/android/local.properties 2>/dev/null)/platform-tools/adb \
+           $(ANDROID_HOME)/platform-tools/adb \
+           $(ANDROID_SDK_ROOT)/platform-tools/adb) \
+         adb)
+
 # Gradle's launcher JVM, not ours. From JDK 24 the runtime warns whenever an
 # unnamed module calls System.load, and Gradle's own file watching and process
 # handling is native code — net.rubygrapefruit's native-platform — so every
@@ -143,8 +167,14 @@ android:  ## Build and install on the Android phone
 	    echo "  The APK is built and waiting at $(SRC)/build/app/outputs/flutter-apk/."; \
 	    exit 1; \
 	  fi; \
+	  if ! command -v $(ADB) >/dev/null 2>&1; then \
+	    echo "make android: adb not found (tried $(ADB))."; \
+	    echo "  Set sdk.dir in $(SRC)/android/local.properties, or ADB=<path>."; \
+	    echo "  The APK is built and waiting at $(SRC)/build/app/outputs/flutter-apk/."; \
+	    exit 1; \
+	  fi; \
 	  echo "installing to $$id"; \
-	  adb -s "$$id" install -r \
+	  $(ADB) -s "$$id" install -r \
 	    $(SRC)/build/app/outputs/flutter-apk/app-profile.apk
 
 gif:  ## Render a scripted roll to an animated GIF

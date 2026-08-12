@@ -8,9 +8,9 @@ import '../tray/tray.dart';
 /// What the app remembers between launches.
 ///
 /// One instance, [settings], reached directly rather than handed down through
-/// the widget tree. There are three settings and a flag, and a handful of
+/// the widget tree. There are four settings and a flag, and a handful of
 /// places that read them; an inherited widget threaded through the picker, the
-/// tray and a modal sheet to carry a double and three bools would be more
+/// tray and a modal sheet to carry a double and four bools would be more
 /// machinery than the thing it carries.
 ///
 /// It is a [ChangeNotifier] so the sheet that edits it and the tray that obeys
@@ -19,6 +19,8 @@ class Settings extends ChangeNotifier {
   static const String _hapticGainKey = 'haptic.gain';
   static const String _motionKey = 'motion.enabled';
   static const String _shakeDrawKey = 'cards.shake';
+  static const String _timerKey = 'timer.enabled';
+  static const String _limitKey = 'timer.limit';
   static const String _tutorialKey = 'tutorial.seen';
 
   double _hapticGain = Tuning.hapticGain;
@@ -26,6 +28,10 @@ class Settings extends ChangeNotifier {
   bool _motion = true;
 
   bool _shakeToDraw = false;
+
+  bool _timer = false;
+
+  int _limit = 0;
 
   bool _tutorialSeen = false;
 
@@ -87,6 +93,65 @@ class Settings extends ChangeNotifier {
     unawaited(_save());
   }
 
+  /// Whether a clock counting up from the last roll is drawn along the top.
+  ///
+  /// **Off**, because the app's whole job is to answer a question and get out
+  /// of the way, and a clock that nobody asked for is a second thing on the
+  /// screen moving while you are trying to read a number off the first. Turned
+  /// on it sits between Close and Throw and says how long since the last
+  /// throw — or, on the card table, since the last card — in minutes and
+  /// seconds.
+  ///
+  /// It measures, and that is all it does. Nothing counts down, nothing runs
+  /// out, and nothing on either screen behaves differently for it being there:
+  /// a game with a turn limit keeps the limit in the players' heads and this
+  /// only saves somebody having to watch a second phone.
+  ///
+  /// Read where it is drawn rather than obeyed further down, which is the
+  /// opposite of what [motion] does and is right for the same reason it is
+  /// wrong there. Motion changes what the tray *is handed*, so it belongs in
+  /// the source; this changes nothing but whether one widget is built.
+  bool get timer => _timer;
+
+  set timer(bool value) {
+    if (value == _timer) return;
+    _timer = value;
+    notifyListeners();
+    unawaited(_save());
+  }
+
+  /// How long a turn is allowed to run, in seconds, or zero for no limit.
+  ///
+  /// **Zero**, which is off, and a limit is a thing you have to ask for twice:
+  /// it lives under [timer] and means nothing while that is off, because what
+  /// it does when it runs out is turn a clock red and a clock nobody is
+  /// showing cannot go red. The same nesting Shake to deal has under [motion],
+  /// for the same reason.
+  ///
+  /// Between 30 seconds and 5 minutes in quarter-minutes, which is
+  /// [kLimitSteps] positions of a slider and not a free number. A turn limit
+  /// is a thing people agree on out loud — "about a minute each" — and it is
+  /// never 47 seconds; the notches are what make it settable by dragging
+  /// rather than typing. Anything outside that range is a different feature: a
+  /// ten-second limit is a buzzer, and a twenty-minute one is not a limit
+  /// anybody is watching a phone for.
+  ///
+  /// What happens when it passes is in `TimeUpAlert` and [ElapsedTimer]: the
+  /// screen flashes three times, the phone taps three times with it, and the
+  /// clock goes red and stays red until the next roll. Nothing is prevented.
+  /// The app has no opinion about whose turn it is and does not acquire one
+  /// here — it says the time is up, and what that costs is between the people
+  /// playing.
+  int get limit => _limit;
+
+  set limit(int value) {
+    final int clamped = _clampLimit(value);
+    if (clamped == _limit) return;
+    _limit = clamped;
+    notifyListeners();
+    unawaited(_save());
+  }
+
   /// Whether anybody has been shown the tutorial on this phone.
   ///
   /// False is a first run, and a first run is the one launch that puts
@@ -127,6 +192,14 @@ class Settings extends ChangeNotifier {
     // be leaving the bug in place for exactly the players most likely to hit
     // it. It is one switch away for anyone who misses it.
     _shakeToDraw = prefs.getBool(_shakeDrawKey) ?? false;
+    // Off unless asked for, on a phone that has never been asked and on one
+    // that had the app before there was a clock to ask about. The screen is
+    // the dice; anything else on it is there because somebody wanted it.
+    _timer = prefs.getBool(_timerKey) ?? false;
+    // Off, and clamped rather than trusted for the same reason the gain is:
+    // what is in the file was written by some build of this app, and the range
+    // is this build's business.
+    _limit = _clampLimit(prefs.getInt(_limitKey) ?? 0);
     // A phone with nothing written for this has never been shown the
     // tutorial — which is true both of a genuine first run and of a launch
     // after the preferences file has been thrown away, and offering it again
@@ -139,15 +212,26 @@ class Settings extends ChangeNotifier {
     final double gain = _hapticGain;
     final bool motion = _motion;
     final bool shake = _shakeToDraw;
+    final bool timer = _timer;
+    final int limit = _limit;
     final bool tutorial = _tutorialSeen;
     await _guard<void>(() async {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_hapticGainKey, gain);
       await prefs.setBool(_motionKey, motion);
       await prefs.setBool(_shakeDrawKey, shake);
+      await prefs.setBool(_timerKey, timer);
+      await prefs.setInt(_limitKey, limit);
       await prefs.setBool(_tutorialKey, tutorial);
     });
   }
+
+  /// The nearest limit this build will actually hold: off, or one of the
+  /// notches. A number from somewhere else — an older build, a newer one, a
+  /// hand-edited preferences file — is rounded onto the scale rather than
+  /// kept, so a slider is never showing a position it does not have.
+  int _clampLimit(int value) =>
+      value <= 0 ? 0 : limitForStep(stepForLimit(value));
 
   /// A settings store that is not there is a settings store at its defaults.
   ///
@@ -164,6 +248,24 @@ class Settings extends ChangeNotifier {
     }
   }
 }
+
+/// How many notches [Settings.limit] has above zero.
+///
+/// Nineteen: 30 seconds to 5 minutes, every 15 seconds. Step 0 is off, which
+/// makes twenty positions on the slider.
+const int kLimitSteps = 19;
+
+/// The seconds at slider position [step], or zero for off.
+///
+/// `15 + 15 × step`, so step 1 is 30 seconds and step 19 is 300. Written as
+/// arithmetic rather than a table because the table would be the arithmetic
+/// with nineteen chances to mistype it.
+int limitForStep(int step) =>
+    step <= 0 ? 0 : 15 + 15 * step.clamp(1, kLimitSteps);
+
+/// Which position of the slider [seconds] is, rounding to the nearest notch.
+int stepForLimit(int seconds) =>
+    seconds <= 0 ? 0 : ((seconds - 15) / 15).round().clamp(1, kLimitSteps);
 
 /// The settings.
 final Settings settings = Settings();

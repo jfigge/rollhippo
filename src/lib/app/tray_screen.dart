@@ -75,6 +75,18 @@ class _TrayScreenState extends State<TrayScreen>
   final List<_Box> _boxes = <_Box>[];
   Size _size = Size.zero;
 
+  /// Whole seconds since the box on screen was thrown, or null if nobody has
+  /// thrown it yet. Its own notifier for the same reason [_frames] is one: the
+  /// clock changes once a second and everything else up here changes never, so
+  /// this rebuilds a `Text` sixty times a minute rather than sixty times a
+  /// second. See [ElapsedTimer].
+  final ValueNotifier<int?> _clock = ValueNotifier<int?>(null);
+
+  /// Bumped when the box on screen runs out of time. See [TimeUpAlert], which
+  /// is what watches it — a counter rather than a flag so that two turns
+  /// running out one after another are two alerts.
+  final ValueNotifier<int> _alert = ValueNotifier<int>(0);
+
   /// Which box is on screen and being simulated. Changes when a slide lands,
   /// not when it starts — the box you are leaving is the box that still has
   /// your finger on it.
@@ -116,6 +128,8 @@ class _TrayScreenState extends State<TrayScreen>
     _motion.dispose();
     _frames.dispose();
     _page.dispose();
+    _clock.dispose();
+    _alert.dispose();
     super.dispose();
   }
 
@@ -175,6 +189,27 @@ class _TrayScreenState extends State<TrayScreen>
 
     if (_slide != null) _advanceSlide(dt);
 
+    // Wall-clock, and every box, including the ones frozen under a swipe and
+    // the ones nobody is looking at. How long ago a group was thrown is a fact
+    // about the room rather than about the simulation, so it does not stop
+    // while a finger is on the glass and it does not pause for a box that is
+    // off the side of the screen — swipe back to a group after two minutes and
+    // it says two minutes, which is the only answer that could be true.
+    final int limit = settings.timer ? settings.limit : 0;
+    for (int i = 0; i < _boxes.length; i++) {
+      final _Box box = _boxes[i];
+      if (!box.thrown) continue;
+      box.sinceThrow += dt;
+      // Marked on every box, so a group that ran out while you were looking
+      // at another one is already red when you swipe back to it. Only the box
+      // on screen gets the alert: a flash is for somebody watching, and three
+      // taps about a tray nobody can see is the phone shouting into a pocket.
+      if (limit > 0 && !box.alerted && box.sinceThrow >= limit) {
+        box.alerted = true;
+        if (i == _at) _alert.value++;
+      }
+    }
+
     // The hardest knock the box on screen took this frame, in newton-seconds.
     // Only that box: the unthrown ones below are putting their dice down on a
     // floor nobody is looking at, and a phone that buzzed for those would be
@@ -183,9 +218,24 @@ class _TrayScreenState extends State<TrayScreen>
 
     if (!_frozen) {
       final _Box box = _boxes[_at];
+      final bool shaken = isShake(motion);
       // A group that has not been thrown yet is waiting for exactly this.
-      if (!box.thrown && isShake(motion)) {
+      if (!box.thrown && shaken) {
         _throwCurrent();
+      } else if (shaken) {
+        // And a group that *has* been thrown is rolled by the shake itself.
+        // There is no second call to `throwDice` here and there must not be:
+        // [DiceTray.update] wakes the world and the accelerometer scatters
+        // the dice, which is the simulation being the throw rather than
+        // standing in for one. The clock measures rolls and not button
+        // presses, so this counts — otherwise a tray shaken into a fresh
+        // result would go on reporting how long ago the last tap was.
+        //
+        // A shake is true for as long as the wrist is moving, so this is
+        // zeroed on every frame of it and the count starts where the shaking
+        // stopped, which is where the roll it produced actually began.
+        box.sinceThrow = 0;
+        box.alerted = false;
       }
       box.tray.update(motion, dt);
       impulse = box.tray.world.lastWallImpulse;
@@ -203,6 +253,9 @@ class _TrayScreenState extends State<TrayScreen>
         box.tray.update(MotionFrame.still, dt);
       }
     }
+
+    // Last, so that a shake landing this frame is already in it.
+    _updateClock();
 
     // Every frame, including the frozen ones and the silent ones: the engine
     // keeps its own clock off this [dt], and a gap that only advanced on
@@ -264,10 +317,28 @@ class _TrayScreenState extends State<TrayScreen>
     _dragging = false;
   }
 
+  /// Hands the clock the whole second the box on screen is at.
+  ///
+  /// Called every frame and cheap every time: a [ValueNotifier] given the
+  /// value it already holds tells nobody, so this is a comparison of two ints
+  /// on fifty-nine frames out of sixty.
+  void _updateClock() {
+    final _Box box = _boxes[_at];
+    _clock.value = box.thrown ? box.sinceThrow.floor() : null;
+  }
+
   /// Throws the group on screen, whether or not it has been thrown before.
   void _throwCurrent() {
     final _Box box = _boxes[_at];
     box.tray.throwDice();
+    // Zeroed here rather than left to the next frame, so the clock goes back
+    // to 0:00 under the thumb that threw rather than a frame after it. This
+    // covers the button, R on the harness, and the shake that throws a group
+    // nobody had thrown yet — but not a shake on one already thrown, which
+    // never comes through here at all. See `_onTick`.
+    box.sinceThrow = 0;
+    box.alerted = false;
+    _updateClock();
     if (box.thrown) return;
     box.tray.readout.enabled = true;
     setState(() => box.thrown = true);
@@ -435,15 +506,38 @@ class _TrayScreenState extends State<TrayScreen>
                                 label: 'Close',
                                 onTap: () => Navigator.of(context).pop(),
                               ),
-                              if (paged)
-                                PageDots(
-                                  key: kTrayDots,
-                                  current: _at,
-                                  filled: List<bool>.filled(
-                                    _boxes.length,
-                                    true,
-                                  ),
-                                ),
+                              // What the screen is telling you, between the
+                              // two things it is asking you to press: the
+                              // clock, and under it the dots. Both are
+                              // optional and either can be missing, and with
+                              // both gone this is an empty column — which
+                              // `spaceBetween` lays out exactly as the two
+                              // buttons on their own always were.
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  // Read here rather than obeyed lower down.
+                                  // The setting lives behind the picker, a
+                                  // screen away, so it cannot change while a
+                                  // tray is up — the same bargain
+                                  // [_RollPrompt] makes with `motion`.
+                                  if (settings.timer)
+                                    ElapsedTimer(
+                                      key: kElapsedTimer,
+                                      seconds: _clock,
+                                      limit: settings.limit,
+                                    ),
+                                  if (paged)
+                                    PageDots(
+                                      key: kTrayDots,
+                                      current: _at,
+                                      filled: List<bool>.filled(
+                                        _boxes.length,
+                                        true,
+                                      ),
+                                    ),
+                                ],
+                              ),
                               TrayButton(
                                 key: kTrayThrow,
                                 label: 'Throw',
@@ -455,6 +549,10 @@ class _TrayScreenState extends State<TrayScreen>
                         ),
                       ),
                     ),
+                    // Last, so the flash is over the buttons as well as the
+                    // dice. It is telling you about the screen rather than
+                    // about anything on it.
+                    TimeUpAlert(trigger: _alert),
                   ],
                 ),
               );
@@ -475,6 +573,18 @@ class _Box {
   /// False for a group you have swiped to and not yet shaken. Its dice have
   /// been put down by the solver, but they are not a result.
   bool thrown;
+
+  /// Whether this group has already run its turn out, so that the alert fires
+  /// once rather than on every frame past the limit. Cleared by the next
+  /// throw, which is also what clears [sinceThrow].
+  bool alerted = false;
+
+  /// Seconds since this group was last thrown, and meaningless until [thrown]
+  /// — which is what the clock reads as nothing at all rather than as 0:00.
+  /// Per box rather than one for the screen, because a group is its own roll:
+  /// throwing the set beside this one says nothing about how long ago this one
+  /// was thrown.
+  double sinceThrow = 0;
 }
 
 /// A swipe coasting to a stop.

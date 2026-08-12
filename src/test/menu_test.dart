@@ -43,13 +43,13 @@ PageDots dotsOf(WidgetTester tester) =>
 /// motion control, and the shake-to-deal that hangs underneath it.
 final Finder motionSwitch = find.byType(Switch).first;
 final Finder shakeSwitch = find.byType(Switch).at(1);
+final Finder timerSwitch = find.byType(Switch).at(2);
 
-/// The calibration slider, which is the one inside the sheet — the picker
-/// underneath it has a slider of its own for the cut in card mode.
-final Finder gainSlider = find.descendant(
-  of: find.byType(BottomSheet),
-  matching: find.byType(Slider),
-);
+/// The two sliders in the sheet, by key. By key rather than by type and place:
+/// the picker underneath has a slider of its own for the cut in card mode, and
+/// the sheet has had two of them since there was a turn limit.
+final Finder gainSlider = find.byKey(kGainSlider);
+final Finder limitSlider = find.byKey(kLimitSlider);
 
 Future<void> openMenu(WidgetTester tester) async {
   await tester.tap(find.byType(AppMenuButton));
@@ -258,6 +258,217 @@ void main() {
     });
   });
 
+  group('the arguments are behind the arrow', () {
+    /// Opens the sheet with every panel shut, which is how it always opens.
+    Future<void> openSettings(WidgetTester tester) async {
+      await pumpPicker(tester);
+      settings.motion = true;
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('nothing is expanded to begin with, and the whole sheet fits', (
+      WidgetTester tester,
+    ) async {
+      await openSettings(tester);
+
+      // Every setting says what it is and what it is doing.
+      for (final String title in <String>[
+        'Motion control',
+        'Shake to deal a card',
+        'Impact strength',
+        'Timer',
+      ]) {
+        expect(find.text(title), findsOneWidget, reason: '$title is missing');
+      }
+      // And none of them is arguing its case yet.
+      expect(find.textContaining('accessibility afterthought'), findsNothing);
+      expect(find.textContaining('A shoe has memory'), findsNothing);
+      expect(find.textContaining('nothing counts down'), findsNothing);
+
+      // Which is the point of the rewrite: the sheet used to run past the
+      // bottom of a phone with its prose alone, and the fifth setting would
+      // have had nowhere to go.
+      final double screen = tester.getSize(find.byType(PickerScreen)).height;
+      expect(
+        tester.getRect(find.text('Timer')).bottom,
+        lessThan(screen),
+        reason: 'the last setting is off the bottom of the screen again',
+      );
+    });
+
+    testWidgets('the arrow opens one, and shuts it again', (
+      WidgetTester tester,
+    ) async {
+      await openSettings(tester);
+
+      await tester.tap(find.text('Motion control'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('accessibility afterthought'), findsOneWidget);
+
+      await tester.tap(find.text('Motion control'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('accessibility afterthought'), findsNothing);
+    });
+
+    testWidgets('one at a time, because a short sheet is the whole point', (
+      WidgetTester tester,
+    ) async {
+      await openSettings(tester);
+
+      await tester.tap(find.text('Motion control'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Shake to deal a card'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('A shoe has memory'), findsOneWidget);
+      expect(
+        find.textContaining('accessibility afterthought'),
+        findsNothing,
+        reason: 'four open panels are the sheet that was there before',
+      );
+    });
+
+    testWidgets('the switch is the switch, and does not open anything', (
+      WidgetTester tester,
+    ) async {
+      await openSettings(tester);
+
+      await tester.tap(motionSwitch);
+      await tester.pumpAndSettle();
+
+      expect(settings.motion, isFalse, reason: 'the switch still switches');
+      expect(
+        find.textContaining('accessibility afterthought'),
+        findsNothing,
+        reason: 'the thing you came for must not open a paragraph',
+      );
+    });
+
+    testWidgets('what a setting costs stays on the screen either way', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.shakeToDraw;
+      addTearDown(() => settings.shakeToDraw = was);
+      await openSettings(tester);
+      settings.shakeToDraw = false;
+      await tester.pumpAndSettle();
+
+      // The one switch here whose downside is not obvious from its label. The
+      // argument for it can wait to be asked for; the price of it cannot.
+      expect(
+        find.textContaining('gone until the shoe is cut'),
+        findsOneWidget,
+        reason: 'the cost has to be in front of the thumb reaching for it',
+      );
+    });
+  });
+
+  group('the turn limit', () {
+    Future<void> openSettings(WidgetTester tester) async {
+      await pumpPicker(tester);
+      settings.timer = true;
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('is a slider under the timer, and starts at None', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.timer;
+      final int wasLimit = settings.limit;
+      addTearDown(() {
+        settings.timer = was;
+        settings.limit = wasLimit;
+      });
+      await openSettings(tester);
+      settings.limit = 0;
+      await tester.pumpAndSettle();
+
+      expect(find.text('Turn limit'), findsOneWidget);
+      // "None" rather than "Off", which is what the slider above it says.
+      expect(find.text('None'), findsOneWidget);
+
+      // Underneath the switch it depends on, and indented under it, on the
+      // same terms Shake to deal is under Motion control.
+      expect(
+        tester.getTopLeft(find.text('Turn limit')).dy,
+        greaterThan(tester.getTopLeft(find.text('Timer')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Turn limit')).dx,
+        greaterThan(tester.getTopLeft(find.text('Timer')).dx),
+      );
+    });
+
+    testWidgets('runs 30 seconds to 5 minutes and shows where it is', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.timer;
+      final int wasLimit = settings.limit;
+      addTearDown(() {
+        settings.timer = was;
+        settings.limit = wasLimit;
+      });
+      await openSettings(tester);
+      settings.limit = 0;
+      await tester.pumpAndSettle();
+
+      await tester.drag(limitSlider, const Offset(500, 0));
+      await tester.pumpAndSettle();
+      expect(settings.limit, 300);
+      expect(find.text('5:00'), findsOneWidget);
+
+      await tester.drag(limitSlider, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(settings.limit, 0, reason: 'all the way down is no limit');
+      expect(find.text('None'), findsOneWidget);
+    });
+
+    testWidgets('goes quiet when the timer itself is off', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.timer;
+      final int wasLimit = settings.limit;
+      addTearDown(() {
+        settings.timer = was;
+        settings.limit = wasLimit;
+      });
+      await pumpPicker(tester);
+      settings.timer = false;
+      settings.limit = 0;
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      // A limit whose whole job is to turn a clock red has nothing to turn.
+      await tester.drag(limitSlider, const Offset(500, 0), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(settings.limit, 0);
+    });
+
+    testWidgets('survives a relaunch, like every other setting', (
+      WidgetTester tester,
+    ) async {
+      final int was = settings.limit;
+      addTearDown(() => settings.limit = was);
+
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final Settings fresh = Settings();
+      expect(fresh.limit, 0);
+      await fresh.load();
+      expect(fresh.limit, 0, reason: 'a limit is asked for, never assumed');
+
+      settings.limit = 90;
+      await tester.pumpAndSettle();
+      final Settings relaunched = Settings();
+      await relaunched.load();
+      expect(relaunched.limit, 90);
+    });
+  });
+
   group('motion control', () {
     testWidgets('is a switch in the settings sheet, and is on to begin with', (
       WidgetTester tester,
@@ -320,6 +531,46 @@ void main() {
       await tester.tap(shakeSwitch);
       await tester.pumpAndSettle();
       expect(settings.shakeToDraw, isTrue);
+    });
+
+    testWidgets('carries the timer switch, last and on its own', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.timer;
+      addTearDown(() => settings.timer = was);
+      await pumpPicker(tester);
+      settings.timer = false;
+
+      await openMenu(tester);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Timer'), findsOneWidget);
+      expect(
+        tester.widget<Switch>(timerSwitch).value,
+        isFalse,
+        reason:
+            'a clock nobody asked for is a second thing moving on the '
+            'screen while you are reading a number off the first',
+      );
+
+      // Last, and level with the two above it rather than indented under
+      // either. It narrows nothing: the three above are about what the phone
+      // does with a hand, and this is only about what is drawn.
+      expect(
+        tester.getTopLeft(find.text('Timer')).dy,
+        greaterThan(tester.getTopLeft(find.text('Impact strength')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Timer')).dx,
+        closeTo(tester.getTopLeft(find.text('Motion control')).dx, 0.01),
+      );
+
+      await tester.tap(timerSwitch);
+      await tester.pumpAndSettle();
+      expect(settings.timer, isTrue);
+      // And it says what it is for, either way round.
+      expect(find.textContaining('counting up'), findsOneWidget);
     });
 
     testWidgets('and that switch goes quiet when motion itself is off', (
@@ -448,6 +699,27 @@ void main() {
       final Settings relaunched = Settings();
       await relaunched.load();
       expect(relaunched.shakeToDraw, isTrue, reason: 'asked for, and kept');
+    });
+
+    testWidgets('the timer is off until somebody asks for it, then kept', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.timer;
+      addTearDown(() => settings.timer = was);
+
+      // Nothing written for the key, on a fresh phone and on one that had the
+      // app before there was a clock to ask about. Both answers are no.
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final Settings fresh = Settings();
+      expect(fresh.timer, isFalse);
+      await fresh.load();
+      expect(fresh.timer, isFalse);
+
+      settings.timer = true;
+      await tester.pumpAndSettle();
+      final Settings relaunched = Settings();
+      await relaunched.load();
+      expect(relaunched.timer, isTrue, reason: 'asked for, and kept');
     });
 
     testWidgets('a stored value from another build is clamped, not trusted', (

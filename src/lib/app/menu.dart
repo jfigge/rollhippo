@@ -57,6 +57,12 @@ const List<double> _kMenuBarRows = <double>[7 / 24, 12 / 24, 17 / 24];
 const double kAppMenuInset =
     (_kMenuTarget - _kMenuIcon) / 2 + _kMenuIcon * _kMenuBarInset;
 
+/// The two sliders on this sheet, so a test can drag the one it means. Neither
+/// has a label a finder could reach it by, and "the slider in the sheet"
+/// stopped being one thing the moment there were two.
+const Key kGainSlider = ValueKey<String>('gain-slider');
+const Key kLimitSlider = ValueKey<String>('limit-slider');
+
 /// The menu button itself, so the tutorial can point at it. The one thing on
 /// the picker that is about the app rather than about the dice, and the only
 /// way to Settings — which makes it worth a page of its own.
@@ -215,25 +221,77 @@ class _MenuBarsPainter extends CustomPainter {
   bool shouldRepaint(_MenuBarsPainter oldDelegate) => false;
 }
 
-/// The settings panel: what the phone does, in three switches and a slider.
+/// How long a disclosure takes to open, and how long the arrow takes to turn.
 ///
-/// The first two are a pair rather than two entries in a list. Motion control
-/// is the larger — whether the phone's own movement plays at all — and Shake
-/// to deal is drawn underneath and inside it, because it only means anything
-/// while the first is on and because it is the one control here that is off
-/// until asked for. See [Settings.shakeToDraw].
-Future<void> showSettingsSheet(
-  BuildContext context,
-) => showModalBottomSheet<void>(
-  context: context,
-  backgroundColor: Colors.transparent,
-  barrierColor: const Color(0xB3000000),
-  constraints: const BoxConstraints(maxWidth: kSheetWidth),
-  // Otherwise a sheet is capped at nine sixteenths of the screen, and the
-  // paragraph explaining what the slider does is the part that goes missing.
-  isScrollControlled: true,
-  builder: (BuildContext context) => const _SettingsSheet(),
+/// Short. This is a panel opening under a thumb that is still on it, not a
+/// transition between screens — anything slower reads as the sheet thinking
+/// about it.
+const Duration _kExpand = Duration(milliseconds: 180);
+
+/// The three voices on this sheet: what a setting is called, what it does, and
+/// why it is the way it is.
+///
+/// The summary is a shade brighter than the argument under it, because it is
+/// the line that is always on the screen and the argument is the one you asked
+/// for.
+const TextStyle _kSettingTitle = TextStyle(
+  color: Color(0xFFE8EEF6),
+  fontSize: 15,
+  fontWeight: FontWeight.w600,
 );
+const TextStyle _kSettingSummary = TextStyle(
+  color: Color(0xBBBFD0E4),
+  fontSize: 13,
+  height: 1.45,
+);
+const TextStyle _kSettingDetail = TextStyle(
+  color: Color(0x99BFD0E4),
+  fontSize: 13,
+  height: 1.45,
+);
+
+/// Which explanation is open. See [_SettingsSheetState._open].
+enum _Panel { motion, shake, impact, timer, limit }
+
+/// The settings panel: three switches and two sliders, each one sentence tall
+/// until you ask it for more.
+///
+/// Every entry is a title, its control, and one line saying what it does now.
+/// The argument for it — which on this sheet runs to a paragraph, because the
+/// arguments are real and two of them are the reason the setting exists — is
+/// behind the arrow beside the control. That is the whole of how four settings
+/// fit on a phone where the prose alone used to be eight hundred points tall,
+/// and it is what leaves room for the fifth.
+///
+/// **What stays visible is the consequence, and that is not an accident.**
+/// Shake to deal is the switch whose downside is not obvious from its label,
+/// and "a dealt card is gone until the shoe is cut" has to be on the screen of
+/// somebody reaching for it rather than one tap further in. The paragraph
+/// underneath argues *why* a shake on the cards is a different act from a
+/// shake on the tray, and that can wait to be asked for. Anything moved behind
+/// the arrow has to pass that test: reasoning, never a cost.
+///
+/// One panel is open at a time. The point of the sheet is that it is short,
+/// and four open panels are the sheet that was there before.
+///
+/// Two of the five are pairs rather than entries in a list, and they are drawn
+/// the same way for the same reason: indented under the switch they depend on,
+/// faded and deaf while it is off. Shake to deal is nothing without Motion
+/// control, because a still phone is never shaken; Turn limit is nothing
+/// without Timer, because what it does when it runs out is turn a clock red.
+/// See [Settings.shakeToDraw] and [Settings.limit].
+Future<void> showSettingsSheet(BuildContext context) =>
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: const Color(0xB3000000),
+      constraints: const BoxConstraints(maxWidth: kSheetWidth),
+      // Otherwise a sheet is capped at nine sixteenths of the screen. It is far
+      // shorter than it was, but an open panel on a small phone can still reach
+      // past that, and this is also what lets it grow as one opens.
+      isScrollControlled: true,
+      builder: (BuildContext context) => const _SettingsSheet(),
+    );
 
 class _SettingsSheet extends StatefulWidget {
   const _SettingsSheet();
@@ -252,6 +310,20 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     gain: settings.hapticGain,
   );
 
+  /// Which argument is on the screen, or null for none — which is where the
+  /// sheet opens every time. Nothing is remembered between openings: the
+  /// question a panel answers is one you have either already read or are about
+  /// to ask again, and a sheet that reopened three lines taller than it closed
+  /// would have given back the space it was rewritten for.
+  _Panel? _open;
+
+  void _toggle(_Panel panel) {
+    // A press the screen answers is the lighter of the two taps — see
+    // [uiHaptic], where the pair is argued.
+    uiHaptic(HapticLevel.light);
+    setState(() => _open = _open == panel ? null : panel);
+  }
+
   void _setGain(double value) {
     settings.hapticGain = value;
     _engine.gain = settings.hapticGain;
@@ -262,6 +334,20 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     _engine.demo();
   }
 
+  /// One switch, in the sheet's colours. Three of these differing only in what
+  /// they are wired to is three chances for one of them to be a different blue.
+  Widget _switch({
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) => Switch(
+    value: value,
+    activeThumbColor: const Color(0xFF6E9AD0),
+    activeTrackColor: const Color(0xFF3F6FA8),
+    inactiveThumbColor: const Color(0xAABFD0E4),
+    inactiveTrackColor: const Color(0x14FFFFFF),
+    onChanged: onChanged,
+  );
+
   @override
   Widget build(BuildContext context) {
     return _Sheet(
@@ -270,49 +356,47 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         listenable: settings,
         builder: (BuildContext context, _) {
           final double gain = settings.hapticGain;
+          final int limit = settings.limit;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               // First, because it is the larger of the two: one of these
               // settings is how hard the app taps back, and the other is
               // whether the phone's own movement plays at all.
-              Row(
-                children: <Widget>[
-                  const Expanded(
-                    child: Text(
-                      'Motion control',
-                      style: TextStyle(
-                        color: Color(0xFFE8EEF6),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Switch(
-                    value: settings.motion,
-                    activeThumbColor: const Color(0xFF6E9AD0),
-                    activeTrackColor: const Color(0xFF3F6FA8),
-                    inactiveThumbColor: const Color(0xAABFD0E4),
-                    inactiveTrackColor: const Color(0x14FFFFFF),
-                    onChanged: (bool on) => settings.motion = on,
-                  ),
-                ],
-              ),
-              Text(
-                settings.motion
-                    ? 'Tilt to pour the dice down the screen, shake to throw '
-                        'them. Turn this off and the tray is handed a phone '
-                        'held perfectly still: down is down the screen and '
-                        'stays there, and Throw is the only way to roll.'
-                    : 'Off. The tray ignores the phone: down is down the '
-                        'screen and stays there, and a shake does nothing. '
-                        'Throw is the only way to roll, and it works exactly '
-                        'as it always did.',
-                style: const TextStyle(
-                  color: Color(0x99BFD0E4),
-                  fontSize: 13,
-                  height: 1.45,
+              _Setting(
+                title: 'Motion control',
+                expanded: _open == _Panel.motion,
+                onTap: () => _toggle(_Panel.motion),
+                control: _switch(
+                  value: settings.motion,
+                  onChanged: (bool on) => settings.motion = on,
                 ),
+                summary:
+                    settings.motion
+                        ? 'Tilt to pour the dice down the screen, shake to '
+                            'throw them.'
+                        : 'Off. Down is down the screen and stays there, and a '
+                            'shake does nothing.',
+                detail:
+                    settings.motion
+                        ? 'Turn it off and the tray is handed a phone held '
+                            'perfectly still: down is down the screen whatever '
+                            'the real one is doing, and Throw — or Draw, on '
+                            'the cards — is the whole of the interface.\n\n'
+                            'It is a real setting rather than an accessibility '
+                            'afterthought. A phone on a table, a hand that '
+                            'cannot shake one, a game being played on a train '
+                            '— all of them want the dice and none of them '
+                            'wants the accelerometer.'
+                        : 'The tray is being handed a phone held perfectly '
+                            'still. Throw — or Draw, on the cards — is the '
+                            'whole of the interface, and it works exactly as '
+                            'it always did.\n\n'
+                            'It is a real setting rather than an accessibility '
+                            'afterthought. A phone on a table, a hand that '
+                            'cannot shake one, a game being played on a train '
+                            '— all of them want the dice and none of them '
+                            'wants the accelerometer.',
               ),
               // Underneath the switch it depends on, and indented under it,
               // because it is a narrowing of that setting rather than a
@@ -327,120 +411,317 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   opacity: settings.motion ? 1 : 0.38,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            const Expanded(
-                              child: Text(
-                                'Shake to deal a card',
-                                style: TextStyle(
-                                  color: Color(0xFFE8EEF6),
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Switch(
-                              value: settings.shakeToDraw,
-                              activeThumbColor: const Color(0xFF6E9AD0),
-                              activeTrackColor: const Color(0xFF3F6FA8),
-                              inactiveThumbColor: const Color(0xAABFD0E4),
-                              inactiveTrackColor: const Color(0x14FFFFFF),
-                              onChanged: (bool on) => settings.shakeToDraw = on,
-                            ),
-                          ],
-                        ),
-                        const Text(
-                          // What it costs, said plainly, because this is the
-                          // one switch in the app whose downside is not
-                          // obvious from the label. Everything else here is
-                          // undone by doing it again.
-                          'Off, and worth leaving off. A shake throws the '
-                          'dice, and a throw you did not mean is undone by '
-                          'throwing again — but a dealt card is gone until '
-                          'the shoe is cut, and a phone handed across a table '
-                          'is a shake. Draw turns the next card over either '
-                          'way.',
-                          style: TextStyle(
-                            color: Color(0x99BFD0E4),
-                            fontSize: 13,
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
+                    child: _Setting(
+                      title: 'Shake to deal a card',
+                      expanded: _open == _Panel.shake,
+                      onTap: () => _toggle(_Panel.shake),
+                      control: _switch(
+                        value: settings.shakeToDraw,
+                        onChanged: (bool on) => settings.shakeToDraw = on,
+                      ),
+                      // What it costs, said plainly and said out here, because
+                      // this is the one switch in the app whose downside is
+                      // not obvious from the label. Everything else on this
+                      // sheet is undone by doing it again.
+                      summary:
+                          settings.shakeToDraw
+                              ? 'On. A shake takes the next card off the shoe, '
+                                  'and there is no dealing it back.'
+                              : 'Off, and worth leaving off. A dealt card is '
+                                  'gone until the shoe is cut, and a phone '
+                                  'handed across a table is a shake.',
+                      detail:
+                          'A shake on the tray and a shake on the card table '
+                          'are not the same act. Shaking dice is the '
+                          'simulation — the box moved, so the dice tumbled — '
+                          'and a throw you did not mean is undone by throwing '
+                          'again.\n\n'
+                          'A shoe has memory, and that is the whole reason to '
+                          'play with one. What has been dealt is off the shoe '
+                          'until the cut comes round, so what is left to come '
+                          'has genuinely changed. Draw turns the next card '
+                          'over either way.',
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 18),
-              Row(
-                children: <Widget>[
-                  const Expanded(
-                    child: Text(
-                      'Impact strength',
-                      style: TextStyle(
-                        color: Color(0xFFE8EEF6),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+              _Setting(
+                title: 'Impact strength',
+                expanded: _open == _Panel.impact,
+                onTap: () => _toggle(_Panel.impact),
+                // The figure rather than a switch: this is the one setting
+                // here that is a quantity, and the number is what says where
+                // the slider under it has got to.
+                control: Text(
+                  gain <= 0 ? 'Off' : '${(gain * 100).round()}%',
+                  style: const TextStyle(
+                    color: Color(0xAABFD0E4),
+                    fontSize: 14,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+                ),
+                under: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: const Color(0xFF3F6FA8),
+                    inactiveTrackColor: const Color(0x1AFFFFFF),
+                    thumbColor: const Color(0xFF6E9AD0),
+                    overlayColor: const Color(0x223F6FA8),
+                    valueIndicatorColor: const Color(0xFF3F6FA8),
+                    trackHeight: 4,
+                  ),
+                  child: Slider(
+                    key: kGainSlider,
+                    value: gain.clamp(0.0, _kMaxGain),
+                    max: _kMaxGain,
+                    divisions: _kGainSteps,
+                    onChanged: _setGain,
+                  ),
+                ),
+                summary:
+                    gain <= 0
+                        ? 'Off, and off for the whole app — the tray, the '
+                            'menus and the profiles.'
+                        : 'How hard the tray taps back when a die hits the '
+                            'side. Drag the slider to feel it.',
+                detail:
+                    'The tap follows the impact, so a D20 slamming into a wall '
+                    'is felt and a die nudging its neighbour is not — this '
+                    'only sets how much of that reaches your hand.\n\n'
+                    'The interface taps too, at a fixed strength rather than '
+                    'at whatever this slider says: a light one for a menu '
+                    'entry or a profile you have pressed, and a firmer one as '
+                    'a menu opens under your thumb, that being the only sign a '
+                    'press was long enough. All the way down silences those as '
+                    'well as the tray.',
+                aside:
+                    onDevice
+                        ? null
+                        : 'Nothing to feel here — this is the desktop harness, '
+                            'and it has no actuator to tap with.',
+              ),
+              const SizedBox(height: 18),
+              // Last. The three above are about what the phone does with a
+              // hand — how it is moved, and how it answers back — where this
+              // one only decides whether one more thing is drawn.
+              _Setting(
+                title: 'Timer',
+                expanded: _open == _Panel.timer,
+                onTap: () => _toggle(_Panel.timer),
+                control: _switch(
+                  value: settings.timer,
+                  onChanged: (bool on) => settings.timer = on,
+                ),
+                summary:
+                    settings.timer
+                        ? 'A clock between Close and Throw, counting up from '
+                            'the last roll.'
+                        : 'No clock. Turn it on for one between Close and '
+                            'Throw, counting up from the last roll.',
+                detail:
+                    'On the card table it counts from the last card instead. '
+                    'Each set of dice keeps its own, so swiping to another '
+                    'says how long ago that one was thrown — and a set nobody '
+                    'has thrown yet shows nothing at all, because 0:00 would '
+                    'be a lie about it.\n\n'
+                    'It measures and does nothing else — until you give it a '
+                    'limit, and even then all that runs out is the colour.',
+              ),
+              // Under the clock it colours, and indented under it, on exactly
+              // the terms Shake to deal is under Motion control: a limit with
+              // no clock to turn red is a setting that would do nothing and
+              // say nothing about having done it.
+              const SizedBox(height: 16),
+              IgnorePointer(
+                ignoring: !settings.timer,
+                child: Opacity(
+                  opacity: settings.timer ? 1 : 0.38,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: _Setting(
+                      title: 'Turn limit',
+                      expanded: _open == _Panel.limit,
+                      onTap: () => _toggle(_Panel.limit),
+                      control: Text(
+                        // "None" rather than "Off", which is what the switches
+                        // say and what the slider above says. A duration that
+                        // has not been set is not a thing that has been turned
+                        // off, and the two words sitting one above the other
+                        // saying the same one would read as a repeat.
+                        limit <= 0 ? 'None' : formatElapsed(limit),
+                        style: const TextStyle(
+                          color: Color(0xAABFD0E4),
+                          fontSize: 14,
+                          fontFeatures: <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
                       ),
+                      under: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: const Color(0xFF3F6FA8),
+                          inactiveTrackColor: const Color(0x1AFFFFFF),
+                          thumbColor: const Color(0xFF6E9AD0),
+                          overlayColor: const Color(0x223F6FA8),
+                          trackHeight: 4,
+                        ),
+                        child: Slider(
+                          key: kLimitSlider,
+                          value: stepForLimit(limit).toDouble(),
+                          max: kLimitSteps.toDouble(),
+                          divisions: kLimitSteps,
+                          onChanged:
+                              (double step) =>
+                                  settings.limit = limitForStep(step.round()),
+                        ),
+                      ),
+                      summary:
+                          limit <= 0
+                              ? 'No limit. Set one and the clock turns red '
+                                  'when a turn runs past it.'
+                              : 'At ${formatElapsed(limit)} the screen flashes '
+                                  'three times, the phone taps with it, and '
+                                  'the clock turns red.',
+                      detail:
+                          'Thirty seconds to five minutes, in quarter-minutes '
+                          '— a turn limit is a thing people agree on out loud, '
+                          'and it is never 47 seconds.\n\n'
+                          'Nothing is prevented and nothing is scored. The '
+                          'clock goes on counting up past the limit rather '
+                          'than down towards it, because how far over a turn '
+                          'has run is the useful number and it is still your '
+                          'table\'s business what that costs. The next roll '
+                          'puts it back to 0:00 and the colour with it.',
+                      aside:
+                          onDevice
+                              ? null
+                              : 'The flash is here on the harness; the taps '
+                                  'need a phone.',
                     ),
                   ),
-                  Text(
-                    gain <= 0 ? 'Off' : '${(gain * 100).round()}%',
-                    style: const TextStyle(
-                      color: Color(0xAABFD0E4),
-                      fontSize: 14,
-                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: const Color(0xFF3F6FA8),
-                  inactiveTrackColor: const Color(0x1AFFFFFF),
-                  thumbColor: const Color(0xFF6E9AD0),
-                  overlayColor: const Color(0x223F6FA8),
-                  valueIndicatorColor: const Color(0xFF3F6FA8),
-                  trackHeight: 4,
-                ),
-                child: Slider(
-                  value: gain.clamp(0.0, _kMaxGain),
-                  max: _kMaxGain,
-                  divisions: _kGainSteps,
-                  onChanged: _setGain,
                 ),
               ),
-              const Text(
-                'How hard the tray taps back when a die hits the side. The tap '
-                'follows the impact, so a D20 slamming into a wall is felt and '
-                'a die nudging its neighbour is not — this only sets how much '
-                'of that reaches your hand. Drag the slider to feel it. Off is '
-                'off for the whole app, menus and profiles included.',
-                style: TextStyle(
-                  color: Color(0x99BFD0E4),
-                  fontSize: 13,
-                  height: 1.45,
-                ),
-              ),
-              if (!onDevice) ...<Widget>[
-                const SizedBox(height: 10),
-                const Text(
-                  'Nothing to feel here — this is the desktop harness, and it '
-                  'has no actuator to tap with.',
-                  style: TextStyle(
-                    color: Color(0x66BFD0E4),
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
             ],
           );
         },
       ),
+    );
+  }
+}
+
+/// One setting: what it is called, its control, what it does now, and — behind
+/// the arrow — why.
+///
+/// The header row and the summary are both the tap that opens it, which is a
+/// deliberately large target for a gesture nobody is obliged to make. The
+/// control is not: a [Switch] and a [Slider] take their own presses, so the
+/// thing you came for is never the thing that opens a paragraph.
+class _Setting extends StatelessWidget {
+  const _Setting({
+    required this.title,
+    required this.summary,
+    required this.detail,
+    required this.expanded,
+    required this.onTap,
+    required this.control,
+    this.under,
+    this.aside,
+  });
+
+  final String title;
+
+  /// The line that is always there. What the setting is doing *now* and what
+  /// that costs — never the argument for it, which is what [detail] is.
+  final String summary;
+
+  /// The argument, in paragraphs separated by a blank line. On the screen only
+  /// while [expanded].
+  final String detail;
+
+  final bool expanded;
+  final VoidCallback onTap;
+
+  /// The switch, or the figure a slider is showing. On the title's own line.
+  final Widget control;
+
+  /// Anything that has to stay visible under the header whether or not the
+  /// panel is open — which today is the one slider.
+  final Widget? under;
+
+  /// A footnote to [detail], drawn in italic. The harness has one; nothing
+  /// else does yet.
+  final String? aside;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget? under = this.under;
+    final String? aside = this.aside;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Row(
+            children: <Widget>[
+              Expanded(child: Text(title, style: _kSettingTitle)),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0,
+                duration: _kExpand,
+                curve: Curves.easeOut,
+                child: const Icon(
+                  Icons.expand_more,
+                  size: 20,
+                  color: Color(0x66BFD0E4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              control,
+            ],
+          ),
+        ),
+        if (under != null) under,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Text(summary, style: _kSettingSummary),
+        ),
+        // Sized rather than faded: the sheet has to grow and shrink around
+        // this, and a paragraph that was always laid out and merely invisible
+        // would have saved nothing at all. The empty box keeps the full width
+        // so the animation is in one dimension only.
+        AnimatedSize(
+          duration: _kExpand,
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: double.infinity,
+            child:
+                !expanded
+                    ? const SizedBox.shrink()
+                    : Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(detail, style: _kSettingDetail),
+                          if (aside != null) ...<Widget>[
+                            const SizedBox(height: 10),
+                            Text(
+                              aside,
+                              style: const TextStyle(
+                                color: Color(0x66BFD0E4),
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+          ),
+        ),
+      ],
     );
   }
 }

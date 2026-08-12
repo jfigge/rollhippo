@@ -91,12 +91,14 @@ src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter 
                    hippo (the animal twice over: in lumps for the die, and in one line
                    for the back of a card — neither of them a body)
 src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · PageDots
-                   chrome (letterbox · TrayButton · AppDialog — what every screen shares)
+                   chrome (letterbox · TrayButton · AppDialog · ElapsedTimer · TimeUpAlert
+                   — what every screen shares)
                    slide_confirm (the drag a question gets when a button is what went wrong)
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
                    tutorial (the first run: pages you swipe, over the screen each is about) ·
                    haptics (HapticEngine + HapticDriver, for the tray · uiHaptic, for
-                   the interface) · settings (haptic gain · motion · shake to deal · tutorial)
+                   the interface) · settings (haptic gain · motion · shake to deal · timer ·
+                   turn limit · tutorial)
                    profiles (SavedProfile · ProfileStore — the saves, stored)
                    profile_row (the row of them, and the naming and delete dialogs)
 src/assets/        rollhippo.svg — the mark, as drawn. Not a Flutter asset: nothing loads it at
@@ -425,6 +427,54 @@ test exists to make the change deliberate, not to make it hard.
   for: the back is drawn only through the first quarter of a card's turn,
   which is exactly the part where a real card's back is still the right way
   up.
+
+- **The settings sheet is one sentence per setting, and the arguments are
+  behind an arrow.** Five settings' worth of the prose this app writes is
+  taller than a phone, which is what `_Setting` in `menu.dart` exists to fix:
+  a title, its control, a summary that is always there, and a `detail` that is
+  only in the tree while that panel is open. `_open` holds one panel at a
+  time, because four open panels are the sheet that was there before. **What
+  goes behind the arrow is reasoning, never a cost** — "a dealt card is gone
+  until the shoe is cut" is in the summary, where the thumb reaching for the
+  switch will meet it, and the argument about why a shake on the cards differs
+  from a shake on the tray is the part that waits to be asked for. Two of the
+  five are nested under the switch they depend on, faded and deaf when it is
+  off: Shake to deal under Motion control, Turn limit under Timer.
+
+- **The clock counts rolls, not button presses.** `Settings.timer` is off by
+  default and draws `ElapsedTimer` between Close and Throw — or Close and
+  Draw — on both screens. Unlike `motion` it is read where it is drawn rather
+  than pushed into a source, because it changes nothing but whether one widget
+  is built. Two things about it are not obvious. It is **per box**: each
+  `_Box` carries its own `sinceThrow`, which advances on every frame including
+  the frozen ones and the off-screen ones, because how long ago a group was
+  thrown is a fact about the room rather than about a simulation that is
+  deliberately not running. And **a shake resets it without going through
+  `throwDice`** — a shake on a group that has already been thrown only wakes
+  the world and lets the accelerometer scatter the dice, so `_onTick` zeroes
+  the clock on `isShake` itself; leave that out and a tray shaken into a fresh
+  result goes on reporting how long ago somebody last tapped. An unthrown
+  group draws nothing at all, because `0:00` would be a lie about a throw
+  nobody has made, and on the cards a reshuffle puts the clock away for the
+  same reason: the glass is bare, so there is nothing to be counting since.
+
+- **A turn running out is said twice, and neither one is a sound.**
+  `Settings.limit` is seconds, zero for none, on nineteen notches from 30 s to
+  5:00 (`limitForStep`/`stepForLimit`, which also round anything the
+  preferences file hands back). Past it, `ElapsedTimer` draws in `kTimeUpInk`
+  and `TimeUpAlert` washes the screen three times *and* fires three
+  `HapticLevel.heavy` taps off the same `AnimationController` — a phone on the
+  table is seen and not felt, one in a hand is felt before it is looked at, and
+  the taps come off the controller rather than a `Timer` so they cannot drift
+  out of step with the light. **There is deliberately no beep**: this app has
+  no audio at all, and adding one means a new dependency, a sound asset, and a
+  decision about silent mode. The trigger is a counter and not a flag, so two
+  turns running out in a row are two alerts. `_Box.alerted` is per box and set
+  for every box, but only the box **on screen** fires the alert — a group that
+  ran out while you were elsewhere is already red when you swipe back, and
+  three taps about a tray nobody can see is the phone shouting into a pocket.
+  Both screens read the limit through `settings.timer`, so a limit with the
+  clock switched off does nothing at all.
 
 - **A held die keeps the face *index* it was read at**, in `DiceTray.held`.
   Reading one live is reading it against a gravity that has nothing to do with

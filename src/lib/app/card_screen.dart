@@ -73,6 +73,27 @@ class _CardScreenState extends State<CardScreen>
   /// Counts up from the last card dealt. See [_kDrawCooldown].
   double _since = _kDrawCooldown;
 
+  /// Seconds since a card was last put on the glass, or null while there is
+  /// none there.
+  ///
+  /// Not [_since], which starts a cooldown's worth ahead so that the first
+  /// card is dealt on the first shake rather than a second later — this one
+  /// has to be able to say that nothing has been dealt at all, and a bare
+  /// glass is exactly what a reshuffle leaves behind as well as what a table
+  /// opens on.
+  double? _sinceDeal;
+
+  /// The same in whole seconds, for the clock along the top. See
+  /// [ElapsedTimer], which is where the reason it is whole is written down.
+  final ValueNotifier<int?> _clock = ValueNotifier<int?>(null);
+
+  /// Bumped when the turn runs out. See [TimeUpAlert].
+  final ValueNotifier<int> _alert = ValueNotifier<int>(0);
+
+  /// Whether this card has already run its turn out, so the alert fires once
+  /// and not on every frame past the limit.
+  bool _alerted = false;
+
   final FocusNode _focus = FocusNode();
 
   /// Ticked on every frame a card is in the air, and on no other. Nothing on
@@ -99,6 +120,8 @@ class _CardScreenState extends State<CardScreen>
   void dispose() {
     _focus.dispose();
     _frame.dispose();
+    _clock.dispose();
+    _alert.dispose();
     _ticker.dispose();
     _motion.dispose();
     super.dispose();
@@ -115,6 +138,22 @@ class _CardScreenState extends State<CardScreen>
     if (dt <= 0) return;
     dt = math.min(dt, 1 / 30);
     _since += dt;
+
+    // The clock, which runs on real seconds and on nothing else — there is no
+    // simulation here for it to be part of. Null until a card is on the glass,
+    // and back to null when a reshuffle sweeps it off, because with nothing
+    // dealt there is nothing for it to be counting since.
+    final double? dealt = _sinceDeal;
+    if (dealt != null) {
+      final double now = dealt + dt;
+      _sinceDeal = now;
+      _clock.value = now.floor();
+      final int limit = settings.timer ? settings.limit : 0;
+      if (limit > 0 && !_alerted && now >= limit) {
+        _alerted = true;
+        _alert.value++;
+      }
+    }
 
     // The whole of what the sensors are for here. Sampled every frame whether
     // or not it is wanted, because the source averages over the interval since
@@ -177,6 +216,14 @@ class _CardScreenState extends State<CardScreen>
     final bool was = table.deck.dealt;
     _since = 0;
     table.draw();
+    // A reshuffle is a draw that deals no card: the pile goes back together
+    // and the glass is left bare. So the clock is not restarted, it is put
+    // away — see [Deck.draw], which is where that being a state worth seeing
+    // is argued.
+    final bool onGlass = table.deck.shown != null;
+    _sinceDeal = onGlass ? 0 : null;
+    _clock.value = onGlass ? 0 : null;
+    _alerted = false;
     _frame.value++;
     // The one thing on this screen a card can change above the painter: a
     // played shoe is a shoe you are asked about before it is closed, and
@@ -280,6 +327,19 @@ class _CardScreenState extends State<CardScreen>
                                   label: 'Close',
                                   onTap: () => unawaited(_close()),
                                 ),
+                                // Between them, and only if it was asked for.
+                                // Read at build rather than obeyed further
+                                // down: the setting is behind the picker, two
+                                // screens away, and cannot change while a
+                                // table is open. Left out entirely when it is
+                                // off, which lays the row out exactly as the
+                                // two buttons on their own always were.
+                                if (settings.timer)
+                                  ElapsedTimer(
+                                    key: kElapsedTimer,
+                                    seconds: _clock,
+                                    limit: settings.limit,
+                                  ),
                                 // Draw, not Throw: there is nothing in the box
                                 // that could be thrown.
                                 TrayButton(
@@ -292,6 +352,9 @@ class _CardScreenState extends State<CardScreen>
                           ),
                         ),
                       ),
+                      // Last, so the flash is over the buttons as well as the
+                      // card.
+                      TimeUpAlert(trigger: _alert),
                     ],
                   ),
                 );
