@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../render/card_painter.dart';
 import '../tray/tray.dart';
 import 'chrome.dart';
 import 'settings.dart';
+import 'slide_confirm.dart';
 
 /// How long after a card is dealt before a shake can deal another.
 ///
@@ -172,9 +174,48 @@ class _CardScreenState extends State<CardScreen>
   void _draw() {
     final CardTable? table = _table;
     if (table == null) return;
+    final bool was = table.deck.dealt;
     _since = 0;
     table.draw();
     _frame.value++;
+    // The one thing on this screen a card can change above the painter: a
+    // played shoe is a shoe you are asked about before it is closed, and
+    // [PopScope.canPop] is read at build time rather than at the moment of
+    // the gesture. So the first card of a shoe — and the reshuffle that ends
+    // one — costs a rebuild, and every card in between costs nothing.
+    if (table.deck.dealt != was) setState(() {});
+  }
+
+  /// Whether closing now would throw anything away. See [Deck.dealt].
+  bool get _dealt => _table?.deck.dealt ?? false;
+
+  /// Leaves the table, asking first if there is a shoe to lose.
+  ///
+  /// The question is a slide rather than a button, because what it is guarding
+  /// against is not a decision but a stray thumb: Close sits an inch from
+  /// Draw, and the two get pressed by the same hand doing the same thing. A
+  /// second button under the first is a second thing to hit by accident; a
+  /// drag from one side of the dialog to the other is not.
+  /// A second tap on Close while the question is up needs no guard here, and
+  /// there is deliberately not one: the dialog is modal, so the tap that would
+  /// have asked twice lands on its barrier instead and takes the question away
+  /// again. Which leaves the table open, which is the safe end of the mistake
+  /// — see the double tap in `cards_test.dart`.
+  Future<void> _close() async {
+    final NavigatorState navigator = Navigator.of(context);
+    if (!_dealt) {
+      navigator.pop();
+      return;
+    }
+    final bool go = await showSlideConfirmDialog(
+      context,
+      title: 'Close the cards?',
+      message:
+          'The shoe goes back in the box. What has been dealt will be '
+          'forgotten, and the next table starts from a full shuffle.',
+      slide: 'Slide to close',
+    );
+    if (go && mounted) navigator.pop();
   }
 
   void _handleKey(KeyEvent event) {
@@ -191,58 +232,71 @@ class _CardScreenState extends State<CardScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0E13),
-      body: KeyboardListener(
-        focusNode: _focus,
-        autofocus: true,
-        onKeyEvent: _handleKey,
-        child: letterbox(
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              _ensureTable(constraints.biggest);
-              final CardTable table = _table!;
+    // The back gesture is the other way out of here, and it is the *easier*
+    // one to make by accident — a thumb on the left edge of a phone being
+    // handed across a table. So it goes through the same question, and
+    // `canPop` is what decides whether there is one to ask: false once the
+    // shoe has been played, which hands the pop to [_close] instead. Before
+    // that it is true, deliberately, because a screen that intercepts every
+    // pop is a screen whose swipe-back stops animating for no reason.
+    return PopScope<Object?>(
+      canPop: !_dealt,
+      onPopInvokedWithResult: (bool popped, Object? result) {
+        if (!popped) unawaited(_close());
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0B0E13),
+        body: KeyboardListener(
+          focusNode: _focus,
+          autofocus: true,
+          onKeyEvent: _handleKey,
+          child: letterbox(
+            LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                _ensureTable(constraints.biggest);
+                final CardTable table = _table!;
 
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    CustomPaint(
-                      painter: CardPainter(table: table, repaint: _frame),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      child: SafeArea(
-                        bottom: false,
-                        minimum: const EdgeInsets.only(top: 44),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: <Widget>[
-                              TrayButton(
-                                label: 'Close',
-                                onTap: () => Navigator.of(context).pop(),
-                              ),
-                              // Draw, not Throw: there is nothing in the box
-                              // that could be thrown.
-                              TrayButton(
-                                label: 'Draw',
-                                onTap: _draw,
-                                emphasis: true,
-                              ),
-                            ],
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      CustomPaint(
+                        painter: CardPainter(table: table, repaint: _frame),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        child: SafeArea(
+                          bottom: false,
+                          minimum: const EdgeInsets.only(top: 44),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: <Widget>[
+                                TrayButton(
+                                  label: 'Close',
+                                  onTap: () => unawaited(_close()),
+                                ),
+                                // Draw, not Throw: there is nothing in the box
+                                // that could be thrown.
+                                TrayButton(
+                                  label: 'Draw',
+                                  onTap: _draw,
+                                  emphasis: true,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),

@@ -3,6 +3,7 @@ import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
 
+import 'chrome.dart';
 import 'haptics.dart';
 import 'profiles.dart';
 
@@ -622,7 +623,7 @@ class _NameDialogState extends State<_NameDialog> {
   @override
   Widget build(BuildContext context) {
     final bool renaming = widget.name != null;
-    return _Dialog(
+    return AppDialog(
       title: renaming ? 'Rename profile' : 'New profile',
       children: <Widget>[
         TextField(
@@ -670,7 +671,7 @@ Future<bool> showDeleteProfileDialog(BuildContext context, String name) async {
     context: context,
     barrierColor: const Color(0xB3000000),
     builder:
-        (BuildContext context) => _Dialog(
+        (BuildContext context) => AppDialog(
           title: 'Delete "$name"?',
           children: <Widget>[
             const Text(
@@ -722,7 +723,7 @@ Future<ScannedChoice> showScannedProfileDialog(
     context: context,
     barrierColor: const Color(0xB3000000),
     builder:
-        (BuildContext context) => _Dialog(
+        (BuildContext context) => AppDialog(
           title: replaces ? 'Replace "$name"?' : 'Save "$name"?',
           children: <Widget>[
             Text(
@@ -750,51 +751,6 @@ Future<ScannedChoice> showScannedProfileDialog(
         ),
   );
   return choice ?? ScannedChoice.cancel;
-}
-
-/// The card both dialogs are drawn on.
-class _Dialog extends StatelessWidget {
-  const _Dialog({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF141A23),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Color(0x14FFFFFF)),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFFE8EEF6),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 18),
-              ...children,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Cancel, and the one that does the thing.

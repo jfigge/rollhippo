@@ -10,6 +10,7 @@ import 'package:rollhippo/app/haptics.dart';
 import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/settings.dart';
+import 'package:rollhippo/app/slide_confirm.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
 import 'package:rollhippo/render/die_preview.dart';
@@ -88,6 +89,18 @@ Future<void> swipePanel(WidgetTester tester, Finder onPanel, double dx) async {
 }
 
 /// The table the card screen is painting, read back out of its painter.
+/// Pumps a handful of frames, and never [WidgetTester.pumpAndSettle].
+///
+/// The card screen starts a `Ticker` in `initState` and never stops it, so
+/// there is no frame at which nothing is scheduled — settling would sit there
+/// pumping until it timed out. A fixed run of frames is what carries a route
+/// transition, a flight and a slider home.
+Future<void> settle(WidgetTester tester, [int frames = 30]) async {
+  for (int i = 0; i < frames; i++) {
+    await tester.pump(const Duration(milliseconds: 32));
+  }
+}
+
 CardTable tableOf(WidgetTester tester) =>
     (tester
                 .widget<CustomPaint>(
@@ -224,6 +237,37 @@ void main() {
       deck.draw();
       expect(deck.remaining, 35);
       expect(deck.shown, isNotNull);
+    });
+
+    test('knows whether it has been played, and forgets at the shuffle', () {
+      final Deck deck = Deck(
+        dice: 1,
+        decks: 1,
+        reshuffleAt: 0,
+        random: math.Random(9),
+      );
+      expect(deck.dealt, isFalse, reason: 'a full shoe, face down');
+
+      deck.draw();
+      expect(deck.dealt, isTrue);
+
+      // Down to the last card: the glass is what says it, but so does the
+      // pile, and either is enough.
+      for (int i = 0; i < 5; i++) {
+        deck.draw();
+      }
+      expect(deck.remaining, 0);
+      expect(deck.dealt, isTrue);
+
+      // The reshuffle is the one thing that puts it back — which is exactly
+      // what a table has to lose by being closed, and after this there is
+      // none of it left to lose.
+      deck.draw();
+      expect(
+        deck.dealt,
+        isFalse,
+        reason: 'a full shoe again, and a bare glass',
+      );
     });
 
     test('at nought per cent it runs to the very last card', () {
@@ -771,6 +815,186 @@ void main() {
       await tester.pump();
       expect(table.deck.remaining, 6);
       expect(table.deck.shown, isNull, reason: 'back to the starting position');
+    }, variant: harness);
+  });
+
+  group('closing the table', () {
+    final TargetPlatformVariant harness = TargetPlatformVariant.only(
+      TargetPlatform.macOS,
+    );
+
+    /// Opens the table on a route of its own.
+    ///
+    /// Pushed rather than handed to `home:`, because what these tests are
+    /// about is whether it goes away — and the last route on a stack has
+    /// nowhere to go.
+    Future<CardTable> push(
+      WidgetTester tester, {
+      int dice = 2,
+      int reshuffleAt = 0,
+    }) async {
+      await tester.binding.setSurfaceSize(kHarnessScreen);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder:
+                (BuildContext context) => TextButton(
+                  onPressed:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder:
+                              (BuildContext context) => CardScreen(
+                                dice: dice,
+                                decks: 1,
+                                reshuffleAt: reshuffleAt,
+                              ),
+                        ),
+                      ),
+                  child: const Text('Open'),
+                ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await settle(tester);
+      return tableOf(tester);
+    }
+
+    testWidgets('a shoe nobody has drawn from closes on the tap', (
+      WidgetTester tester,
+    ) async {
+      await push(tester);
+
+      await tester.tap(find.text('Close'));
+      await settle(tester);
+      expect(find.text('Close the cards?'), findsNothing);
+      expect(find.byType(CardScreen), findsNothing, reason: 'straight out');
+    }, variant: harness);
+
+    testWidgets('a dealt one asks, and stays put until it is answered', (
+      WidgetTester tester,
+    ) async {
+      final CardTable table = await push(tester);
+
+      await tester.tap(find.text('Draw'));
+      await settle(tester);
+      final PlayingCard dealt = table.deck.shown!;
+
+      await tester.tap(find.text('Close'));
+      await settle(tester);
+      expect(find.text('Close the cards?'), findsOneWidget);
+      expect(find.byType(CardScreen), findsOneWidget, reason: 'still open');
+
+      // Cancel is a way out of the question, not out of the table.
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(find.text('Close the cards?'), findsNothing);
+      expect(find.byType(CardScreen), findsOneWidget);
+      expect(table.deck.shown, same(dealt), reason: 'nothing was disturbed');
+      expect(table.deck.remaining, 35);
+    }, variant: harness);
+
+    testWidgets('and a double tap takes the question away, not the table', (
+      WidgetTester tester,
+    ) async {
+      await push(tester);
+      await tester.tap(find.text('Draw'));
+      await settle(tester);
+
+      // Close is tapped twice, which is the slip this is all here to catch
+      // made twice over. The second tap lands on the dialog's barrier — the
+      // question goes, and the table stays, which is the safe end of it. What
+      // must not happen is the tap reaching Close a second time and stacking
+      // a second question on the first.
+      await tester.tap(find.text('Close'));
+      await tester.pump();
+      await tester.tap(find.text('Close'), warnIfMissed: false);
+      await settle(tester);
+      expect(find.text('Close the cards?'), findsNothing);
+      expect(find.byType(CardScreen), findsOneWidget, reason: 'still open');
+    }, variant: harness);
+
+    testWidgets('a slide that stops short is not an answer', (
+      WidgetTester tester,
+    ) async {
+      await push(tester);
+      await tester.tap(find.text('Draw'));
+      await settle(tester);
+      await tester.tap(find.text('Close'));
+      await settle(tester);
+
+      // Two thirds of the way and let go, which is what an accident looks
+      // like: the thumb comes off the track and the track comes home.
+      final Rect track = tester.getRect(find.byType(SlideToConfirm));
+      await tester.dragFrom(
+        Offset(track.left + 24, track.center.dy),
+        Offset(track.width * 2 / 3, 0),
+      );
+      await settle(tester);
+      expect(
+        find.text('Close the cards?'),
+        findsOneWidget,
+        reason: 'still asking',
+      );
+      expect(find.byType(CardScreen), findsOneWidget);
+    }, variant: harness);
+
+    testWidgets('and one taken all the way across closes it', (
+      WidgetTester tester,
+    ) async {
+      await push(tester);
+      await tester.tap(find.text('Draw'));
+      await settle(tester);
+      await tester.tap(find.text('Close'));
+      await settle(tester);
+
+      final Rect track = tester.getRect(find.byType(SlideToConfirm));
+      await tester.dragFrom(
+        Offset(track.left + 24, track.center.dy),
+        Offset(track.width, 0),
+      );
+      await settle(tester);
+      expect(find.byType(CardScreen), findsNothing, reason: 'and out');
+      expect(find.text('Close the cards?'), findsNothing);
+    }, variant: harness);
+
+    testWidgets('the back gesture is the same door', (
+      WidgetTester tester,
+    ) async {
+      await push(tester);
+
+      // Nothing dealt: it is not intercepted at all, which is what keeps the
+      // swipe back animating the way the system means it to.
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(find.byType(CardScreen), findsNothing);
+
+      await push(tester);
+      await tester.tap(find.text('Draw'));
+      await settle(tester);
+
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(find.text('Close the cards?'), findsOneWidget);
+      expect(find.byType(CardScreen), findsOneWidget);
+    }, variant: harness);
+
+    testWidgets('a shoe put back together has nothing left to lose', (
+      WidgetTester tester,
+    ) async {
+      final CardTable table = await push(tester, dice: 1);
+
+      for (int i = 0; i < 7; i++) {
+        await tester.tap(find.text('Draw'));
+        await settle(tester, 4);
+      }
+      expect(table.deck.remaining, 6, reason: 'the seventh was the reshuffle');
+
+      await tester.tap(find.text('Close'));
+      await settle(tester);
+      expect(find.text('Close the cards?'), findsNothing);
+      expect(find.byType(CardScreen), findsNothing);
     }, variant: harness);
   });
 

@@ -77,3 +77,53 @@ class TrayButton extends StatelessWidget {
 /// the chrome every screen shares and has nothing app-local of its own to
 /// import, which is what makes it the one place both can see.
 const double kSheetWidth = 440;
+
+/// The card a dialog is drawn on: a title, and whatever answers it.
+///
+/// Here rather than beside the profile dialogs it was written for, and for the
+/// same reason [kSheetWidth] is here — the slide-to-close dialog the cards ask
+/// before they shut is not about profiles, and a second copy of this card
+/// would be a second set of colours to keep in step with the first.
+class AppDialog extends StatelessWidget {
+  const AppDialog({super.key, required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF141A23),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0x14FFFFFF)),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFE8EEF6),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ...children,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -90,7 +90,9 @@ src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable ·
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
                    hippo (the animal twice over: in lumps for the die, and in one line
                    for the back of a card — neither of them a body)
-src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · chrome · PageDots
+src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · PageDots
+                   chrome (letterbox · TrayButton · AppDialog — what every screen shares)
+                   slide_confirm (the drag a question gets when a button is what went wrong)
                    menu (AppMenuButton + the Settings and Share sheets) · scan_screen (the camera)
                    tutorial (the first run: pages you swipe, over the screen each is about) ·
                    haptics (HapticEngine + HapticDriver, for the tray · uiHaptic, for
@@ -278,6 +280,19 @@ test exists to make the change deliberate, not to make it hard.
   it had to tell — with the outgoing card staying put, depth order left the
   incoming one hidden behind it for the whole flight and popping into view at
   the end, so the two were swapped at the instant the flying card went edge on.
+- **A played shoe is asked about before it is closed.** Close sits an inch
+  from Draw and gets hit by the same hand doing the same thing, so
+  `CardScreen._close` puts a question in front of it — but only when there is
+  something to lose, which is what `Deck.dealt` answers: a card on the glass,
+  or cards gone from the pile. A shoe nobody has drawn from closes on the tap,
+  and so does one a reshuffle has just put back together, because both are the
+  position a new table opens in. The question is a `SlideToConfirm` rather
+  than a second button for the reason it exists at all: what it is guarding
+  against is not a decision but a stray thumb, and a button under a button is
+  another thing to hit by accident. The back gesture goes through the same
+  door — `PopScope`, whose `canPop` is `!_dealt`, which is why `_draw` calls
+  `setState` on the one card that changes that answer and on no other.
+
 - **The profiles wrap, and the Roll button does not move.** `ProfileRow` is a
   `Wrap` inside a `SingleChildScrollView`, under a "Profiles" heading that is
   *outside* that scroll view so it stays put while the block scrolls under it,

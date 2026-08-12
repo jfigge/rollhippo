@@ -14,7 +14,7 @@ publish_to: "none"
 # second upload means bumping the `+N` and rebuilding — see `make upload`. Play
 # is the same arrangement under the name versionCode, which Gradle takes from
 # here rather than from anything in android/.
-version: 1.0.0+4
+version: 1.0.0+5
 
 environment:
   sdk: ^3.7.2

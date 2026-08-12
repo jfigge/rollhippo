@@ -97,6 +97,22 @@ class Deck {
   /// True when the next [draw] will reshuffle rather than deal a card.
   bool get spent => remaining <= cut;
 
+  /// True once this shoe has been played — a card is on the glass, or cards
+  /// have gone from the pile, or both.
+  ///
+  /// What it really answers is "would shutting this down throw anything away",
+  /// and on a shoe that is a question about the *pile* rather than about the
+  /// glass. Drawing without replacement is the whole of what makes this mode
+  /// different from throwing dice, so what a closed table loses is not the
+  /// card you were looking at, it is everything the cards already gone say
+  /// about the ones that are left.
+  ///
+  /// Which is why a reshuffle puts it back to false. [shuffle] empties the
+  /// glass and refills the pile, and what is left behind is a full shoe nobody
+  /// has drawn from — the state a table opens in, with nothing to lose by
+  /// closing it.
+  bool get dealt => _shown != null || remaining < size;
+
   /// Puts every card back and shuffles, and clears the glass.
   void shuffle() {
     _pile
