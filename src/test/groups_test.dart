@@ -5,6 +5,7 @@ import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
+import 'package:rollhippo/app/tutorial.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/physics/body.dart';
 import 'package:rollhippo/render/die_preview.dart';
@@ -40,13 +41,13 @@ PageDots trayDotsOf(WidgetTester tester) =>
 /// for as long as it is still moving, so a rack that is a few points short of
 /// home takes no taps — and the plus that adds a die is a tap on the rack.
 Future<void> swipeLeft(WidgetTester tester) async {
-  await tester.drag(find.byType(PageView), const Offset(-300, 0));
+  await tester.drag(find.byKey(kRack), const Offset(-300, 0));
   await tester.pumpAndSettle();
 }
 
 /// Back the other way, and settled for the same reason.
 Future<void> swipeRight(WidgetTester tester) async {
-  await tester.drag(find.byType(PageView), const Offset(300, 0));
+  await tester.drag(find.byKey(kRack), const Offset(300, 0));
   await tester.pumpAndSettle();
 }
 
@@ -262,7 +263,7 @@ void main() {
       await swipeLeft(tester);
       expect(find.text(kEmptyEditor), findsOneWidget);
 
-      await tester.drag(find.byType(PageView), const Offset(300, 0));
+      await tester.drag(find.byKey(kRack), const Offset(300, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(selectedIn(tester, 0), 1);

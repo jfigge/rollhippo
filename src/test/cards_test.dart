@@ -11,6 +11,7 @@ import 'package:rollhippo/app/page_dots.dart';
 import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/slide_confirm.dart';
+import 'package:rollhippo/app/tutorial.dart';
 import 'package:rollhippo/cards/deck.dart';
 import 'package:rollhippo/render/card_painter.dart';
 import 'package:rollhippo/render/die_preview.dart';
@@ -101,16 +102,22 @@ Future<void> settle(WidgetTester tester, [int frames = 30]) async {
   }
 }
 
-CardTable tableOf(WidgetTester tester) =>
+/// The dice rack's page view, which is no longer the only one on the picker:
+/// the card page has one of its own for its three shoes.
+final Finder diceRack = find.byKey(kRack);
+
+/// The table for shoe [at], off the painter that draws all of them.
+CardTable tableOf(WidgetTester tester, [int at = 0]) =>
     (tester
                 .widget<CustomPaint>(
                   find.byWidgetPredicate(
-                    (Widget w) => w is CustomPaint && w.painter is CardPainter,
+                    (Widget w) =>
+                        w is CustomPaint && w.painter is CardPagesPainter,
                   ),
                 )
                 .painter!
-            as CardPainter)
-        .table;
+            as CardPagesPainter)
+        .tables[at];
 
 void main() {
   group('a deck of rolls', () {
@@ -452,7 +459,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      await tester.drag(find.byType(PageView), const Offset(-300, 0));
+      await tester.drag(diceRack, const Offset(-300, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -709,7 +716,15 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
-          home: CardScreen(dice: dice, decks: decks, reshuffleAt: reshuffleAt),
+          home: CardScreen(
+            shoes: <CardSet>[
+              CardSet(
+                colours: List<int>.filled(dice, kDiceWhite),
+                decks: decks,
+                reshuffleAt: reshuffleAt,
+              ),
+            ],
+          ),
         ),
       );
       await tester.pump();
@@ -845,9 +860,13 @@ void main() {
                         MaterialPageRoute<void>(
                           builder:
                               (BuildContext context) => CardScreen(
-                                dice: dice,
-                                decks: 1,
-                                reshuffleAt: reshuffleAt,
+                                shoes: <CardSet>[
+                                  CardSet(
+                                    colours: List<int>.filled(dice, kDiceWhite),
+                                    decks: 1,
+                                    reshuffleAt: reshuffleAt,
+                                  ),
+                                ],
                               ),
                         ),
                       ),

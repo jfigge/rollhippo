@@ -145,9 +145,11 @@ void main() {
             <DieSpec>[],
             <DieSpec>[],
           ],
-      colours: colours,
-      decks: decks,
-      reshuffleAt: cut,
+      cards: <CardSet>[
+        CardSet(colours: colours, decks: decks, reshuffleAt: cut),
+        kEmptyShoe,
+        kEmptyShoe,
+      ],
     );
 
     test('carries the whole picker, both modes of it', () {
@@ -176,9 +178,9 @@ void main() {
         reason: 'the same profile, not a copy of half of it',
       );
       expect(back.profile.mode, ProfileMode.cards);
-      expect(back.profile.decks, 3);
-      expect(back.profile.reshuffleAt, 17);
-      expect(back.profile.colours, <int>[
+      expect(back.profile.cards.first.decks, 3);
+      expect(back.profile.cards.first.reshuffleAt, 17);
+      expect(back.profile.cards.first.colours, <int>[
         kDicePalette[2],
         kDicePalette[5],
         kDiceWhite,
@@ -208,9 +210,15 @@ void main() {
                 for (int d = 0; d < 10; d++) spec(DieKind.d20, kDicePalette[7]),
               ],
           ],
-          colours: <int>[kDiceWhite, kDiceWhite, kDiceWhite],
-          decks: 3,
-          reshuffleAt: 20,
+          cards: <CardSet>[
+            CardSet(
+              colours: <int>[kDiceWhite, kDiceWhite, kDiceWhite],
+              decks: 3,
+              reshuffleAt: 20,
+            ),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ),
         name: 'Poker Nights',
       );

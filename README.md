@@ -14,7 +14,10 @@ playing. Getting that right is what makes a card the same wager as the throw it
 stands for. It then differs in the one way a shoe always differs — it is drawn
 without replacement, so what has already gone tells you something about what is
 left — and there is a cut card, at a percentage you set, for exactly that
-reason. Three dice across three decks is 648 cards.
+reason. Three dice across three decks is 648 cards. Up to three shoes at once,
+each with its own dice, its own decks and its own cut, swiped between the way
+the trays are: a shoe is its own memory, so keeping two apart is the same
+promise the tray makes about a roll you have already thrown.
 
 **Or throw one.** Pick a set of dice — up to ten of them, any mixture of D4
 through D20 plus a poker die, each its own colour — into a box the size of the

@@ -16,7 +16,8 @@ wrong app.
 **A shoe of cards, one per possible roll.** `lib/cards/` builds every *ordered*
 outcome of one to three six-sided dice, one to three decks of them at once,
 shuffles it and deals without replacement, with a cut card at whatever
-percentage you set. Drawing a card is the same wager as throwing the dice it
+percentage you set — up to three such shoes at once, each with its own dice,
+its own decks and its own cut, swiped between exactly as the trays are. Drawing a card is the same wager as throwing the dice it
 stands for — that is what makes it a stand-in rather than a gimmick — and it
 differs in the one way a shoe always does: what has already gone tells you
 something about what is left. That difference is the point of the mode, and
@@ -85,17 +86,20 @@ release asks that hardest. The Flutter version is pinned in the workflow's
 ```
 src/lib/physics/   body (RigidBody) · shape (ConvexShape) · collision · contact · solver · world
 src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind · DieSpec · faceValue)
-                   profile (Profile · ProfileMode — the whole picker, as data) · share_code (both payloads)
+                   profile (Profile · ProfileMode · CardSet — the whole picker, as data)
+                   share_code (both payloads)
 src/lib/motion/    MotionSource — the sensors, a synthetic phone for the harness, and a still one
                    (StillMotionSource) for when motion control is switched off
 src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable · Deal
-src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
+src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · DiePreview
+                   CardPainter · CardPagesPainter
                    hippo (the animal twice over: in lumps for the die, and in one line
                    for the back of a card — neither of them a body)
                    poker (the poker die's six faces, drawn as cards — pips, courts, suits)
                    die_glyph (dieGlyphFont and the laid-out numbers, apart from the
                    painter because two things print text on a die now)
-src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · PageDots
+src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen (a box per set)
+                   CardScreen (a table per shoe) · PageDots
                    chrome (letterbox · TrayButton · AppDialog · ElapsedTimer · TimeUpAlert
                    — what every screen shares)
                    slide_confirm (the drag a question gets when a button is what went wrong)
@@ -305,6 +309,46 @@ test exists to make the change deliberate, not to make it hard.
   it had to tell — with the outgoing card staying put, depth order left the
   incoming one hidden behind it for the whole flight and popping into view at
   the end, so the two were swapped at the instant the flying card went edge on.
+- **The card page has three shoes, and they mirror the tray's three sets.**
+  `CardSet` is a group of dice's opposite number — the colours printed on a
+  card, the decks and the cut — and a `Profile` carries three of them beside
+  its three `groups`, empties and all. Each shoe carries its *own* set-up
+  rather than sharing one, because two shoes with the same dice, decks and cut
+  are the same shoe twice: the point of three is that one can be a blackjack
+  shoe and another a single deck cut to the last card. Everything about them
+  is the dice side's shape with the words changed — `rollableCards` beside
+  `rollableGroups`, `kShoeDots` beside `kGroupDots`, `CardPagesPainter` beside
+  `TrayPagesPainter`, one `_Shoe` per table beside one `_Box` per group, each
+  with its own clock — and where it *departs* is worth knowing:
+
+  **Every table advances, not only the one on screen.** A box you are not
+  looking at is not simulated, because stepping it could change what its dice
+  are showing. A card is already dealt before it has arrived, so all that is
+  left in flight is its journey; freezing that would only mean swiping back to
+  a card stopped in mid-air.
+
+  **Two page views now live in the picker's tree at once**, which is why the
+  card rack's pages are keyed `ValueKey<String>('shoe-N')` where the dice
+  rack's are `ValueKey<int>(N)`. With both as ints, anything looking for one
+  set's dice would find the other page's as well — which is exactly what
+  `groups_test` did.
+
+  **Close takes every shoe**, so `_dealt` asks all of them and the question
+  names how many are going. Asking about the shoe in front of you while
+  quietly dropping the two beside it would be asking the wrong question.
+
+- **Both places a profile is stored had to learn about the shoes, and neither
+  one drops a save.** The preferences file gains a `cards` array *and* goes on
+  writing the first shoe under the three field names one shoe used to have, so
+  a phone that installs this build and then goes back to an older one still
+  reads its saves; `profileFromJson` prefers `cards` and falls back to the old
+  three, which is every save written before there were three. The QR code
+  could not do that — its shoes are positional bytes — so it took a version:
+  `RH3:` is written, and `RH2:` is still *read*, arriving as one shoe with two
+  nobody started. **Never the other way round.** An `RH2:` reader handed an
+  `RH3:` code would silently drop two shoes, which is the whole reason the
+  version sits in the prefix.
+
 - **A played shoe is asked about before it is closed.** Close sits an inch
   from Draw and gets hit by the same hand doing the same thing, so
   `CardScreen._close` puts a question in front of it — but only when there is
@@ -316,7 +360,9 @@ test exists to make the change deliberate, not to make it hard.
   against is not a decision but a stray thumb, and a button under a button is
   another thing to hit by accident. The back gesture goes through the same
   door — `PopScope`, whose `canPop` is `!_dealt`, which is why `_draw` calls
-  `setState` on the one card that changes that answer and on no other.
+  `setState` on the one card that changes that answer and on no other. With
+  three shoes `_dealt` is true if *any* of them has been played, so the first
+  card dealt anywhere on the table is the one that costs a rebuild.
 
 - **The profiles wrap, and the Roll button does not move.** `ProfileRow` is a
   `Wrap` inside a `SingleChildScrollView`, under a "Profiles" heading that is
@@ -529,10 +575,19 @@ test exists to make the change deliberate, not to make it hard.
   `throwDice`** — a shake on a group that has already been thrown only wakes
   the world and lets the accelerometer scatter the dice, so `_onTick` zeroes
   the clock on `isShake` itself; leave that out and a tray shaken into a fresh
-  result goes on reporting how long ago somebody last tapped. An unthrown
-  group draws nothing at all, because `0:00` would be a lie about a throw
-  nobody has made, and on the cards a reshuffle puts the clock away for the
-  same reason: the glass is bare, so there is nothing to be counting since.
+  result goes on reporting how long ago somebody last tapped.
+
+  **A clock nobody has started reads `0:00` and stays there.** An unthrown
+  group and a bare glass are both timing nothing, and both say so by showing a
+  stopped clock rather than no clock — which is what everybody already takes a
+  stopped clock to mean. It used to draw nothing at all, on the argument that
+  a zero would be a lie about a throw nobody had made; what that cost was
+  worse than the lie, because a setting you had just switched on showed you
+  nothing until you threw, which reads as a setting that did not work. The
+  distinction survives *above* the widget and is still load-bearing: the
+  screens go on pushing null, `ElapsedTimer` turns null into a zero at the
+  last moment, and the two things that must not happen to a clock that has not
+  started — going red, and firing an alert — both still test the null.
 
 - **A turn running out is said twice, and neither one is a sound.**
   `Settings.limit` is seconds, zero for none, on nineteen notches from 30 s to

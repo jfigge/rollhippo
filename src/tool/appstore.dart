@@ -383,10 +383,13 @@ void main() {
     await tester.pumpWidget(
       _app(
         CardScreen(
-          dice: 2,
-          decks: 2,
-          reshuffleAt: 5,
-          colours: <int>[kDicePalette[5], kDicePalette[2]],
+          shoes: <CardSet>[
+            CardSet(
+              colours: <int>[kDicePalette[5], kDicePalette[2]],
+              decks: 2,
+              reshuffleAt: 5,
+            ),
+          ],
         ),
       ),
     );
@@ -1232,9 +1235,15 @@ Profile _saved(int dice) => Profile(
     <DieSpec>[],
     <DieSpec>[],
   ],
-  colours: const <int>[kDiceWhite, kDiceWhite],
-  decks: 2,
-  reshuffleAt: 5,
+  cards: <CardSet>[
+    CardSet(
+      colours: const <int>[kDiceWhite, kDiceWhite],
+      decks: 2,
+      reshuffleAt: 5,
+    ),
+    kEmptyShoe,
+    kEmptyShoe,
+  ],
 );
 
 /// The kinds the picker offers without being asked by name — see

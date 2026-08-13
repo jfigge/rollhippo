@@ -9,6 +9,7 @@ import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/profiles.dart';
 import 'package:rollhippo/app/tray_screen.dart';
+import 'package:rollhippo/app/tutorial.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
 
@@ -64,7 +65,7 @@ void main() {
     // rack, the second dot lit and hollow, and an editor gone quiet in exactly
     // the place it was. It is the one layout that only exists after a swipe,
     // which makes it the one worth having a picture of.
-    await tester.drag(find.byType(PageView), const Offset(-300, 0));
+    await tester.drag(find.byKey(kRack), const Offset(-300, 0));
     await tester.pumpAndSettle();
 
     await _write(tester, '$dir/picker-empty.png');
@@ -196,9 +197,15 @@ Profile _saved(int dice) => Profile(
     <DieSpec>[],
     <DieSpec>[],
   ],
-  colours: const <int>[kDiceWhite, kDiceWhite],
-  decks: 2,
-  reshuffleAt: 5,
+  cards: <CardSet>[
+    CardSet(
+      colours: const <int>[kDiceWhite, kDiceWhite],
+      decks: 2,
+      reshuffleAt: 5,
+    ),
+    kEmptyShoe,
+    kEmptyShoe,
+  ],
 );
 
 /// The kinds the picker will let you choose without being asked by name — see

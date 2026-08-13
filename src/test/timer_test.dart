@@ -115,16 +115,31 @@ Future<void> openCards(
   WidgetTester tester, {
   int dice = 1,
   int reshuffleAt = 0,
+  int shoes = 1,
 }) async {
   await tester.binding.setSurfaceSize(kHarnessScreen);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
-      home: CardScreen(dice: dice, decks: 1, reshuffleAt: reshuffleAt),
+      home: CardScreen(
+        shoes: <CardSet>[
+          for (int i = 0; i < shoes; i++)
+            CardSet(
+              colours: List<int>.filled(dice, kDiceWhite),
+              decks: 1,
+              reshuffleAt: reshuffleAt,
+            ),
+        ],
+      ),
     ),
   );
   await tester.pump();
 }
+
+/// Where the top of the Close button is. The one thing on either screen that
+/// nothing optional above it is allowed to move.
+double closeTop(WidgetTester tester) =>
+    tester.getTopLeft(find.text('Close')).dy;
 
 /// Puts a recorder in front of the phone's actuator for one test. The alert's
 /// taps go through [uiHaptic] rather than a [HapticEngine] — there is no
@@ -203,7 +218,7 @@ void main() {
       // one end, last at the other.
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('Throw'), findsOneWidget);
-    }, variant: harness);
+    });
 
     testWidgets('and neither does the card table', (WidgetTester tester) async {
       withTimer(false);
@@ -223,9 +238,10 @@ void main() {
       await openTray(tester);
       await run(tester, 3);
 
-      // The tray opens waiting, so there is no roll to be timing since — and
-      // 0:00 would be a lie about a throw nobody has made.
-      expect(clockOf(tester), isNull);
+      // The tray opens waiting, so there is no roll to be timing since. The
+      // clock says so by reading zero and staying there: three seconds of
+      // screen time have passed and it has counted none of them.
+      expect(clockOf(tester), '0:00');
     }, variant: harness);
 
     testWidgets('starts at 0:00 on the throw, and counts', (
@@ -450,9 +466,11 @@ void main() {
       withTimer(true, limit: 30);
       await openCards(tester);
 
-      // Nothing to run out until a card is on the glass.
+      // Nothing to run out until a card is on the glass: the clock reads zero
+      // and cannot be past a limit, because no time has passed for it.
       await run(tester, 31);
-      expect(clockOf(tester), isNull);
+      expect(clockOf(tester), '0:00');
+      expect(inkOf(tester), isNot(kTimeUpInk));
 
       await tester.tap(find.text('Draw'));
       await tester.pump();
@@ -469,7 +487,7 @@ void main() {
   });
 
   group('a clock per group', () {
-    testWidgets('an unthrown group is timing nothing, and says nothing', (
+    testWidgets('an unthrown group is timing nothing, and reads 0:00', (
       WidgetTester tester,
     ) async {
       withTimer(true);
@@ -482,8 +500,8 @@ void main() {
       await run(tester, 1);
 
       // The dice are lying on the floor of that box, but they are not a
-      // result — so 0:00 would be a lie about a throw nobody has made.
-      expect(clockOf(tester), isNull);
+      // result — so this group's clock has not started, and reads zero.
+      expect(clockOf(tester), '0:00');
     }, variant: harness);
 
     testWidgets('a group that ran out off-screen is red when you reach it', (
@@ -498,7 +516,12 @@ void main() {
       // first group's turn from over here.
       await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));
       await run(tester, 30);
-      expect(clockOf(tester), isNull, reason: 'this one has not been thrown');
+      expect(clockOf(tester), '0:00', reason: 'this one has not been thrown');
+      expect(
+        inkOf(tester),
+        isNot(kTimeUpInk),
+        reason: 'and a clock at zero is not past anything',
+      );
       expect(washOf(tester), 0, reason: 'a flash is for somebody watching');
 
       await tester.dragFrom(const Offset(200, 500), const Offset(300, 0));
@@ -530,13 +553,14 @@ void main() {
   });
 
   group('the card clock', () {
-    testWidgets('says nothing until a card is on the glass', (
+    testWidgets('reads 0:00 until a card is on the glass', (
       WidgetTester tester,
     ) async {
       withTimer(true);
       await openCards(tester);
       await run(tester, 2);
-      expect(clockOf(tester), isNull);
+      // Zero, and stopped: two seconds have gone by and it has counted none.
+      expect(clockOf(tester), '0:00');
 
       await tester.tap(find.text('Draw'));
       await tester.pump();
@@ -546,7 +570,7 @@ void main() {
       expect(clockOf(tester), '0:02');
     }, variant: harness);
 
-    testWidgets('a reshuffle puts it away rather than restarting it', (
+    testWidgets('a reshuffle stops it rather than restarting it', (
       WidgetTester tester,
     ) async {
       withTimer(true);
@@ -563,11 +587,15 @@ void main() {
       await tester.tap(find.text('Draw'));
       await tester.pump();
       // A full pile and an empty glass. There is no card to be counting since,
-      // which is a different thing from a card that arrived just now.
-      expect(clockOf(tester), isNull);
+      // so the clock goes back to zero and *stops* — which is a different
+      // thing from a card that arrived just now, and the next line is what
+      // tells the two apart.
+      expect(clockOf(tester), '0:00');
 
+      // Still zero two seconds later, which is what makes it a stopped clock
+      // rather than one the reshuffle restarted.
       await run(tester, 2);
-      expect(clockOf(tester), isNull);
+      expect(clockOf(tester), '0:00');
     }, variant: harness);
 
     testWidgets('sits between Close and Draw', (WidgetTester tester) async {
@@ -579,6 +607,48 @@ void main() {
       final double clock = tester.getCenter(find.byKey(kElapsedTimer)).dx;
       expect(clock, greaterThan(tester.getRect(find.text('Close')).right));
       expect(clock, lessThan(tester.getRect(find.text('Draw')).left));
+    }, variant: harness);
+  });
+  group('the clock and the dots share the top of the screen', () {
+    // Both used to be children of one column in the middle of the button row,
+    // which made the row as tall as the two of them together: switching the
+    // timer on with more than one page moved Close and Throw down the screen.
+    // The buttons are the fixed thing here — the clock sits between them and
+    // the dots go underneath — so turning either on moves neither.
+    testWidgets('the tray keeps its buttons put whatever is above them', (
+      WidgetTester tester,
+    ) async {
+      withTimer(false);
+      await openTray(tester, groups: 3);
+      final double bare = closeTop(tester);
+      expect(find.byKey(kTrayDots), findsOneWidget, reason: 'three boxes');
+
+      withTimer(true);
+      await openTray(tester, groups: 3);
+      expect(find.byKey(kElapsedTimer), findsOneWidget);
+      expect(closeTop(tester), bare, reason: 'the clock moved the buttons');
+
+      // And the dots are below the row rather than inside it.
+      expect(
+        tester.getTopLeft(find.byKey(kTrayDots)).dy,
+        greaterThan(tester.getBottomLeft(find.text('Close')).dy),
+      );
+    }, variant: harness);
+
+    testWidgets('and so does the table', (WidgetTester tester) async {
+      withTimer(false);
+      await openCards(tester, shoes: 3);
+      final double bare = closeTop(tester);
+      expect(find.byKey(kCardDots), findsOneWidget, reason: 'three shoes');
+
+      withTimer(true);
+      await openCards(tester, shoes: 3);
+      expect(find.byKey(kElapsedTimer), findsOneWidget);
+      expect(closeTop(tester), bare, reason: 'the clock moved the buttons');
+      expect(
+        tester.getTopLeft(find.byKey(kCardDots)).dy,
+        greaterThan(tester.getBottomLeft(find.text('Close')).dy),
+      );
     }, variant: harness);
   });
 }

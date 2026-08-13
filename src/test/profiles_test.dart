@@ -23,9 +23,15 @@ Profile diceProfile(int dice, {int decks = 2, int cut = 5}) => Profile(
     <DieSpec>[],
     <DieSpec>[],
   ],
-  colours: <int>[kDiceWhite, kDiceWhite],
-  decks: decks,
-  reshuffleAt: cut,
+  cards: <CardSet>[
+    CardSet(
+      colours: <int>[kDiceWhite, kDiceWhite],
+      decks: decks,
+      reshuffleAt: cut,
+    ),
+    kEmptyShoe,
+    kEmptyShoe,
+  ],
 );
 
 /// The dice the rack is showing. The card page is built at the same time, one
@@ -176,17 +182,23 @@ void main() {
           <DieSpec>[],
           <DieSpec>[const DieSpec(kind: DieKind.d8, colour: kDiceWhite)],
         ],
-        colours: <int>[0xFF3F6FA8, 0xFFD8B23A, kDiceWhite],
-        decks: 3,
-        reshuffleAt: 17,
+        cards: <CardSet>[
+          CardSet(
+            colours: <int>[0xFF3F6FA8, 0xFFD8B23A, kDiceWhite],
+            decks: 3,
+            reshuffleAt: 17,
+          ),
+          kEmptyShoe,
+          kEmptyShoe,
+        ],
       );
 
       final Profile back = profileFromJson(profileToJson(profile))!;
 
       expect(back.mode, ProfileMode.cards);
-      expect(back.decks, 3);
-      expect(back.reshuffleAt, 17);
-      expect(back.colours, profile.colours);
+      expect(back.cards.first.decks, 3);
+      expect(back.cards.first.reshuffleAt, 17);
+      expect(back.cards, profile.cards);
       // The empty set in the middle survives: it is a set nobody started, not
       // a gap to be closed up.
       expect(back.groups.length, 3);
@@ -200,11 +212,40 @@ void main() {
       expect(profileFromJson(null), isNull);
       expect(profileFromJson('RH1:AwIAAA=='), isNull);
       final Map<String, Object?> good = profileToJson(diceProfile(2));
-      for (final String key in <String>['dice', 'colours', 'decks', 'cut']) {
-        final Map<String, Object?> broken = Map<String, Object?>.of(good)
+      expect(
+        profileFromJson(Map<String, Object?>.of(good)..remove('dice')),
+        isNull,
+        reason: 'without dice',
+      );
+      // The three single-shoe fields are a *fallback*, so taking `cards` away
+      // is not damage: it is what every save written before there were three
+      // shoes looks like, and it still opens — as one shoe, with two nobody
+      // started. Taking one of the three away as well leaves nothing to fall
+      // back to, and that is the save that gets dropped.
+      final Map<String, Object?> old = Map<String, Object?>.of(good)
+        ..remove('cards');
+      final Profile? legacy = profileFromJson(old);
+      expect(legacy, isNotNull, reason: 'a save from before there were shoes');
+      expect(legacy!.cards.length, kMaxCardSets);
+      expect(legacy.cards.first.colours, good['colours']);
+      expect(legacy.cards[1].isEmpty, isTrue);
+      for (final String key in <String>['colours', 'decks', 'cut']) {
+        final Map<String, Object?> broken = Map<String, Object?>.of(old)
           ..remove(key);
         expect(profileFromJson(broken), isNull, reason: 'without $key');
       }
+      // And a shoe list this build could not put on screen: the first shoe is
+      // the one the picker will not let you empty.
+      expect(
+        profileFromJson(
+          Map<String, Object?>.of(good)
+            ..['cards'] = <Object?>[
+              <String, Object?>{'colours': <int>[], 'decks': 1, 'cut': 0},
+            ],
+        ),
+        isNull,
+        reason: 'a first shoe with no card',
+      );
       // A code that is not one of ours is not a profile either.
       expect(
         profileFromJson(Map<String, Object?>.of(good)..['dice'] = 'hello'),
@@ -223,9 +264,11 @@ void main() {
           <DieSpec>[for (int i = 0; i < 2; i++) kCardDie],
           <DieSpec>[],
         ],
-        colours: const <int>[kDiceWhite],
-        decks: 1,
-        reshuffleAt: 0,
+        cards: <CardSet>[
+          CardSet(colours: const <int>[kDiceWhite], decks: 1, reshuffleAt: 0),
+          kEmptyShoe,
+          kEmptyShoe,
+        ],
       );
       expect(sets.summary, '2 sets, 7 dice');
 
@@ -234,9 +277,15 @@ void main() {
         Profile(
           mode: ProfileMode.cards,
           groups: const <List<DieSpec>>[],
-          colours: const <int>[kDiceWhite, kDiceWhite],
-          decks: 2,
-          reshuffleAt: 5,
+          cards: <CardSet>[
+            CardSet(
+              colours: const <int>[kDiceWhite, kDiceWhite],
+              decks: 2,
+              reshuffleAt: 5,
+            ),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ).summary,
         '2 decks, 72 cards',
       );
@@ -244,9 +293,11 @@ void main() {
         Profile(
           mode: ProfileMode.cards,
           groups: const <List<DieSpec>>[],
-          colours: const <int>[kDiceWhite],
-          decks: 1,
-          reshuffleAt: 5,
+          cards: <CardSet>[
+            CardSet(colours: const <int>[kDiceWhite], decks: 1, reshuffleAt: 5),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ).summary,
         '1 deck, 6 cards',
       );
@@ -306,9 +357,15 @@ void main() {
         Profile(
           mode: ProfileMode.cards,
           groups: const <List<DieSpec>>[],
-          colours: const <int>[0xFFB3453F],
-          decks: 3,
-          reshuffleAt: 12,
+          cards: <CardSet>[
+            CardSet(
+              colours: const <int>[0xFFB3453F],
+              decks: 3,
+              reshuffleAt: 12,
+            ),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ),
       );
       await pumpEventQueue();
@@ -319,9 +376,9 @@ void main() {
       expect(profiles.saves.length, 2);
       expect(profiles.saves[0].name, 'Cards');
       expect(profiles.saves[0].profile.mode, ProfileMode.cards);
-      expect(profiles.saves[0].profile.decks, 3);
-      expect(profiles.saves[0].profile.reshuffleAt, 12);
-      expect(profiles.saves[0].profile.colours, <int>[0xFFB3453F]);
+      expect(profiles.saves[0].profile.cards.first.decks, 3);
+      expect(profiles.saves[0].profile.cards.first.reshuffleAt, 12);
+      expect(profiles.saves[0].profile.cards.first.colours, <int>[0xFFB3453F]);
       expect(profiles.saves[1].name, 'Yahtzee');
       expect(profiles.saves[1].profile.groups[0].length, 5);
     });
@@ -649,7 +706,7 @@ void main() {
 
       final Profile kept = profiles.saves.single.profile;
       expect(kept.mode, ProfileMode.cards);
-      expect(kept.decks, 3);
+      expect(kept.cards.first.decks, 3);
       // And the dice behind it went along too, untouched.
       expect(kept.groups[0].length, kDefaultDice.length);
     });
@@ -666,9 +723,11 @@ void main() {
             <DieSpec>[],
             <DieSpec>[],
           ],
-          colours: const <int>[kDiceWhite],
-          decks: 1,
-          reshuffleAt: 0,
+          cards: <CardSet>[
+            CardSet(colours: const <int>[kDiceWhite], decks: 1, reshuffleAt: 0),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ),
       );
       await pumpPicker(tester);
@@ -941,9 +1000,15 @@ void main() {
             <DieSpec>[],
             <DieSpec>[],
           ],
-          colours: const <int>[kDiceWhite, 0xFFB3453F],
-          decks: 3,
-          reshuffleAt: 12,
+          cards: <CardSet>[
+            CardSet(
+              colours: const <int>[kDiceWhite, 0xFFB3453F],
+              decks: 3,
+              reshuffleAt: 12,
+            ),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ),
       );
 
@@ -1077,9 +1142,20 @@ void main() {
             <DieSpec>[],
             <DieSpec>[kCardDie],
           ],
-          colours: const <int>[kDiceWhite, kDiceWhite, kDiceWhite, kDiceWhite],
-          decks: 9,
-          reshuffleAt: 99,
+          cards: <CardSet>[
+            CardSet(
+              colours: const <int>[
+                kDiceWhite,
+                kDiceWhite,
+                kDiceWhite,
+                kDiceWhite,
+              ],
+              decks: 9,
+              reshuffleAt: 99,
+            ),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ),
       );
 
@@ -1111,9 +1187,20 @@ void main() {
             <DieSpec>[],
             <DieSpec>[kCardDie],
           ],
-          colours: const <int>[kDiceWhite, kDiceWhite, kDiceWhite, kDiceWhite],
-          decks: 9,
-          reshuffleAt: 99,
+          cards: <CardSet>[
+            CardSet(
+              colours: const <int>[
+                kDiceWhite,
+                kDiceWhite,
+                kDiceWhite,
+                kDiceWhite,
+              ],
+              decks: 9,
+              reshuffleAt: 99,
+            ),
+            kEmptyShoe,
+            kEmptyShoe,
+          ],
         ),
         name: 'Later',
       );
@@ -1122,9 +1209,9 @@ void main() {
       final Profile kept = profiles.saves.single.profile;
       expect(kept.groups.length, kMaxGroups);
       expect(kept.groups[0].length, kMaxDice);
-      expect(kept.colours.length, kMaxCardDice);
-      expect(kept.decks, kMaxDecks);
-      expect(kept.reshuffleAt, kMaxReshuffleAt);
+      expect(kept.cards.first.colours.length, kMaxCardDice);
+      expect(kept.cards.first.decks, kMaxDecks);
+      expect(kept.cards.first.reshuffleAt, kMaxReshuffleAt);
       expect(
         kept.summary,
         '$kMaxDecks decks, 648 cards',

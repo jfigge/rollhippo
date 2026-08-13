@@ -53,9 +53,11 @@ Profile oneDie(DieKind kind) => Profile(
     <DieSpec>[],
     <DieSpec>[],
   ],
-  colours: const <int>[kDiceWhite],
-  decks: 1,
-  reshuffleAt: 0,
+  cards: <CardSet>[
+    CardSet(colours: const <int>[kDiceWhite], decks: 1, reshuffleAt: 0),
+    kEmptyShoe,
+    kEmptyShoe,
+  ],
 );
 
 void main() {

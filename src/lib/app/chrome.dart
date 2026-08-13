@@ -92,7 +92,19 @@ class ElapsedTimer extends StatelessWidget {
 
   /// Whole seconds since the last throw or deal, or null if there has not been
   /// one — a group nobody has shaken yet, and a table whose glass is still
-  /// bare, are both timing nothing and both draw nothing.
+  /// bare, are both timing nothing.
+  ///
+  /// Both draw **0:00** rather than nothing. The clock used to be absent until
+  /// there was something to count, on the argument that a zero would be a lie
+  /// about a throw nobody had made. What that cost was worse than the lie: a
+  /// setting you had just switched on showed you nothing at all until you
+  /// threw, which reads as a setting that did not work. A clock reading zero
+  /// is a clock that has not started, which is what everybody already takes a
+  /// stopped clock to mean.
+  ///
+  /// The distinction is kept above this line rather than thrown away, because
+  /// two other things still turn on it: nothing that has not been thrown can
+  /// be past its limit, and nothing that has not been thrown fires an alert.
   final ValueListenable<int?> seconds;
 
   /// The turn limit in seconds, or zero for none. See [Settings.limit]. At or
@@ -105,10 +117,12 @@ class ElapsedTimer extends StatelessWidget {
     return ValueListenableBuilder<int?>(
       valueListenable: seconds,
       builder: (BuildContext context, int? value, _) {
-        if (value == null) return const SizedBox.shrink();
-        final bool over = limit > 0 && value >= limit;
+        // A clock nobody has started reads zero, and is never over its limit:
+        // no time has passed for it to be past anything.
+        final int elapsed = value ?? 0;
+        final bool over = value != null && limit > 0 && elapsed >= limit;
         return Text(
-          formatElapsed(value),
+          formatElapsed(elapsed),
           style: TextStyle(
             // The muted grey everything that is not asking to be pressed is
             // drawn in. A clock beside two buttons must not read as a third —

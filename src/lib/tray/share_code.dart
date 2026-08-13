@@ -72,12 +72,23 @@ List<List<DieSpec>>? decodeGroups(String text) {
 
 /// What every Roll Hippo *profile* code starts with.
 ///
-/// A version on from [kShareCodePrefix], and a different thing: that one is a
-/// set of dice, and this is the whole picker — which mode it is in, what is in
-/// the rack, what the shoe is made of, and what its owner calls it. A build
-/// that only knows how to read the old one will decline this outright rather
-/// than decode two thirds of it, which is what the version is for.
-const String kProfileCodePrefix = 'RH2:';
+/// Two versions on from [kShareCodePrefix], and a different thing: that one is
+/// a set of dice, and this is the whole picker — which mode it is in, what is
+/// in the rack, what the shoes are made of, and what its owner calls it. A
+/// build that only knows how to read an older one declines this outright
+/// rather than decode two thirds of it, which is what the version is for.
+const String kProfileCodePrefix = 'RH3:';
+
+/// The profile code this app used to write, and still reads.
+///
+/// Identical to [kProfileCodePrefix] but for its shoes: an `RH2:` code carries
+/// one, as the only one there was, where an `RH3:` carries up to three. It is
+/// read and never written, which costs a branch in [decodeProfile] and means a
+/// code somebody saved to a photo or printed on a card still opens. The other
+/// direction is not available and is not meant to be: an `RH2:` reader that
+/// took an `RH3:` code would silently drop two of its shoes, which is the
+/// whole reason the version is in the prefix.
+const String kProfileCodeV2Prefix = 'RH2:';
 
 /// A profile read off somebody else's screen.
 ///
@@ -94,23 +105,21 @@ class ScannedProfile {
 
 /// A whole profile, small enough to put in a QR code.
 ///
-/// Header first, because it is fixed width and every code has one: the mode,
-/// the two numbers the shoe is made of, and the card's own dice as palette
-/// indices. Then the sets of dice, in exactly the bytes [encodeGroups] would
-/// have written. Then the name, which goes last because it is the only part
-/// whose length nobody can predict.
+/// The mode first, then the shoes, then the sets of dice in exactly the bytes
+/// [encodeGroups] would have written, then the name — which goes last because
+/// it is the only part whose length nobody can predict.
 ///
-/// A full house — three sets of ten, three cards, a twelve-character name —
-/// comes to 55 bytes, which is 76 characters of base64 and a QR code still
-/// coarse enough to read across a table.
+/// A shoe is its own little run for the same reason a group of dice is: a
+/// count and then that many of a thing, so the reader never has to know how
+/// many there were going to be. Three dice, two numbers and a length is five
+/// bytes at the most, so three shoes cost fifteen where one cost five.
+///
+/// A full house — three sets of ten dice, three shoes of three cards, a
+/// twelve-character name — comes to 65 bytes, which is 88 characters of
+/// base64 and a QR code still coarse enough to read across a table.
 String encodeProfile(Profile profile, {String name = ''}) {
-  final List<int> bytes = <int>[
-    profile.mode.index,
-    profile.decks,
-    profile.reshuffleAt,
-    profile.colours.length,
-    for (final int colour in profile.colours) _paletteIndex(colour),
-  ];
+  final List<int> bytes = <int>[profile.mode.index];
+  _writeCards(bytes, profile.cards);
   _writeGroups(bytes, profile.groups);
   final List<int> label = utf8.encode(name);
   bytes
@@ -130,7 +139,8 @@ String encodeProfile(Profile profile, {String name = ''}) {
 /// for. See `PickerScreen._apply`.
 ScannedProfile? decodeProfile(String text) {
   final String trimmed = text.trim();
-  if (!trimmed.startsWith(kProfileCodePrefix)) return null;
+  final bool v2 = trimmed.startsWith(kProfileCodeV2Prefix);
+  if (!v2 && !trimmed.startsWith(kProfileCodePrefix)) return null;
 
   final Uint8List bytes;
   try {
@@ -138,23 +148,17 @@ ScannedProfile? decodeProfile(String text) {
   } on FormatException {
     return null;
   }
-  // The header, and at least one colour: a card with no dice on it is not a
-  // profile this build has ever produced.
+  // The mode, and enough after it to be a shoe. Anything shorter is not a code
+  // this build or the one before it has ever produced.
   if (bytes.length < 5) return null;
 
   int at = 0;
   final int mode = bytes[at++];
   if (mode >= ProfileMode.values.length) return null;
-  final int decks = bytes[at++];
-  final int reshuffleAt = bytes[at++];
-  final int cardDice = bytes[at++];
-  if (cardDice == 0 || at + cardDice > bytes.length) return null;
-  final List<int> colours = <int>[];
-  for (int i = 0; i < cardDice; i++) {
-    final int index = bytes[at++];
-    if (index >= kDicePalette.length) return null;
-    colours.add(kDicePalette[index]);
-  }
+
+  final _Cards? cards = v2 ? _readCardsV2(bytes, at) : _readCards(bytes, at);
+  if (cards == null) return null;
+  at = cards.end;
 
   final _Groups? read = _readGroups(bytes, at);
   if (read == null) return null;
@@ -177,11 +181,79 @@ ScannedProfile? decodeProfile(String text) {
     profile: Profile(
       mode: ProfileMode.values[mode],
       groups: read.groups,
-      colours: colours,
-      decks: decks,
-      reshuffleAt: reshuffleAt,
+      cards: cards.cards,
     ),
   );
+}
+
+/// The shoes, and where they stopped.
+class _Cards {
+  const _Cards(this.cards, this.end);
+
+  final List<CardSet> cards;
+  final int end;
+}
+
+void _writeCards(List<int> bytes, List<CardSet> cards) {
+  bytes.add(cards.length);
+  for (final CardSet shoe in cards) {
+    bytes
+      ..add(shoe.colours.length)
+      ..addAll(<int>[
+        for (final int colour in shoe.colours) _paletteIndex(colour),
+      ])
+      ..add(shoe.decks)
+      ..add(shoe.reshuffleAt);
+  }
+}
+
+_Cards? _readCards(Uint8List bytes, int at) {
+  if (at >= bytes.length) return null;
+  final int count = bytes[at++];
+  final List<CardSet> cards = <CardSet>[];
+  for (int c = 0; c < count; c++) {
+    if (at >= bytes.length) return null;
+    final int dice = bytes[at++];
+    // Two numbers follow the colours, and a shoe with neither is a truncated
+    // code rather than a short one.
+    if (at + dice + 2 > bytes.length) return null;
+    final List<int> colours = <int>[];
+    for (int d = 0; d < dice; d++) {
+      final int index = bytes[at++];
+      if (index >= kDicePalette.length) return null;
+      colours.add(kDicePalette[index]);
+    }
+    cards.add(
+      CardSet(colours: colours, decks: bytes[at++], reshuffleAt: bytes[at++]),
+    );
+  }
+  return _Cards(cards, at);
+}
+
+/// The one shoe an `RH2:` code carries, read into the list of them this build
+/// works in.
+///
+/// The old header put its two numbers *before* the colours rather than after,
+/// which is the whole of the difference and the reason this is a separate
+/// reader rather than a flag inside the other one. It comes back as a single
+/// shoe: the two the code has no room for arrive empty, exactly as they would
+/// on a phone where nobody had started them.
+_Cards? _readCardsV2(Uint8List bytes, int at) {
+  final int decks = bytes[at++];
+  final int reshuffleAt = bytes[at++];
+  final int dice = bytes[at++];
+  if (dice == 0 || at + dice > bytes.length) return null;
+  final List<int> colours = <int>[];
+  for (int i = 0; i < dice; i++) {
+    final int index = bytes[at++];
+    if (index >= kDicePalette.length) return null;
+    colours.add(kDicePalette[index]);
+  }
+  return _Cards(<CardSet>[
+    CardSet(colours: colours, decks: decks, reshuffleAt: reshuffleAt),
+    for (int i = 1; i < kMaxCardSets; i++)
+      const CardSet(colours: <int>[], decks: 1, reshuffleAt: 0),
+  ], at);
 }
 
 /// The sets of dice, and where they stopped. Both codes carry them the same

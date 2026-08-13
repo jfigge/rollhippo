@@ -7,6 +7,7 @@ import 'package:rollhippo/app/picker_screen.dart';
 import 'package:rollhippo/app/profile_row.dart';
 import 'package:rollhippo/app/settings.dart';
 import 'package:rollhippo/app/tray_screen.dart';
+import 'package:rollhippo/app/tutorial.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/render/die_preview.dart';
 import 'package:rollhippo/tray/tray.dart';
@@ -31,7 +32,7 @@ List<DieSpec> rackOf(WidgetTester tester, int group) => <DieSpec>[
 /// A [PageView] only builds the page it is showing, so this is the only way to
 /// look at what is in the second set.
 Future<void> swipeLeft(WidgetTester tester) async {
-  await tester.drag(find.byType(PageView), const Offset(-300, 0));
+  await tester.drag(find.byKey(kRack), const Offset(-300, 0));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
 }
@@ -863,9 +864,15 @@ ScannedProfile scanned(List<List<DieSpec>> groups, {String name = ''}) =>
       profile: Profile(
         mode: ProfileMode.dice,
         groups: groups,
-        colours: const <int>[kDiceWhite, kDiceWhite],
-        decks: 2,
-        reshuffleAt: 5,
+        cards: <CardSet>[
+          CardSet(
+            colours: const <int>[kDiceWhite, kDiceWhite],
+            decks: 2,
+            reshuffleAt: 5,
+          ),
+          kEmptyShoe,
+          kEmptyShoe,
+        ],
       ),
     );
 

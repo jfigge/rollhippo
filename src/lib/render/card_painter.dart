@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
@@ -746,6 +747,49 @@ void _paintShadow(
 }
 
 /// Paints [table] whenever [repaint] says something about it has changed.
+/// The tables, side by side, with the row slid to wherever a swipe has got to.
+///
+/// The card side's [TrayPagesPainter], and the same one deliberately: the two
+/// screens page the same way, over the same gap, with the same dark between
+/// them, because they are two halves of one app and a swipe that felt
+/// different on one of them would read as a bug.
+class CardPagesPainter extends CustomPainter {
+  CardPagesPainter({
+    required this.tables,
+    required this.page,
+    required this.repaint,
+  }) : super(repaint: repaint);
+
+  /// One table per shoe, in the order they were set up.
+  final List<CardTable> tables;
+
+  /// How far along the row we are, in pages. A whole number is a table
+  /// squarely on screen; anything between is a swipe in flight.
+  final ValueListenable<double> page;
+
+  final Listenable repaint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double pitch =
+        size.width + Tuning.trayPageGap * Tuning.logicalPixelsPerMetre;
+    final double at = page.value;
+
+    canvas.clipRect(Offset.zero & size);
+    for (int i = 0; i < tables.length; i++) {
+      final double dx = (i - at) * pitch;
+      if (dx.abs() >= size.width) continue;
+      canvas.save();
+      canvas.translate(dx, 0);
+      paintCardScene(canvas, size, tables[i]);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(CardPagesPainter oldDelegate) => true;
+}
+
 class CardPainter extends CustomPainter {
   CardPainter({required this.table, required this.repaint})
     : super(repaint: repaint);

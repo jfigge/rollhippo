@@ -26,12 +26,29 @@ const int kMaxProfileName = 12;
 ///
 /// Not the name. That belongs to the save, not to the profile inside it,
 /// and is written a level up by [SavedProfile.toJson].
+///
+/// The shoes go out under `cards`, and the *first* of them goes out again
+/// under the three field names a single shoe used to have. That is not
+/// duplication for its own sake: a preferences file is read by whichever build
+/// is installed, and somebody who takes this version and then goes back — a
+/// TestFlight build, a downgrade, a phone restored from a backup — would
+/// otherwise find every save unreadable rather than merely short of two shoes.
+/// [profileFromJson] prefers `cards` and falls back to the old three, so the
+/// two directions cost one line each and neither one loses a save.
 Map<String, Object?> profileToJson(Profile profile) => <String, Object?>{
   'mode': profile.mode.name,
   'dice': encodeGroups(profile.groups),
-  'colours': profile.colours,
-  'decks': profile.decks,
-  'cut': profile.reshuffleAt,
+  'cards': <Object?>[
+    for (final CardSet shoe in profile.cards)
+      <String, Object?>{
+        'colours': shoe.colours,
+        'decks': shoe.decks,
+        'cut': shoe.reshuffleAt,
+      },
+  ],
+  'colours': profile.cards.first.colours,
+  'decks': profile.cards.first.decks,
+  'cut': profile.cards.first.reshuffleAt,
 };
 
 /// What [profileToJson] wrote, or null for anything this build cannot read.
@@ -46,13 +63,8 @@ Profile? profileFromJson(Object? source) {
   if (dice is! String) return null;
   final List<List<DieSpec>>? groups = decodeGroups(dice);
   if (groups == null) return null;
-  final Object? stored = source['colours'];
-  if (stored is! List) return null;
-  final List<int> colours = stored.whereType<int>().toList();
-  if (colours.isEmpty || colours.length != stored.length) return null;
-  final Object? decks = source['decks'];
-  final Object? cut = source['cut'];
-  if (decks is! int || cut is! int) return null;
+  final List<CardSet>? cards = _cardsFromJson(source);
+  if (cards == null) return null;
   return Profile(
     // Anything that is not the card page is the dice page. A mode this build
     // has never heard of is not worth refusing the whole profile over.
@@ -61,10 +73,52 @@ Profile? profileFromJson(Object? source) {
             ? ProfileMode.cards
             : ProfileMode.dice,
     groups: groups,
-    colours: colours,
-    decks: decks,
-    reshuffleAt: cut,
+    cards: cards,
   );
+}
+
+/// The shoes, from either shape of save.
+///
+/// `cards` if it is there, and the single shoe the three old fields describe
+/// if it is not — which is every save written before there were three of them,
+/// and is why a phone that has had this app for a year opens on the shoe it
+/// had rather than on a default. Null for a save that has neither, which
+/// [profileFromJson] drops.
+List<CardSet>? _cardsFromJson(Map<String, Object?> source) {
+  final Object? stored = source['cards'];
+  if (stored is List) {
+    final List<CardSet> cards = <CardSet>[];
+    for (final Object? entry in stored) {
+      final CardSet? shoe = _cardFromJson(entry);
+      if (shoe == null) return null;
+      cards.add(shoe);
+    }
+    // The first shoe is the one the picker will not let you empty, so a file
+    // claiming otherwise is one this build cannot put on screen.
+    if (cards.isEmpty || cards.first.isEmpty) return null;
+    return cards;
+  }
+  final CardSet? only = _cardFromJson(source);
+  if (only == null || only.isEmpty) return null;
+  return <CardSet>[
+    only,
+    for (int i = 1; i < kMaxCardSets; i++)
+      const CardSet(colours: <int>[], decks: 1, reshuffleAt: 0),
+  ];
+}
+
+/// One shoe, from the three fields it is written as — at the top level of an
+/// old save, and inside each entry of `cards` in a new one.
+CardSet? _cardFromJson(Object? source) {
+  if (source is! Map<String, Object?>) return null;
+  final Object? stored = source['colours'];
+  if (stored is! List) return null;
+  final List<int> colours = stored.whereType<int>().toList();
+  if (colours.length != stored.length) return null;
+  final Object? decks = source['decks'];
+  final Object? cut = source['cut'];
+  if (decks is! int || cut is! int) return null;
+  return CardSet(colours: colours, decks: decks, reshuffleAt: cut);
 }
 
 /// One profile, named and kept.

@@ -20,9 +20,11 @@ void main() {
     groups: <List<DieSpec>>[
       <DieSpec>[white],
     ],
-    colours: <int>[kDiceWhite],
-    decks: 1,
-    reshuffleAt: 0,
+    cards: <CardSet>[
+      CardSet(colours: <int>[kDiceWhite], decks: 1, reshuffleAt: 0),
+      kEmptyShoe,
+      kEmptyShoe,
+    ],
   );
 
   /// Puts a scanner over a screen that says HOME, and collects whatever it

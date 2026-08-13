@@ -552,55 +552,63 @@ class _TrayScreenState extends State<TrayScreen>
                       child: SafeArea(
                         bottom: false,
                         minimum: const EdgeInsets.only(top: 44),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: <Widget>[
-                              TrayButton(
-                                label: 'Close',
-                                onTap: () => Navigator.of(context).pop(),
+                        // The clock rides *in* the row, between the two
+                        // buttons; the dots go under the whole of it. Both
+                        // were children of one column in the middle of the
+                        // row once, and that is a row whose height is the
+                        // taller of them: turning the timer on with more than
+                        // one box moved Close and Throw down the screen by
+                        // half the height of a dot. A row that changes height
+                        // when something optional appears inside it is a row
+                        // that moves everything it contains.
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
                               ),
-                              // What the screen is telling you, between the
-                              // two things it is asking you to press: the
-                              // clock, and under it the dots. Both are
-                              // optional and either can be missing, and with
-                              // both gone this is an empty column — which
-                              // `spaceBetween` lays out exactly as the two
-                              // buttons on their own always were.
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: <Widget>[
+                                  TrayButton(
+                                    label: 'Close',
+                                    onTap: () => Navigator.of(context).pop(),
+                                  ),
                                   // Read here rather than obeyed lower down.
                                   // The setting lives behind the picker, a
                                   // screen away, so it cannot change while a
                                   // tray is up — the same bargain
-                                  // [_RollPrompt] makes with `motion`.
+                                  // [_RollPrompt] makes with `motion`. Left
+                                  // out entirely when it is off, which lays
+                                  // the row out exactly as the two buttons on
+                                  // their own always were.
                                   if (settings.timer)
                                     ElapsedTimer(
                                       key: kElapsedTimer,
                                       seconds: _clock,
                                       limit: settings.limit,
                                     ),
-                                  if (paged)
-                                    PageDots(
-                                      key: kTrayDots,
-                                      current: _at,
-                                      filled: List<bool>.filled(
-                                        _boxes.length,
-                                        true,
-                                      ),
-                                    ),
+                                  TrayButton(
+                                    key: kTrayThrow,
+                                    label: 'Throw',
+                                    onTap: _throwCurrent,
+                                    emphasis: true,
+                                  ),
                                 ],
                               ),
-                              TrayButton(
-                                key: kTrayThrow,
-                                label: 'Throw',
-                                onTap: _throwCurrent,
-                                emphasis: true,
+                            ),
+                            // Under the row rather than in it, and centred on
+                            // the screen rather than on wherever `spaceBetween`
+                            // would have put a middle child.
+                            if (paged)
+                              PageDots(
+                                key: kTrayDots,
+                                current: _at,
+                                filled: List<bool>.filled(_boxes.length, true),
                               ),
-                            ],
-                          ),
+                          ],
                         ),
                       ),
                     ),
@@ -635,7 +643,8 @@ class _Box {
   bool alerted = false;
 
   /// Seconds since this group was last thrown, and meaningless until [thrown]
-  /// — which is what the clock reads as nothing at all rather than as 0:00.
+  /// — which is what the clock draws as a stopped `0:00` rather than as a
+  /// count, and what keeps an unthrown group from ever running out of time.
   /// Per box rather than one for the screen, because a group is its own roll:
   /// throwing the set beside this one says nothing about how long ago this one
   /// was thrown.

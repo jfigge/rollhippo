@@ -120,19 +120,25 @@ typedef TutorialBackdrop = Widget Function(TutorialStage stage);
 const Profile kTutorialProfile = Profile(
   mode: ProfileMode.dice,
   groups: _kTutorialGroups,
-  colours: _kTutorialCard,
-  decks: 2,
-  reshuffleAt: 5,
+  cards: _kTutorialShoes,
 );
 
 /// The same set-up, on the other page. See [TutorialStage.cards].
 const Profile kTutorialCards = Profile(
   mode: ProfileMode.cards,
   groups: _kTutorialGroups,
-  colours: _kTutorialCard,
-  decks: 2,
-  reshuffleAt: 5,
+  cards: _kTutorialShoes,
 );
+
+/// One shoe with a card in it, and two nobody has started — which is the shape
+/// the picker opens on, and so the shape the page about it should show. The
+/// tour is a picture of the app in use, and an app in use has not filled in
+/// everything it could.
+const List<CardSet> _kTutorialShoes = <CardSet>[
+  CardSet(colours: _kTutorialCard, decks: 2, reshuffleAt: 5),
+  kEmptyShoe,
+  kEmptyShoe,
+];
 
 const List<List<DieSpec>> _kTutorialGroups = <List<DieSpec>>[
   <DieSpec>[

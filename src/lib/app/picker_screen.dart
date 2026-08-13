@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -97,6 +98,13 @@ const double kDotsBand = 26;
 /// can tell which one it has hold of. One counts the sets of dice, the other
 /// counts the modes.
 const Key kGroupDots = ValueKey<String>('group-dots');
+
+/// The card page's rack, and the dots that count its shoes — [kRack] and
+/// [kGroupDots]'s opposite numbers, and named for the same two reasons: a
+/// swipe test has to be able to find the thing it is swiping, and the
+/// tutorial points at one of them.
+const Key kCardRack = ValueKey<String>('card-rack');
+const Key kShoeDots = ValueKey<String>('shoe-dots');
 const Key kModeDots = ValueKey<String>('mode-dots');
 
 /// The two modes' pages. Both are built at all times — the dice page sets the
@@ -150,10 +158,32 @@ const List<DieSpec> kDefaultDice = <DieSpec>[
 const Profile kDefaultProfile = Profile(
   mode: ProfileMode.dice,
   groups: <List<DieSpec>>[kDefaultDice, <DieSpec>[], <DieSpec>[]],
-  colours: <int>[kDiceWhite, kDiceWhite],
-  decks: 2,
-  reshuffleAt: 5,
+  cards: <CardSet>[
+    CardSet(colours: <int>[kDiceWhite, kDiceWhite], decks: 2, reshuffleAt: 5),
+    kEmptyShoe,
+    kEmptyShoe,
+  ],
 );
+
+/// The shoes worth dealing from, in the order they were set up.
+///
+/// [rollableGroups] for the card page, and empty for the same reason: a shoe
+/// with nothing printed on its card is one you never started, so it is not a
+/// table to swipe to either.
+List<CardSet> rollableCards(List<CardSet> cards) => <CardSet>[
+  for (final CardSet shoe in cards)
+    if (shoe.isNotEmpty) shoe,
+];
+
+/// Where [shoe] ends up once the empty shoes have been dropped. See
+/// [rollableIndex], which answers the same question about a set of dice.
+int rollableCardIndex(List<CardSet> cards, int shoe) {
+  int index = 0;
+  for (int i = 0; i < shoe && i < cards.length; i++) {
+    if (cards[i].isNotEmpty) index++;
+  }
+  return index;
+}
 
 /// The groups worth throwing, deep-copied, in the order they were set up.
 ///
@@ -283,16 +313,36 @@ class _PickerScreenState extends State<PickerScreen>
   /// would have to be kept in step. Only the colours vary: every one of them
   /// is a D6, since a deck of every outcome only makes sense for dice that all
   /// have the same faces.
-  final List<int> _cardColours = List<int>.of(kDefaultProfile.colours);
+  /// The three shoes, exactly as [_groups] holds the three sets of dice: the
+  /// first always has a die on its card, the other two start with none and are
+  /// allowed to go back to none, because an empty shoe is how you say you only
+  /// wanted one.
+  ///
+  /// Three parallel lists rather than three [CardSet]s, for the reason
+  /// [_groups] is a list of mutable lists: the picker edits one field at a
+  /// time under a thumb, and a value type would be rebuilt on every drag of
+  /// the reshuffle slider. They are gathered into `CardSet`s by [_capture],
+  /// which is the only thing that hands them to anybody else.
+  final List<List<int>> _shoeColours = <List<int>>[
+    List<int>.of(kDefaultProfile.cards.first.colours),
+    <int>[],
+    <int>[],
+  ];
+  final List<int> _shoeDecks = <int>[
+    for (final CardSet shoe in kDefaultProfile.cards) shoe.decks,
+  ];
+  final List<int> _shoeCut = <int>[
+    for (final CardSet shoe in kDefaultProfile.cards) shoe.reshuffleAt,
+  ];
 
-  /// Which of them the swatches are pointed at, exactly as [_selectedIn] does
-  /// for a group of real dice. Card mode always has at least one die, so this
-  /// always names a real one.
-  int _cardSelected = 0;
+  /// Which die of each card the swatches are pointed at, exactly as
+  /// [_selectedIn] does for a group of real dice.
+  final List<int> _cardSelectedIn = List<int>.filled(kMaxCardSets, 0);
 
-  /// What the shoe is made of.
-  int _decks = kDefaultProfile.decks;
-  int _reshuffleAt = kDefaultProfile.reshuffleAt;
+  /// Which shoe is on screen. [_group]'s opposite number.
+  int _shoe = 0;
+
+  final PageController _shoeRacks = PageController();
 
   /// Which save the picker was last opened from or saved to, by id, or null
   /// when what is on screen has come from neither. It lights that profile; it does
@@ -300,11 +350,37 @@ class _PickerScreenState extends State<PickerScreen>
   /// edit nobody has saved. See [_saveTo].
   int? _saved;
 
+  /// The shoe on screen. Everything on the card page is about this one, which
+  /// is what lets the panel below it go on being written as though there were
+  /// only ever the one.
+  List<int> get _cardColours => _shoeColours[_shoe];
+  int get _cardSelected => _cardSelectedIn[_shoe];
+  int get _decks => _shoeDecks[_shoe];
+  int get _reshuffleAt => _shoeCut[_shoe];
+
+  /// The first shoe is *the* shoe and cannot be emptied; the others can, which
+  /// is the only way to say you have finished with one. [_floor]'s opposite
+  /// number.
+  int get _cardFloor => _shoe == 0 ? 1 : 0;
+
+  /// How many shoes have a card in them — which is how many tables Deal will
+  /// open, and so what the panel counts this one out of.
+  int get _startedShoes =>
+      _shoeColours.where((List<int> colours) => colours.isNotEmpty).length;
+
+  /// Where the shoe on screen sits among the started ones. [rollableCardIndex]
+  /// asked of the picker's own state, so that the panel does not have to build
+  /// a whole profile to letter its heading.
+  int get _shoeNumber {
+    int index = 0;
+    for (int i = 0; i < _shoe; i++) {
+      if (_shoeColours[i].isNotEmpty) index++;
+    }
+    return index;
+  }
+
   /// How many dice a card stands for.
   int get _cardDice => _cardColours.length;
-
-  /// The die in slot [i] of the card: a D6 in whatever colour it was given.
-  DieSpec _cardSpec(int i) => kCardDie.copyWith(colour: _cardColours[i]);
 
   /// The group on screen. Everything below the rack is about this one.
   List<DieSpec> get _dice => _groups[_group];
@@ -385,9 +461,14 @@ class _PickerScreenState extends State<PickerScreen>
     groups: <List<DieSpec>>[
       for (final List<DieSpec> group in _groups) List<DieSpec>.of(group),
     ],
-    colours: List<int>.of(_cardColours),
-    decks: _decks,
-    reshuffleAt: _reshuffleAt,
+    cards: <CardSet>[
+      for (int shoe = 0; shoe < kMaxCardSets; shoe++)
+        CardSet(
+          colours: List<int>.of(_shoeColours[shoe]),
+          decks: _shoeDecks[shoe],
+          reshuffleAt: _shoeCut[shoe],
+        ),
+    ],
   );
 
   /// Puts what is on screen into [save] — Save, from a profile's own menu.
@@ -454,18 +535,26 @@ class _PickerScreenState extends State<PickerScreen>
   /// already where this would put them.
   void _load(Profile profile) {
     _takeGroups(profile.groups);
-    _cardColours
-      ..clear()
-      ..addAll(profile.colours.take(kMaxCardDice));
-    // The last die always stays — a shoe with no dice in it is not a shoe —
-    // so a profile that says otherwise gets the one card mode starts
-    // with rather than a panel with nothing to point at.
-    if (_cardColours.isEmpty) _cardColours.add(kCardDie.colour);
-    _cardSelected = 0;
-    _decks = profile.decks.clamp(1, kMaxDecks);
-    _reshuffleAt = profile.reshuffleAt.clamp(0, kMaxReshuffleAt);
+    _takeCards(profile.cards);
     _mode = profile.mode;
     _group = 0;
+    _shoe = 0;
+  }
+
+  /// Takes a set of shoes onto the card page, held to the picker's limits.
+  /// [_takeGroups]'s opposite number, and the same shape of thing.
+  void _takeCards(List<CardSet> from) {
+    for (int shoe = 0; shoe < kMaxCardSets; shoe++) {
+      final CardSet set = shoe < from.length ? from[shoe] : kEmptyShoe;
+      _shoeColours[shoe] = <int>[...set.colours.take(kMaxCardDice)];
+      _shoeDecks[shoe] = set.decks.clamp(1, kMaxDecks);
+      _shoeCut[shoe] = set.reshuffleAt.clamp(0, kMaxReshuffleAt);
+      _cardSelectedIn[shoe] = 0;
+    }
+    // The same floor [_cardFloor] holds everywhere else: the first shoe is
+    // *the* shoe, and a profile that says otherwise gets the one card mode
+    // starts with rather than a panel with nothing to point at.
+    if (_shoeColours[0].isEmpty) _shoeColours[0] = <int>[kCardDie.colour];
   }
 
   /// Takes a set of groups into the rack, held to the picker's limits. Call
@@ -596,8 +685,12 @@ class _PickerScreenState extends State<PickerScreen>
     if (_cardDice >= kMaxCardDice) return;
     _edited();
     setState(() {
-      _cardColours.add(_cardColours.last);
-      _cardSelected = _cardColours.length - 1;
+      // A shoe nobody has started has nothing to match, so the first die of
+      // one is the ivory a card die is unless you say otherwise.
+      _cardColours.add(
+        _cardColours.isEmpty ? kCardDie.colour : _cardColours.last,
+      );
+      _cardSelectedIn[_shoe] = _cardColours.length - 1;
     });
   }
 
@@ -608,11 +701,14 @@ class _PickerScreenState extends State<PickerScreen>
   /// colours they were, not shuffle the third one's colour up into its place.
   /// One die always stays — a shoe with no dice in it is not a shoe.
   void _removeCardDie() {
-    if (_cardDice <= 1) return;
+    if (_cardDice <= _cardFloor) return;
     _edited();
     setState(() {
       _cardColours.removeAt(_cardSelected);
-      _cardSelected = _cardSelected.clamp(0, _cardColours.length - 1);
+      _cardSelectedIn[_shoe] = _cardSelected.clamp(
+        0,
+        math.max(0, _cardColours.length - 1),
+      );
     });
   }
 
@@ -620,7 +716,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// as the rack next door is, and for the reason given there — see [_select].
   void _selectCardDie(int index) {
     _edited();
-    setState(() => _cardSelected = index);
+    setState(() => _cardSelectedIn[_shoe] = index);
   }
 
   /// Paints the selected die of the card.
@@ -629,6 +725,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// leave its editor talking about nothing, and card mode cannot — the last
   /// die always stays — so there is always a die here for a swatch to land on.
   void _setCardColour(int colour) {
+    if (_cardColours.isEmpty) return;
     _edited();
     setState(() => _cardColours[_cardSelected] = colour);
   }
@@ -636,7 +733,7 @@ class _PickerScreenState extends State<PickerScreen>
   /// How many decks are shuffled together into the shoe.
   void _setDecks(int decks) {
     _edited();
-    setState(() => _decks = decks);
+    setState(() => _shoeDecks[_shoe] = decks);
   }
 
   /// How little is left when the shoe goes back together.
@@ -659,7 +756,7 @@ class _PickerScreenState extends State<PickerScreen>
     final int at = value.round();
     if (at == _reshuffleAt) return;
     _edited();
-    setState(() => _reshuffleAt = at);
+    setState(() => _shoeCut[_shoe] = at);
   }
 
   /// Commits to a mode and lets the block coast the rest of the way there.
@@ -859,14 +956,17 @@ class _PickerScreenState extends State<PickerScreen>
 
   void _roll() {
     if (_cards) {
+      final List<CardSet> shoes = rollableCards(_capture().cards);
+      if (shoes.isEmpty) return;
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder:
               (BuildContext context) => CardScreen(
-                dice: _cardDice,
-                decks: _decks,
-                reshuffleAt: _reshuffleAt,
-                colours: List<int>.of(_cardColours),
+                shoes: shoes,
+                initial: rollableCardIndex(
+                  _capture().cards,
+                  _shoe,
+                ).clamp(0, shoes.length - 1),
               ),
         ),
       );
@@ -1085,10 +1185,65 @@ class _PickerScreenState extends State<PickerScreen>
   /// other.
   Widget _cardsPage(double width) => Column(
     children: <Widget>[
-      _cardRack(),
+      _cardRacksView(),
+      _cardDots(),
       const Spacer(),
       _swipeable(_cardPanel(), width),
     ],
+  );
+
+  /// The three shoes' racks, one on screen. [_racksView]'s opposite number,
+  /// and the reason the card rack is a page rather than a row: a shoe is set
+  /// up the way a set of dice is, and swiped between the same way.
+  ///
+  /// Its height is the one row a card rack uses, worked out from the width
+  /// the same way [_rackHeight] works out two.
+  Widget _cardRacksView() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return SizedBox(
+          key: kCardRack,
+          height: _cardRackHeight(constraints.maxWidth),
+          child: PageView(
+            controller: _shoeRacks,
+            onPageChanged: (int page) => setState(() => _shoe = page),
+            children: <Widget>[
+              for (int shoe = 0; shoe < kMaxCardSets; shoe++) _cardRack(shoe),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// One row of square slots, laid out exactly as the first row of the dice
+  /// rack is — see [_rackHeight], which is this twice over plus the gap.
+  double _cardRackHeight(double width) =>
+      ((width - 2 * kRackMargin) / kRackColumns - 2 * kRackGutter + kRackRowGap)
+          .clamp(0.0, double.infinity);
+
+  /// Where you are among the three shoes, and which of them have a card.
+  /// [_dots]'s opposite number, in the same place under the rack.
+  Widget _cardDots() {
+    return SizedBox(
+      height: kDotsBand,
+      child: Center(
+        child: PageDots(
+          key: kShoeDots,
+          current: _shoe,
+          filled: <bool>[
+            for (final List<int> colours in _shoeColours) colours.isNotEmpty,
+          ],
+          onTap: _goToShoe,
+        ),
+      ),
+    );
+  }
+
+  void _goToShoe(int shoe) => _shoeRacks.animateToPage(
+    shoe,
+    duration: const Duration(milliseconds: 260),
+    curve: Curves.easeOutCubic,
   );
 
   /// Arms [child] as the handle the two modes are dragged by.
@@ -1126,11 +1281,18 @@ class _PickerScreenState extends State<PickerScreen>
   /// does not have is the second row — three dice never reach it — and that is
   /// deliberately a row of nothing rather than a row of empty slots: it is the
   /// space [_cardsPage] spends on a panel with a slider in it.
-  Widget _cardRack() {
+  Widget _cardRack(int shoe) {
+    final List<int> colours = _shoeColours[shoe];
+    final int selected = _cardSelectedIn[shoe];
     // The same plus the dice rack has, in the same place: the last slot of the
     // three, until the third die lands in it.
-    final int adder = _cardDice < kMaxCardDice ? kMaxCardDice - 1 : -1;
+    final int adder = colours.length < kMaxCardDice ? kMaxCardDice - 1 : -1;
     return Padding(
+      // The key a page view is entitled to, exactly as [_rack] has — but a
+      // string rather than an int, because there are two page views in this
+      // tree now and `ValueKey<int>(0)` would name the first page of both.
+      // Anything looking for one set's dice would find the other's as well.
+      key: ValueKey<String>('shoe-$shoe'),
       padding: const EdgeInsets.symmetric(horizontal: kRackMargin),
       child: Column(
         children: <Widget>[
@@ -1155,8 +1317,18 @@ class _PickerScreenState extends State<PickerScreen>
                               i < kMaxCardDice
                                   ? _RackSlot(
                                     key: i == adder ? kAddDie : null,
-                                    spec: i < _cardDice ? _cardSpec(i) : null,
-                                    selected: i == _cardSelected,
+                                    // This shoe's dice and this shoe's
+                                    // selection, not the ones on screen: a
+                                    // page view builds its neighbours too, and
+                                    // three racks drawing the current shoe's
+                                    // card would be the same rack three times.
+                                    spec:
+                                        i < colours.length
+                                            ? kCardDie.copyWith(
+                                              colour: colours[i],
+                                            )
+                                            : null,
+                                    selected: i == selected,
                                     adds: i == adder,
                                     // Tappable, and selected the same way the
                                     // dice rack is: the swatches below are
@@ -1169,7 +1341,7 @@ class _PickerScreenState extends State<PickerScreen>
                                     // is that slot; past three there is no
                                     // slot at all.
                                     onTap:
-                                        i < _cardDice
+                                        i < colours.length
                                             ? () => _selectCardDie(i)
                                             : i == adder
                                             ? _addCardDie
@@ -1190,6 +1362,13 @@ class _PickerScreenState extends State<PickerScreen>
   /// What the shoe is made of: how many decks are in it, and how deep it is
   /// cut before it goes back together.
   Widget _cardPanel() {
+    // A shoe nobody has started has no card to describe and no die for a
+    // swatch to land on, so the panel goes quiet rather than away — the same
+    // bargain [_editor] makes for an empty set of dice, and for the same
+    // reason: a panel that vanished would take the dots and the button below
+    // it a hundred points up the screen, under a finger that is in the middle
+    // of a swipe.
+    final bool empty = _cardColours.isEmpty;
     final int size = Deck.sizeOf(_cardDice, _decks);
     return Container(
       // The handle the two modes are dragged by, on the page that has the
@@ -1211,14 +1390,17 @@ class _PickerScreenState extends State<PickerScreen>
               // The title sits in the label column and the count starts where
               // the first deck button does, so the panel reads as two columns
               // rather than as three rows that happen to be stacked.
-              const SizedBox(
+              SizedBox(
                 width: _kFieldLabel,
                 child: Text(
-                  'Cards',
+                  empty ? 'No cards yet' : 'Cards',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Color(0xFFE8EEF6),
+                    color:
+                        empty
+                            ? const Color(0x66BFD0E4)
+                            : const Color(0xFFE8EEF6),
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1228,7 +1410,16 @@ class _PickerScreenState extends State<PickerScreen>
                 child: Padding(
                   padding: const EdgeInsets.only(left: _kChipMargin),
                   child: Text(
-                    '($size in the shoe)',
+                    // Which shoe, once there is more than one to be — the dots
+                    // above say which page you are on, not how many of the
+                    // three you have started. Counted the way the table counts
+                    // them, so a started shoe with an empty one before it is
+                    // numbered as the swipe there will number it.
+                    empty
+                        ? ''
+                        : _startedShoes > 1
+                        ? 'Shoe ${_shoeNumber + 1}/$_startedShoes · $size cards'
+                        : '($size in the shoe)',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1239,89 +1430,111 @@ class _PickerScreenState extends State<PickerScreen>
                   ),
                 ),
               ),
-              _RemoveButton(onPressed: _cardDice > 1 ? _removeCardDie : null),
+              _RemoveButton(
+                onPressed: _cardDice > _cardFloor ? _removeCardDie : null,
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          // The same swatches the die editor has, in the same place under the
-          // panel's title, doing the same thing to the die the rack above has
-          // a ring round.
-          //
-          // Across the whole panel rather than in the label column the two
-          // rows below keep to: eight of them do not fit beside a label on a
-          // narrow phone, and a swatch row that wrapped there would make this
-          // panel a different height on different handsets.
-          Wrap(
-            spacing: 5,
-            runSpacing: 6,
-            children: <Widget>[
-              for (final int colour in kDicePalette)
-                _Swatch(
-                  colour: colour,
-                  selected: colour == _cardColours[_cardSelected],
-                  onTap: () => _setCardColour(colour),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              const SizedBox(width: _kFieldLabel, child: _FieldLabel('Decks')),
-              for (int n = 1; n <= kMaxDecks; n++)
-                Expanded(
-                  child: _Chip(
-                    label: '$n',
-                    selected: n == _decks,
-                    onTap: () => _setDecks(n),
+          // The controls fade together and stop taking taps rather than each
+          // being told separately that it is disabled — there is one reason
+          // they are all off, and it is not about any of them.
+          IgnorePointer(
+            ignoring: empty,
+            child: Opacity(
+              opacity: empty ? 0.38 : 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // The same swatches the die editor has, in the same place under the
+                  // panel's title, doing the same thing to the die the rack above has
+                  // a ring round.
+                  //
+                  // Across the whole panel rather than in the label column the two
+                  // rows below keep to: eight of them do not fit beside a label on a
+                  // narrow phone, and a swatch row that wrapped there would make this
+                  // panel a different height on different handsets.
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 6,
+                    children: <Widget>[
+                      for (final int colour in kDicePalette)
+                        _Swatch(
+                          colour: colour,
+                          selected:
+                              !empty && colour == _cardColours[_cardSelected],
+                          onTap: () => _setCardColour(colour),
+                        ),
+                    ],
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              const SizedBox(
-                width: _kFieldLabel,
-                child: _FieldLabel('Reshuffle'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: <Widget>[
+                      const SizedBox(
+                        width: _kFieldLabel,
+                        child: _FieldLabel('Decks'),
+                      ),
+                      for (int n = 1; n <= kMaxDecks; n++)
+                        Expanded(
+                          child: _Chip(
+                            label: '$n',
+                            selected: n == _decks,
+                            onTap: () => _setDecks(n),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: <Widget>[
+                      const SizedBox(
+                        width: _kFieldLabel,
+                        child: _FieldLabel('Reshuffle'),
+                      ),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 3,
+                            overlayShape: const RoundSliderOverlayShape(
+                              overlayRadius: 14,
+                            ),
+                          ),
+                          child: Slider(
+                            key: kReshuffleSlider,
+                            value: _reshuffleAt.toDouble(),
+                            max: kMaxReshuffleAt.toDouble(),
+                            divisions: kMaxReshuffleAt,
+                            activeColor: const Color(0xFF3F6FA8),
+                            inactiveColor: const Color(0x22FFFFFF),
+                            onChanged: _setReshuffleAt,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        // Wide enough for the longest it gets, which is "<20%".
+                        width: 46,
+                        child: Text(
+                          // Below this much left, not above it: the shoe goes back
+                          // together when it is nearly out, and a bare number does not
+                          // say which way round that is.
+                          '<$_reshuffleAt%',
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Color(0xFFE8EEF6),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: <FontFeature>[
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 14,
-                    ),
-                  ),
-                  child: Slider(
-                    key: kReshuffleSlider,
-                    value: _reshuffleAt.toDouble(),
-                    max: kMaxReshuffleAt.toDouble(),
-                    divisions: kMaxReshuffleAt,
-                    activeColor: const Color(0xFF3F6FA8),
-                    inactiveColor: const Color(0x22FFFFFF),
-                    onChanged: _setReshuffleAt,
-                  ),
-                ),
-              ),
-              SizedBox(
-                // Wide enough for the longest it gets, which is "<20%".
-                width: 46,
-                child: Text(
-                  // Below this much left, not above it: the shoe goes back
-                  // together when it is nearly out, and a bare number does not
-                  // say which way round that is.
-                  '<$_reshuffleAt%',
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    color: Color(0xFFE8EEF6),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
