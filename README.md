@@ -17,7 +17,8 @@ left — and there is a cut card, at a percentage you set, for exactly that
 reason. Three dice across three decks is 648 cards.
 
 **Or throw one.** Pick a set of dice — up to ten of them, any mixture of D4
-through D20, each its own colour — into a box the size of the phone screen and
+through D20 plus a poker die, each its own colour — into a box the size of the
+phone screen and
 20 cm deep, and read what they landed on. They fall under gravity, bounce off
 the walls and off each other, and tumble when the phone is shaken.
 
@@ -101,6 +102,13 @@ serve as the bevel for all of them.
 | D10 | pentagonal trapezohedron | the only one that is not Platonic |
 | D12 | dodecahedron | |
 | D20 | icosahedron | |
+| Poker | cube | the D6's solid, printed with the six cards it stands for |
+
+The last is not new geometry, and that is the point of it: a poker die is a D6
+whose faces carry 9, 10, J, Q, K and A, printed as the cards themselves. It
+rolls exactly as fairly as a D6 because it *is* one; all that differs is what
+is printed on it, which is a `DiePrinting` on the style rather than anything
+the physics can see.
 
 None of their faces are transcribed by hand. Each shape is defined by its
 vertices alone, and `ConvexShape.fromVertices` *finds* the faces — every plane

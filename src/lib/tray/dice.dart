@@ -6,6 +6,13 @@ import '../physics/shape.dart';
 import 'tuning.dart';
 
 /// The dice a set can contain.
+///
+/// **The order of this list is the wire format.** `share_code.dart` writes a
+/// die as `kind.index << 4 | colour`, and the preferences file holds every
+/// saved profile's dice in exactly those bytes — so inserting a kind rather
+/// than appending one silently turns every stored hippopotamus into whatever
+/// took its number. New kinds go on the end, and the four bits leave room for
+/// sixteen of them.
 enum DieKind {
   d4(4),
   d6(6),
@@ -19,7 +26,15 @@ enum DieKind {
   ///
   /// Not offered until it is asked for by name: see [secret], and
   /// `kHippoProfile` for what the name is.
-  hippo(6, marked: 'Hippo');
+  hippo(6, marked: 'Hippo'),
+
+  /// A poker die: nine, ten, jack, queen, king and ace, printed as the card
+  /// faces they are — see `render/poker.dart`.
+  ///
+  /// A D6 underneath, exactly as [hippo] is, so it rolls as fairly as one.
+  /// Its faces carry 9 to 14 rather than 1 to 6, which is what puts an ace
+  /// above a king when anything compares two of them.
+  poker(6, marked: 'Poker');
 
   const DieKind(this.sides, {String? marked}) : _marked = marked;
 
@@ -29,6 +44,17 @@ enum DieKind {
   final String? _marked;
 
   String get label => _marked ?? 'D$sides';
+
+  /// The numbers this kind's faces carry, in ascending order.
+  ///
+  /// One to [sides] for most dice and stated rather than assumed, because one
+  /// of them counts otherwise: the poker die's ranks are 9 to 14, so that an
+  /// ace sorts above a king. Anything that wants to know what a reading can be
+  /// asks here rather than counting faces.
+  List<int> get numbers => switch (this) {
+    DieKind.poker => <int>[9, 10, 11, 12, 13, 14],
+    _ => <int>[for (int i = 1; i <= sides; i++) i],
+  };
 
   /// True of the kinds the picker keeps back until you have named a
   /// profile after them. The hippopotamus, and nothing else.
@@ -132,6 +158,12 @@ ConvexShape _build(DieKind kind) {
       return _shape(_dodecahedron());
     case DieKind.d20:
       return _shape(_icosahedron());
+    case DieKind.poker:
+      // The same cube as the D6 and a separate shape only so that the painter
+      // can tell the two apart — the hippopotamus's arrangement exactly, and
+      // for the same reason. What is printed on it is a card rather than a
+      // number, which is `paintPokerFace`'s business and not the solid's.
+      return _shape(_cube(), valueFor: _pokerValue);
     case DieKind.hippo:
       // The same cube as the D6, numbered the same way, and a separate shape
       // only so that the painter can tell the two apart.
@@ -147,6 +179,15 @@ ConvexShape _build(DieKind kind) {
       return _shape(_cube(), valueFor: _cubeValue);
   }
 }
+
+/// The poker die's numbering: the D6's, moved up so that a nine is a nine.
+///
+/// Nine, ten, jack, queen, king, ace against one to six, which keeps the
+/// cube's pairing — an ace lands opposite a nine the way a six lands opposite
+/// a one — and means the numbers a die reads out are in the order the ranks
+/// are, so anything that compares or sorts them is right without being told
+/// about cards.
+int _pokerValue(Vector3 n) => _cubeValue(n) + 8;
 
 /// The D6's numbering, which the hippo carved out of one keeps.
 ///

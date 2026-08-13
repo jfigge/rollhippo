@@ -1818,8 +1818,11 @@ class _Chip extends StatelessWidget {
         ),
         // Shrunk to fit rather than cut off, the same bargain the title makes.
         // Six chips of two or three characters fit any phone with room to
-        // spare; a seventh, with a word on it, does not — and a chip whose
-        // label had been ellipsed would be a chip you could not read.
+        // spare, and there are eight now — nine with the hippopotamus out —
+        // two of which have words on them. So on anything narrower than a
+        // 393-point phone the longest label starts to scale, which is what
+        // this is for: a chip whose label had been ellipsed would be a chip
+        // you could not read, where one set a point smaller is still a chip.
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(

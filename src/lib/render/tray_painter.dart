@@ -8,7 +8,14 @@ import 'package:vector_math/vector_math_64.dart' show Vector3;
 import '../physics/body.dart';
 import '../physics/shape.dart';
 import '../tray/tray.dart';
+import 'die_glyph.dart';
 import 'hippo.dart';
+import 'poker.dart';
+
+// The font seam belongs to the glyph cache now that two painters print text
+// on a die, but it was `tray_painter`'s for as long as the tools have been
+// setting it. They still ask here.
+export 'die_glyph.dart' show dieGlyphFont;
 
 /// Maps tray space to the screen.
 ///
@@ -62,37 +69,112 @@ TrayCamera cameraFor(Size size, double width, double height) => TrayCamera(
   centre: Offset(size.width / 2, size.height / 2),
 );
 
-/// How one die is painted: its body colour, the ink its numbers are in, and
-/// whether what gets painted is a hippopotamus.
-class DieStyle {
-  const DieStyle({required this.body, required this.ink, this.hippo = false});
+/// What is printed on a die's faces, when the face's own number is not it.
+enum DiePrinting {
+  /// The number, as it stands. Every die but the two below.
+  numerals,
 
-  /// Derives the ink from the body, because a die is only ever printed in
-  /// whichever of the two you can read against the other.
-  factory DieStyle.of(int colour, {bool hippo = false}) {
+  /// A hippopotamus, drawn inside the cube it is carved from — see
+  /// [paintHippo].
+  hippo,
+
+  /// The card the face stands for, pips and courts and all — see
+  /// [paintPokerFace].
+  cards,
+}
+
+/// What each kind of die prints on itself.
+DiePrinting printingFor(DieKind kind) => switch (kind) {
+  DieKind.hippo => DiePrinting.hippo,
+  DieKind.poker => DiePrinting.cards,
+  _ => DiePrinting.numerals,
+};
+
+/// How one die is painted: its body colour, the ink its numbers are in, the
+/// red a card's red suits get, and what is printed on it at all.
+class DieStyle {
+  const DieStyle({
+    required this.body,
+    required this.ink,
+    required this.red,
+    this.printing = DiePrinting.numerals,
+  });
+
+  /// Derives the inks from the body, because a die is only ever printed in
+  /// whichever of them you can read against the other.
+  factory DieStyle.of(
+    int colour, {
+    DiePrinting printing = DiePrinting.numerals,
+  }) {
     final double r = ((colour >> 16) & 0xFF) / 255.0;
     final double g = ((colour >> 8) & 0xFF) / 255.0;
     final double b = (colour & 0xFF) / 255.0;
     final double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    final Color ink =
+        luminance > 0.42 ? const Color(0xFF20242B) : const Color(0xFFF6EFE4);
     return DieStyle(
       body: Color(colour),
-      ink: luminance > 0.42 ? const Color(0xFF20242B) : const Color(0xFFF6EFE4),
-      hippo: hippo,
+      ink: ink,
+      red: _redOn(luminance, ink),
+      printing: printing,
     );
   }
 
-  /// How a whole die is painted, which is the only place the animal comes
-  /// from: everything below this line draws a [DieStyle], and only the two
-  /// screens that know what is in the rack decide whether it is one.
+  /// How a whole die is painted, which is the only place the animal and the
+  /// cards come from: everything below this line draws a [DieStyle], and only
+  /// the screens that know what is in the rack decide what it is one of.
   factory DieStyle.ofSpec(DieSpec spec) =>
-      DieStyle.of(spec.colour, hippo: spec.kind == DieKind.hippo);
+      DieStyle.of(spec.colour, printing: printingFor(spec.kind));
 
   final Color body;
   final Color ink;
 
-  /// Drawn as the animal rather than as the solid — see [paintHippo]. The one
-  /// die in the app whose picture is not its own polyhedron.
-  final bool hippo;
+  /// What a red suit is printed in on this body — a diamond, a heart, and the
+  /// index over them.
+  ///
+  /// Not a constant, because [kDicePalette] has a red die in it and a red
+  /// diamond on a red body is not a diamond. A card's own red is the start of
+  /// it; where that is too close to the body to read, it is mixed towards
+  /// [ink] — which is already the colour chosen for its contrast with the body
+  /// — until the two are far enough apart. On the one body where that runs a
+  /// long way the red ends up a rose rather than a red, which is the honest
+  /// cost of letting a poker die be any colour the picker offers.
+  final Color red;
+
+  /// What goes on the faces. Only [DiePrinting.numerals] draws the number
+  /// plainly; the other three are why this is an enum and not a flag.
+  final DiePrinting printing;
+
+  /// True when the die is drawn as the animal rather than as its solid.
+  bool get hippo => printing == DiePrinting.hippo;
+
+  /// How light a colour reads, by the weighted sum [DieStyle.of] picks the ink
+  /// with. Public so that a test can hold the reds to the measure they were
+  /// chosen by rather than to a different one.
+  static double luminance(Color colour) =>
+      0.2126 * colour.r + 0.7152 * colour.g + 0.0722 * colour.b;
+
+  /// A card's red, moved until it stands off the body it is printed on.
+  ///
+  /// [bodyLuminance] is the weighted sum the ink is chosen by rather than
+  /// `Color.computeLuminance`, which linearises first and so answers a
+  /// slightly different question. Two contrast rules on one die measured two
+  /// ways would be two rules, and this one leans on the ink's: the red is
+  /// mixed *towards* the ink, so it can only get far enough from the body
+  /// because the ink already is.
+  static Color _redOn(double bodyLuminance, Color ink) {
+    const double apart = 0.30;
+    Color red = const Color(0xFFB3453F);
+    // Eight steps of a quarter is convergence to the ink, which is the worst
+    // case and still a colour you can read — it only loses the distinction
+    // between a red suit and a black one, where stopping early would lose the
+    // suit altogether.
+    for (int step = 0; step < 8; step++) {
+      if ((luminance(red) - bodyLuminance).abs() >= apart) break;
+      red = Color.lerp(red, ink, 0.25)!;
+    }
+    return red;
+  }
 }
 
 /// Direction from a surface *towards* the light — front, above, and a little to
@@ -162,50 +244,6 @@ const Map<int, List<Offset>> _pips = <int, List<Offset>>{
     Offset(_p, _p),
   ],
 };
-
-// Numbers are laid out once at this size and then scaled into each face by the
-// canvas transform, which is both cheaper than re-laying them out every frame
-// and the only way to get a numeral to sit in perspective on a tilted face.
-const double _glyphFontSize = 100.0;
-const double _glyphLayoutWidth = 400.0;
-final Map<int, ui.Paragraph> _glyphs = <int, ui.Paragraph>{};
-
-String? _dieGlyphFont;
-
-/// The face the numbers on the dice are laid out in, or null for the
-/// platform's own — which is what the app uses, and what a phone should.
-///
-/// A seam for the tools, and the only reason it exists: `flutter test`
-/// substitutes a font with no glyphs in it, so a rendered sheet comes out with
-/// a solid box wherever a number should be. That is tolerable for a die, whose
-/// shape is the thing being looked at, and not for the hippopotamus, whose
-/// numbers are printed on an animal and have to be judged against it. A tool
-/// names a real face here before it draws anything.
-String? get dieGlyphFont => _dieGlyphFont;
-
-set dieGlyphFont(String? family) {
-  if (family == _dieGlyphFont) return;
-  _dieGlyphFont = family;
-  // The laid-out paragraphs are the old face's.
-  _glyphs.clear();
-}
-
-ui.Paragraph _glyph(int value, Color ink) {
-  final int key = value * 0x100000000 + ink.toARGB32();
-  return _glyphs[key] ??=
-      (ui.ParagraphBuilder(
-              ui.ParagraphStyle(
-                fontFamily: _dieGlyphFont,
-                textAlign: TextAlign.center,
-                fontSize: _glyphFontSize,
-                fontWeight: FontWeight.w600,
-              ),
-            )
-            ..pushStyle(ui.TextStyle(color: ink))
-            ..addText('$value'))
-          .build()
-        ..layout(const ui.ParagraphConstraints(width: _glyphLayoutWidth));
-}
 
 /// Twice the signed area of a projected polygon, which is what decides whether
 /// a face is worth printing a number on: at a grazing angle the number is a
@@ -544,7 +582,20 @@ void paintDie(Canvas canvas, TrayCamera camera, RigidBody die, DieStyle style) {
     // right way round rather than mirrored.
     final Vector3 inward = normal.cross(along);
 
-    if (shape.usesPips) {
+    if (style.printing == DiePrinting.cards) {
+      // Before the pip and numeral branches, because a poker die's solid is
+      // an unmarked cube: nothing about the shape says it is not a D6.
+      _paintCardFace(
+        canvas,
+        camera,
+        centre,
+        along,
+        inward,
+        face.inradius,
+        face.value,
+        style,
+      );
+    } else if (shape.usesPips) {
       _paintPips(
         canvas,
         camera,
@@ -566,7 +617,7 @@ void paintDie(Canvas canvas, TrayCamera camera, RigidBody die, DieStyle style) {
         along,
         inward,
         face.inradius,
-        face.value,
+        '${face.value}',
         style.ink,
         1.75,
       );
@@ -744,7 +795,7 @@ void paintHippo(
       along,
       normal.cross(along),
       face.inradius,
-      face.value,
+      '${face.value}',
       style.ink,
       _hippoNumber,
     );
@@ -886,11 +937,68 @@ void _paintEdgeNumbers(
       along,
       inward,
       face.inradius,
-      shape.faces[neighbour].value,
+      '${shape.faces[neighbour].value}',
       style.ink,
       0.95,
     );
   }
+}
+
+/// The transform that puts the plane of a face onto the canvas: x along the
+/// face's first edge, y *down* it, and one unit of each equal to [unit] metres
+/// on the die.
+///
+/// An affine approximation of a perspective projection, taken at [anchor]
+/// where it is indistinguishable at this size — which is what lets a
+/// laid-out paragraph or a built path be reused rather than re-projected
+/// point by point.
+Matrix4 _faceSpace(
+  TrayCamera camera,
+  Vector3 anchor,
+  Vector3 along,
+  Vector3 inward,
+  double unit,
+) {
+  final Offset origin = camera.project(anchor);
+  final Offset du = camera.project(anchor + along * unit) - origin;
+  final Offset dv = camera.project(anchor + inward * unit) - origin;
+  // Face space runs y down the face, which is what text and every drawing
+  // here expects — hence the negated second column.
+  return Matrix4.identity()
+    ..setEntry(0, 0, du.dx)
+    ..setEntry(1, 0, du.dy)
+    ..setEntry(0, 1, -dv.dx)
+    ..setEntry(1, 1, -dv.dy)
+    ..setEntry(0, 3, origin.dx)
+    ..setEntry(1, 3, origin.dy);
+}
+
+/// Lays one card onto a face, in the plane of that face.
+///
+/// [paintPokerFace] draws into a box one unit across; a face's own space runs
+/// to its inradius, so the card is scaled to sit just inside the edge — nearly
+/// all of the face, the way a card face is nearly all of a card.
+void _paintCardFace(
+  Canvas canvas,
+  TrayCamera camera,
+  Vector3 anchor,
+  Vector3 along,
+  Vector3 inward,
+  double unit,
+  int value,
+  DieStyle style,
+) {
+  canvas.save();
+  canvas.transform(_faceSpace(camera, anchor, along, inward, unit).storage);
+  canvas.scale(1.9);
+  paintPokerFace(
+    canvas,
+    value,
+    ink: style.ink,
+    red: style.red,
+    body: style.body.toARGB32(),
+  );
+  canvas.restore();
 }
 
 /// Lays one number onto a face, in the plane of that face.
@@ -907,25 +1015,12 @@ void _paintNumber(
   Vector3 along,
   Vector3 inward,
   double unit,
-  int value,
+  String text,
   Color ink,
   double height,
 ) {
-  final ui.Paragraph glyph = _glyph(value, ink);
-  final Offset origin = camera.project(anchor);
-  final Offset du = camera.project(anchor + along * unit) - origin;
-  final Offset dv = camera.project(anchor + inward * unit) - origin;
-
-  // Face space runs x along the edge and y *down* the face, which is what
-  // text expects — hence the negated second column.
-  final Matrix4 place =
-      Matrix4.identity()
-        ..setEntry(0, 0, du.dx)
-        ..setEntry(1, 0, du.dy)
-        ..setEntry(0, 1, -dv.dx)
-        ..setEntry(1, 1, -dv.dy)
-        ..setEntry(0, 3, origin.dx)
-        ..setEntry(1, 3, origin.dy);
+  final ui.Paragraph glyph = dieGlyph(text, ink);
+  final Matrix4 place = _faceSpace(camera, anchor, along, inward, unit);
 
   final double width = glyph.longestLine;
   double scale = height / glyph.height;
@@ -938,11 +1033,11 @@ void _paintNumber(
   canvas.scale(scale);
   canvas.drawParagraph(
     glyph,
-    Offset(-_glyphLayoutWidth / 2, -glyph.height / 2),
+    Offset(-dieGlyphLayoutWidth / 2, -glyph.height / 2),
   );
   // A 6 and a 9 are the same glyph upside down, which on a die that can land
   // any way up is not a distinction you can leave to the reader.
-  if (value == 6 || value == 9) {
+  if (text == '6' || text == '9') {
     canvas.drawRect(
       Rect.fromLTWH(
         -width * 0.34,

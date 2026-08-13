@@ -66,7 +66,7 @@ void main() {
           reason: '${kind.label} settled on an edge, not a face',
         );
         expect(landed, tray.faceUp(die));
-        expect(landed, inInclusiveRange(1, kind.sides));
+        expect(landed, isIn(kind.numbers));
       });
     }
   });

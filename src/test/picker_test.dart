@@ -284,7 +284,7 @@ void main() {
         for (int f = 1; f < shape.faces.length; f++) {
           if (shape.faces[f].value > shape.faces[highest].value) highest = f;
         }
-        expect(shape.faces[highest].value, kind.sides);
+        expect(shape.faces[highest].value, kind.numbers.last);
 
         // Which face actually has that number written on it, which is the one
         // carrying it everywhere but the D4 — a D4 prints its numbers along
@@ -298,10 +298,10 @@ void main() {
           shape.readsDownFace
               ? shape.faces[face.neighbours[marking.edge]].value
               : face.value,
-          kind.sides,
+          kind.numbers.last,
           reason:
-              '${kind.label} is not introducing itself with a ${kind.sides} '
-              'anywhere you can see',
+              '${kind.label} is not introducing itself with a '
+              '${kind.numbers.last} anywhere you can see',
         );
 
         // No face leans further out of the screen than the one being shown.

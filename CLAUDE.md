@@ -23,7 +23,8 @@ something about what is left. That difference is the point of the mode, and
 `reshuffleAt` is there to let you decide how much of it you want.
 
 **A 3D dice tray.** Rigid-body physics for a chosen set of dice — up to ten,
-D4 through D20, each its own colour — in a phone-sized box, simulated in the
+D4 through D20 plus a poker die, each its own colour — in a phone-sized box,
+simulated in the
 *phone's own frame of reference* so the walls never move and the acceleration
 field inside them comes straight off the accelerometer.
 
@@ -53,6 +54,7 @@ Run from the repo root:
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
 | `make picker` | render the picker — both modes, its saves, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
+| `make poker` | render the poker die — its six faces square to the glass, and the same die tumbling and at the rack angle in every colour. The other kind whose faces cannot be checked by reading a number off them |
 | `make tutorial` | render the tutorial — every page, over the screen that page is about, with the part it names lit — on a phone and on the shortest screen worth shipping to, into `/tmp/rollhippo/` |
 | `make icon` | redraw the app icon from `src/assets/rollhippo.svg` into both asset catalogues and Android's `mipmap` folders, and both platforms' launch images with it — writes into the project, not `/tmp`. The XML beside the rasters is structure, not drawing, and is not regenerated: the adaptive icon's two files, `LaunchScreen.storyboard`, and Android's `launch_background.xml` and `styles.xml`, which only place the launch image and paint the picker's colour behind it |
 | `make ios` | `--profile` by choice, not by force. Debug was impossible under Flutter 3.29.2 (flutter#163984); since the upgrade it runs and hot-reloads on device fine. Still profile, because the solver is Dart every frame and debug's JIT is not the shipping feel. Installs with `xcrun devicectl`, **never `flutter install`** — that one uninstalls the old copy first and cannot be told not to, and an uninstalled iOS app takes its container, its `NSUserDefaults` and so every saved profile with it |
@@ -90,6 +92,9 @@ src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable ·
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · CardPainter · DiePreview
                    hippo (the animal twice over: in lumps for the die, and in one line
                    for the back of a card — neither of them a body)
+                   poker (the poker die's six faces, drawn as cards — pips, courts, suits)
+                   die_glyph (dieGlyphFont and the laid-out numbers, apart from the
+                   painter because two things print text on a die now)
 src/lib/app/       PickerScreen (the rack, in two modes) · TrayScreen · CardScreen · PageDots
                    chrome (letterbox · TrayButton · AppDialog · ElapsedTimer · TimeUpAlert
                    — what every screen shares)
@@ -385,6 +390,58 @@ test exists to make the change deliberate, not to make it hard.
   match opens it without a word, and anything else asks. `Profile` has value
   equality — and `DieSpec` has it for that reason — because "do I already have
   this one" is the question the whole tree hangs off.
+
+- **`DieKind`'s order is a wire format, so a new kind goes on the end.** A die
+  travels as one byte, `kind.index << 4 | colour`, and that is not only what a
+  QR code carries: `ProfileStore` writes every save's dice into the
+  preferences file as an `RH1:` code, so those bytes are on disk on every
+  phone that has ever kept a profile. Insert a kind rather than appending one
+  and every stored hippopotamus silently becomes whatever took its number —
+  which nothing would catch, because the byte is still valid. The four bits
+  leave room for sixteen kinds and there are eight. The consequence to like
+  rather than merely tolerate: `secret` and the picker's chip order are
+  separate questions from this one, so the hippopotamus sitting in the middle
+  of the list costs nothing.
+
+- **Two of the eight kinds are the D6's cube, printed differently.**
+  `DieKind.hippo` and `DieKind.poker` are both `_cube()`, and separate shapes
+  only so that the painter can tell them from a D6 and from each other. Both
+  roll exactly as fairly as the D6 does, because they are one — which is the
+  whole reason they are cheap. What separates them is `DiePrinting`, which a
+  `DieStyle` carries and which is the only thing the painter branches on:
+  `cards` hands the face to `paintPokerFace`, `hippo` never reaches the face
+  loop at all. **A poker die's shape says nothing about it** — it is an
+  unmarked cube, indistinguishable from a D6 — so the cards branch has to come
+  *before* the `usesPips` one, or a poker die deals itself pips.
+
+  A D100 was built here and taken out again, and the reason is worth keeping:
+  the only *fair* hundred-faced die is a 50-gonal trapezohedron, and at this
+  app's life size — every die to the 16 mm D6's circumradius — its faces come
+  out 1.30 mm across with a 1.59 mm bevel. The rounding is wider than the face,
+  so there is no flat left to land on. It also wants 200 edge directions
+  against `_edgePitch`'s 32, and puts 40,200 candidate axes through a pair
+  where two D12s put 225. A real zocchihedron dodges the slivers only by not
+  being face-transitive, which is why it is famously unfair — and it would fail
+  the isohedral assumption the uniform bevel shrink rests on. What a dice set
+  means by a D100 is a D10 in tens, which is two dice here and always was.
+
+- **A poker die is the one die printed in more than one colour.** Every other
+  die has an ink derived from its body and prints in that. A card carries its
+  colour as part of what it says — a red diamond is not a black one — so
+  `DieStyle` also carries a `red`, and it is not a constant: `kDicePalette` has
+  a red die in it, and a card's own red on that body is invisible, so the red
+  is mixed towards the ink until the two luminances are far enough apart. On
+  the red body it ends up a rose. **`DieStyle.luminance` is the measure, not
+  `Color.computeLuminance`** — the ink's own threshold is a weighted sum of the
+  gamma-encoded channels, and holding the red to the linearised one would be
+  two contrast rules on one die.
+
+  On *ivory* alone the three courts are printed blue, green and red, which is
+  what the poker die this was drawn from does and which has nothing to do with
+  their suits: three engraved figures at 98 pixels are hard to tell apart and a
+  colour is read before a crown is. It is a fact about the ivory die only,
+  because three inks nobody chose against the body would be worse on a violet
+  one than no colour at all.
 
 - **Nothing is saved on its own.** Two places write a profile, and both
   are gestures: `+ New`, which makes one out of what is on screen, and Save on

@@ -33,6 +33,7 @@ void main() {
       DieKind.d12: 20,
       DieKind.d20: 12,
       DieKind.hippo: 8, // The cube it is carved out of.
+      DieKind.poker: 8, // The cube the cards are printed on.
     };
 
     for (final DieKind kind in DieKind.values) {
@@ -76,19 +77,27 @@ void main() {
       ]..sort();
       expect(
         values,
-        List<int>.generate(kind.sides, (int i) => i + 1),
-        reason: '${kind.label} must carry 1…${kind.sides} exactly once',
+        kind.numbers,
+        reason:
+            '${kind.label} must carry ${kind.numbers.first}…'
+            '${kind.numbers.last} exactly once',
       );
 
       if (kind == DieKind.d4) continue; // No face is opposite another.
+      // A real die's opposite faces sum to the same thing everywhere on it —
+      // seven on a D6, twenty-one on a D20, and for the two that do not count
+      // from one, the first and last of what they do carry. That is what makes
+      // it fair to read: the number you can see and the one against the table
+      // always account for the whole die between them.
+      final int pair = kind.numbers.first + kind.numbers.last;
       for (final ConvexFace face in shape.faces) {
         final ConvexFace opposite = shape.faces.firstWhere(
           (ConvexFace other) => other.normal.dot(face.normal) < -0.999,
         );
         expect(
           face.value + opposite.value,
-          kind.sides + 1,
-          reason: '${kind.label}: opposite faces must sum to ${kind.sides + 1}',
+          pair,
+          reason: '${kind.label}: opposite faces must sum to $pair',
         );
       }
     }
