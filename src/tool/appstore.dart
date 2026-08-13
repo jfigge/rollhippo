@@ -560,11 +560,19 @@ Widget _app(Widget home) => RepaintBoundary(
 
 /// Throws, then runs the tray on until the dice have stopped and been read.
 ///
-/// The screen arrives already thrown for its first group, so this is only
-/// waiting — but it waits on the simulation rather than a fixed count, because
-/// ten dice take visibly longer to settle than four and a picture taken while
-/// one is still rolling is a picture of a number that had not happened yet.
-Future<void> _settle(WidgetTester tester) => _pump(tester, 450);
+/// The throw is this function's own, and has to be: the tray opens with its
+/// dice lying on the floor and waits for somebody to ask, which is right for
+/// a person holding a phone and wrong for a store listing — a screenshot of
+/// an unrolled tray is a screenshot of the app not doing the thing.
+///
+/// Then it waits, generously rather than on a count that happens to work:
+/// ten dice take visibly longer to settle than four, and a picture taken
+/// while one is still rolling is a picture of a number that had not happened
+/// yet.
+Future<void> _settle(WidgetTester tester) async {
+  await tester.tap(find.byKey(kTrayThrow));
+  await _pump(tester, 450);
+}
 
 /// Advances a ticker-driven screen by [frames] frames.
 ///

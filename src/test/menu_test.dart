@@ -258,8 +258,7 @@ void main() {
     });
   });
 
-  group('the arguments are behind the arrow', () {
-    /// Opens the sheet with every panel shut, which is how it always opens.
+  group('one line per setting', () {
     Future<void> openSettings(WidgetTester tester) async {
       await pumpPicker(tester);
       settings.motion = true;
@@ -268,85 +267,42 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('nothing is expanded to begin with, and the whole sheet fits', (
+    testWidgets('every setting says what it is doing, and no more', (
       WidgetTester tester,
     ) async {
       await openSettings(tester);
 
-      // Every setting says what it is and what it is doing.
       for (final String title in <String>[
         'Motion control',
         'Shake to deal a card',
         'Impact strength',
         'Timer',
+        'Turn limit',
       ]) {
         expect(find.text(title), findsOneWidget, reason: '$title is missing');
       }
-      // And none of them is arguing its case yet.
+
+      // And none of them argues its case. That prose is in the user guide —
+      // five paragraphs of it on a sheet is a wall, and a wall is not read.
       expect(find.textContaining('accessibility afterthought'), findsNothing);
       expect(find.textContaining('A shoe has memory'), findsNothing);
-      expect(find.textContaining('nothing counts down'), findsNothing);
+      expect(find.textContaining('quarter-minutes'), findsNothing);
+    });
 
-      // Which is the point of the rewrite: the sheet used to run past the
-      // bottom of a phone with its prose alone, and the fifth setting would
-      // have had nowhere to go.
+    testWidgets('and the whole sheet fits on the screen', (
+      WidgetTester tester,
+    ) async {
+      await openSettings(tester);
+
       final double screen = tester.getSize(find.byType(PickerScreen)).height;
       expect(
-        tester.getRect(find.text('Timer')).bottom,
+        tester.getRect(find.text('Turn limit')).bottom,
         lessThan(screen),
-        reason: 'the last setting is off the bottom of the screen again',
+        reason: 'the last setting is off the bottom of the screen',
       );
     });
 
-    testWidgets('the arrow opens one, and shuts it again', (
-      WidgetTester tester,
-    ) async {
-      await openSettings(tester);
-
-      await tester.tap(find.text('Motion control'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('accessibility afterthought'), findsOneWidget);
-
-      await tester.tap(find.text('Motion control'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('accessibility afterthought'), findsNothing);
-    });
-
-    testWidgets('one at a time, because a short sheet is the whole point', (
-      WidgetTester tester,
-    ) async {
-      await openSettings(tester);
-
-      await tester.tap(find.text('Motion control'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Shake to deal a card'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('A shoe has memory'), findsOneWidget);
-      expect(
-        find.textContaining('accessibility afterthought'),
-        findsNothing,
-        reason: 'four open panels are the sheet that was there before',
-      );
-    });
-
-    testWidgets('the switch is the switch, and does not open anything', (
-      WidgetTester tester,
-    ) async {
-      await openSettings(tester);
-
-      await tester.tap(motionSwitch);
-      await tester.pumpAndSettle();
-
-      expect(settings.motion, isFalse, reason: 'the switch still switches');
-      expect(
-        find.textContaining('accessibility afterthought'),
-        findsNothing,
-        reason: 'the thing you came for must not open a paragraph',
-      );
-    });
-
-    testWidgets('what a setting costs stays on the screen either way', (
+    testWidgets('what a setting costs stays on the screen', (
       WidgetTester tester,
     ) async {
       final bool was = settings.shakeToDraw;
@@ -356,12 +312,31 @@ void main() {
       await tester.pumpAndSettle();
 
       // The one switch here whose downside is not obvious from its label. The
-      // argument for it can wait to be asked for; the price of it cannot.
+      // argument for it belongs in the guide; the price of it does not.
       expect(
         find.textContaining('gone until the shoe is cut'),
         findsOneWidget,
         reason: 'the cost has to be in front of the thumb reaching for it',
       );
+    });
+
+    testWidgets('and the line changes with the switch it is about', (
+      WidgetTester tester,
+    ) async {
+      final bool was = settings.shakeToDraw;
+      addTearDown(() => settings.shakeToDraw = was);
+      await openSettings(tester);
+      settings.shakeToDraw = false;
+      await tester.pumpAndSettle();
+      expect(find.textContaining('worth leaving off'), findsOneWidget);
+
+      await tester.tap(shakeSwitch);
+      await tester.pumpAndSettle();
+
+      // A line true of the switch in general is a line nobody reads twice.
+      expect(settings.shakeToDraw, isTrue);
+      expect(find.textContaining('worth leaving off'), findsNothing);
+      expect(find.textContaining('no dealing it back'), findsOneWidget);
     });
   });
 

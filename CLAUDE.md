@@ -215,6 +215,24 @@ test exists to make the change deliberate, not to make it hard.
   nobody has thrown yet, which is fed `MotionFrame.still` off-screen until it
   sleeps so its dice are lying on the floor by the time you reach them. Anything
   that assumes every tray advances every frame will be wrong.
+
+- **Nothing is thrown on the way in.** Every group opens unthrown — the one you
+  arrived on exactly like the ones you have not swiped to — and waits for a
+  shake or for Throw. A roll is a thing somebody asks for, and this is what the
+  card table always did: a shoe opens on a bare glass and waits for Draw. Note
+  that the picker's button still says **Roll**, which now opens the tray rather
+  than rolling in it, and **Deal** has always been the same half-truth.
+
+  The consequence to keep in mind is that a `DiceTray`'s constructor *throws* —
+  that is the only way the dice get anywhere at all — so an unthrown tray is a
+  tray in mid-air until something steps it. Off-screen boxes are put down by
+  the still-motion loop above, but the box you arrive on has no off-screen
+  second to hide in: `_TrayScreenState._settle` steps it to rest inside the
+  layout pass that built it, before a single frame is painted. Take that out
+  and opening the tray is a roll again — just an unasked-for one that you watch
+  tumble into a heap. `tool/appstore.dart` throws explicitly for the same
+  reason, in `_settle`: a store screenshot of an unrolled tray is a screenshot
+  of the app not doing the thing.
 - **A box is built once and never resized; the camera letterboxes instead.** A
   `DiceTray`'s constructor throws the dice and a `CardTable`'s builds a `Deck`,
   which shuffles — so rebuilding either one on a layout change is re-rolling a
@@ -428,18 +446,19 @@ test exists to make the change deliberate, not to make it hard.
   which is exactly the part where a real card's back is still the right way
   up.
 
-- **The settings sheet is one sentence per setting, and the arguments are
-  behind an arrow.** Five settings' worth of the prose this app writes is
-  taller than a phone, which is what `_Setting` in `menu.dart` exists to fix:
-  a title, its control, a summary that is always there, and a `detail` that is
-  only in the tree while that panel is open. `_open` holds one panel at a
-  time, because four open panels are the sheet that was there before. **What
-  goes behind the arrow is reasoning, never a cost** — "a dealt card is gone
-  until the shoe is cut" is in the summary, where the thumb reaching for the
-  switch will meet it, and the argument about why a shake on the cards differs
-  from a shake on the tray is the part that waits to be asked for. Two of the
-  five are nested under the switch they depend on, faded and deaf when it is
-  off: Shake to deal under Motion control, Turn limit under Timer.
+- **The settings sheet is one sentence per setting, and the arguments are not
+  on it.** Five settings' worth of the prose this app writes is taller than a
+  phone and reads as a wall, which is what `_Setting` in `menu.dart` exists to
+  prevent: a title, its control, and one summary line. **What the line says is
+  the consequence, never the argument** — "a dealt card is gone until the shoe
+  is cut" is on the sheet, where the thumb reaching for the switch will meet
+  it; why a shake on the cards differs from a shake on the tray is in
+  `website/docs/index.html` under Settings, along with every other setting's
+  case. That guide is now the only place those arguments exist, so **a new
+  setting means a section there** — the sheet has nowhere to put one. Each
+  summary tracks the setting's state rather than describing it in general.
+  Two of the five are nested under the switch they depend on, faded and deaf
+  when it is off: Shake to deal under Motion control, Turn limit under Timer.
 
 - **The clock counts rolls, not button presses.** `Settings.timer` is off by
   default and draws `ElapsedTimer` between Close and Throw — or Close and

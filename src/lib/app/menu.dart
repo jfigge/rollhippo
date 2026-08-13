@@ -221,19 +221,13 @@ class _MenuBarsPainter extends CustomPainter {
   bool shouldRepaint(_MenuBarsPainter oldDelegate) => false;
 }
 
-/// How long a disclosure takes to open, and how long the arrow takes to turn.
+/// The two voices on this sheet: what a setting is called, and what it is
+/// doing now.
 ///
-/// Short. This is a panel opening under a thumb that is still on it, not a
-/// transition between screens — anything slower reads as the sheet thinking
-/// about it.
-const Duration _kExpand = Duration(milliseconds: 180);
-
-/// The three voices on this sheet: what a setting is called, what it does, and
-/// why it is the way it is.
-///
-/// The summary is a shade brighter than the argument under it, because it is
-/// the line that is always on the screen and the argument is the one you asked
-/// for.
+/// There is no third. The argument for a setting — and two of these have a
+/// real one — is in the user guide, which is where somebody reading an
+/// argument is willing to be. On the sheet it is one line, because the sheet
+/// is a place you came to move a switch.
 const TextStyle _kSettingTitle = TextStyle(
   color: Color(0xFFE8EEF6),
   fontSize: 15,
@@ -244,35 +238,23 @@ const TextStyle _kSettingSummary = TextStyle(
   fontSize: 13,
   height: 1.45,
 );
-const TextStyle _kSettingDetail = TextStyle(
-  color: Color(0x99BFD0E4),
-  fontSize: 13,
-  height: 1.45,
-);
 
-/// Which explanation is open. See [_SettingsSheetState._open].
-enum _Panel { motion, shake, impact, timer, limit }
-
-/// The settings panel: three switches and two sliders, each one sentence tall
-/// until you ask it for more.
+/// The settings panel: three switches and two sliders, one line each.
 ///
-/// Every entry is a title, its control, and one line saying what it does now.
-/// The argument for it — which on this sheet runs to a paragraph, because the
-/// arguments are real and two of them are the reason the setting exists — is
-/// behind the arrow beside the control. That is the whole of how four settings
-/// fit on a phone where the prose alone used to be eight hundred points tall,
-/// and it is what leaves room for the fifth.
+/// Every entry is a title, its control, and a sentence saying what it is doing
+/// now. There is no more than that, and there deliberately used to be: this
+/// file carried a paragraph under every switch, arguing the setting, and five
+/// settings' worth of it was taller than a phone and read as a wall.
 ///
-/// **What stays visible is the consequence, and that is not an accident.**
-/// Shake to deal is the switch whose downside is not obvious from its label,
-/// and "a dealt card is gone until the shoe is cut" has to be on the screen of
-/// somebody reaching for it rather than one tap further in. The paragraph
-/// underneath argues *why* a shake on the cards is a different act from a
-/// shake on the tray, and that can wait to be asked for. Anything moved behind
-/// the arrow has to pass that test: reasoning, never a cost.
-///
-/// One panel is open at a time. The point of the sheet is that it is short,
-/// and four open panels are the sheet that was there before.
+/// **The line that is kept is the consequence, not the argument.** Shake to
+/// deal is the switch whose downside is not obvious from its label, so "a
+/// dealt card is gone until the shoe is cut" is on the sheet where the thumb
+/// reaching for it will meet it. *Why* a shake on the cards is a different act
+/// from a shake on the tray is a different kind of sentence, and it is in
+/// `website/docs/index.html` under Settings, along with the rest — which is
+/// the one place a person actually reading an argument has gone looking for
+/// it. Each summary tracks the setting's state, so what it says is true of the
+/// switch as it stands rather than in general.
 ///
 /// Two of the five are pairs rather than entries in a list, and they are drawn
 /// the same way for the same reason: indented under the switch they depend on,
@@ -309,20 +291,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     driver: hapticsFor(device: onDevice),
     gain: settings.hapticGain,
   );
-
-  /// Which argument is on the screen, or null for none — which is where the
-  /// sheet opens every time. Nothing is remembered between openings: the
-  /// question a panel answers is one you have either already read or are about
-  /// to ask again, and a sheet that reopened three lines taller than it closed
-  /// would have given back the space it was rewritten for.
-  _Panel? _open;
-
-  void _toggle(_Panel panel) {
-    // A press the screen answers is the lighter of the two taps — see
-    // [uiHaptic], where the pair is argued.
-    uiHaptic(HapticLevel.light);
-    setState(() => _open = _open == panel ? null : panel);
-  }
 
   void _setGain(double value) {
     settings.hapticGain = value;
@@ -365,8 +333,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               // whether the phone's own movement plays at all.
               _Setting(
                 title: 'Motion control',
-                expanded: _open == _Panel.motion,
-                onTap: () => _toggle(_Panel.motion),
                 control: _switch(
                   value: settings.motion,
                   onChanged: (bool on) => settings.motion = on,
@@ -377,26 +343,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             'throw them.'
                         : 'Off. Down is down the screen and stays there, and a '
                             'shake does nothing.',
-                detail:
-                    settings.motion
-                        ? 'Turn it off and the tray is handed a phone held '
-                            'perfectly still: down is down the screen whatever '
-                            'the real one is doing, and Throw — or Draw, on '
-                            'the cards — is the whole of the interface.\n\n'
-                            'It is a real setting rather than an accessibility '
-                            'afterthought. A phone on a table, a hand that '
-                            'cannot shake one, a game being played on a train '
-                            '— all of them want the dice and none of them '
-                            'wants the accelerometer.'
-                        : 'The tray is being handed a phone held perfectly '
-                            'still. Throw — or Draw, on the cards — is the '
-                            'whole of the interface, and it works exactly as '
-                            'it always did.\n\n'
-                            'It is a real setting rather than an accessibility '
-                            'afterthought. A phone on a table, a hand that '
-                            'cannot shake one, a game being played on a train '
-                            '— all of them want the dice and none of them '
-                            'wants the accelerometer.',
               ),
               // Underneath the switch it depends on, and indented under it,
               // because it is a narrowing of that setting rather than a
@@ -413,8 +359,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     padding: const EdgeInsets.only(left: 16),
                     child: _Setting(
                       title: 'Shake to deal a card',
-                      expanded: _open == _Panel.shake,
-                      onTap: () => _toggle(_Panel.shake),
                       control: _switch(
                         value: settings.shakeToDraw,
                         onChanged: (bool on) => settings.shakeToDraw = on,
@@ -430,17 +374,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                               : 'Off, and worth leaving off. A dealt card is '
                                   'gone until the shoe is cut, and a phone '
                                   'handed across a table is a shake.',
-                      detail:
-                          'A shake on the tray and a shake on the card table '
-                          'are not the same act. Shaking dice is the '
-                          'simulation — the box moved, so the dice tumbled — '
-                          'and a throw you did not mean is undone by throwing '
-                          'again.\n\n'
-                          'A shoe has memory, and that is the whole reason to '
-                          'play with one. What has been dealt is off the shoe '
-                          'until the cut comes round, so what is left to come '
-                          'has genuinely changed. Draw turns the next card '
-                          'over either way.',
                     ),
                   ),
                 ),
@@ -448,8 +381,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               const SizedBox(height: 18),
               _Setting(
                 title: 'Impact strength',
-                expanded: _open == _Panel.impact,
-                onTap: () => _toggle(_Panel.impact),
                 // The figure rather than a switch: this is the one setting
                 // here that is a quantity, and the number is what says where
                 // the slider under it has got to.
@@ -484,16 +415,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             'menus and the profiles.'
                         : 'How hard the tray taps back when a die hits the '
                             'side. Drag the slider to feel it.',
-                detail:
-                    'The tap follows the impact, so a D20 slamming into a wall '
-                    'is felt and a die nudging its neighbour is not — this '
-                    'only sets how much of that reaches your hand.\n\n'
-                    'The interface taps too, at a fixed strength rather than '
-                    'at whatever this slider says: a light one for a menu '
-                    'entry or a profile you have pressed, and a firmer one as '
-                    'a menu opens under your thumb, that being the only sign a '
-                    'press was long enough. All the way down silences those as '
-                    'well as the tray.',
                 aside:
                     onDevice
                         ? null
@@ -506,8 +427,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               // one only decides whether one more thing is drawn.
               _Setting(
                 title: 'Timer',
-                expanded: _open == _Panel.timer,
-                onTap: () => _toggle(_Panel.timer),
                 control: _switch(
                   value: settings.timer,
                   onChanged: (bool on) => settings.timer = on,
@@ -518,14 +437,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                             'the last roll.'
                         : 'No clock. Turn it on for one between Close and '
                             'Throw, counting up from the last roll.',
-                detail:
-                    'On the card table it counts from the last card instead. '
-                    'Each set of dice keeps its own, so swiping to another '
-                    'says how long ago that one was thrown — and a set nobody '
-                    'has thrown yet shows nothing at all, because 0:00 would '
-                    'be a lie about it.\n\n'
-                    'It measures and does nothing else — until you give it a '
-                    'limit, and even then all that runs out is the colour.',
               ),
               // Under the clock it colours, and indented under it, on exactly
               // the terms Shake to deal is under Motion control: a limit with
@@ -540,8 +451,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     padding: const EdgeInsets.only(left: 16),
                     child: _Setting(
                       title: 'Turn limit',
-                      expanded: _open == _Panel.limit,
-                      onTap: () => _toggle(_Panel.limit),
                       control: Text(
                         // "None" rather than "Off", which is what the switches
                         // say and what the slider above says. A duration that
@@ -582,16 +491,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                               : 'At ${formatElapsed(limit)} the screen flashes '
                                   'three times, the phone taps with it, and '
                                   'the clock turns red.',
-                      detail:
-                          'Thirty seconds to five minutes, in quarter-minutes '
-                          '— a turn limit is a thing people agree on out loud, '
-                          'and it is never 47 seconds.\n\n'
-                          'Nothing is prevented and nothing is scored. The '
-                          'clock goes on counting up past the limit rather '
-                          'than down towards it, because how far over a turn '
-                          'has run is the useful number and it is still your '
-                          'table\'s business what that costs. The next roll '
-                          'puts it back to 0:00 and the colour with it.',
                       aside:
                           onDevice
                               ? null
@@ -609,20 +508,16 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 }
 
-/// One setting: what it is called, its control, what it does now, and — behind
-/// the arrow — why.
+/// One setting: what it is called, its control, and what it is doing now.
 ///
-/// The header row and the summary are both the tap that opens it, which is a
-/// deliberately large target for a gesture nobody is obliged to make. The
-/// control is not: a [Switch] and a [Slider] take their own presses, so the
-/// thing you came for is never the thing that opens a paragraph.
+/// Three lines of the sheet and no more. There is no disclosure and no
+/// paragraph behind one — the arguments live in the user guide, and what is
+/// here is the sentence somebody moving the switch needs in front of them. See
+/// [showSettingsSheet], where that division is argued.
 class _Setting extends StatelessWidget {
   const _Setting({
     required this.title,
     required this.summary,
-    required this.detail,
-    required this.expanded,
-    required this.onTap,
     required this.control,
     this.under,
     this.aside,
@@ -630,26 +525,21 @@ class _Setting extends StatelessWidget {
 
   final String title;
 
-  /// The line that is always there. What the setting is doing *now* and what
-  /// that costs — never the argument for it, which is what [detail] is.
+  /// What the setting is doing *now*, and what that costs. State-dependent on
+  /// purpose: a line that were true of the switch in general would be a line
+  /// nobody reads twice.
   final String summary;
-
-  /// The argument, in paragraphs separated by a blank line. On the screen only
-  /// while [expanded].
-  final String detail;
-
-  final bool expanded;
-  final VoidCallback onTap;
 
   /// The switch, or the figure a slider is showing. On the title's own line.
   final Widget control;
 
-  /// Anything that has to stay visible under the header whether or not the
-  /// panel is open — which today is the one slider.
+  /// Anything drawn between the header and the summary — which today is the
+  /// two sliders, each of which belongs directly under the figure it moves.
   final Widget? under;
 
-  /// A footnote to [detail], drawn in italic. The harness has one; nothing
-  /// else does yet.
+  /// A footnote in italic, for something true of where the app is running
+  /// rather than of the setting. Both of today's are about the desktop
+  /// harness, which is why neither is ever on a phone.
   final String? aside;
 
   @override
@@ -659,68 +549,25 @@ class _Setting extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Row(
-            children: <Widget>[
-              Expanded(child: Text(title, style: _kSettingTitle)),
-              AnimatedRotation(
-                turns: expanded ? 0.5 : 0,
-                duration: _kExpand,
-                curve: Curves.easeOut,
-                child: const Icon(
-                  Icons.expand_more,
-                  size: 20,
-                  color: Color(0x66BFD0E4),
-                ),
-              ),
-              const SizedBox(width: 12),
-              control,
-            ],
-          ),
+        Row(
+          children: <Widget>[
+            Expanded(child: Text(title, style: _kSettingTitle)),
+            control,
+          ],
         ),
         if (under != null) under,
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Text(summary, style: _kSettingSummary),
-        ),
-        // Sized rather than faded: the sheet has to grow and shrink around
-        // this, and a paragraph that was always laid out and merely invisible
-        // would have saved nothing at all. The empty box keeps the full width
-        // so the animation is in one dimension only.
-        AnimatedSize(
-          duration: _kExpand,
-          curve: Curves.easeOut,
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            width: double.infinity,
-            child:
-                !expanded
-                    ? const SizedBox.shrink()
-                    : Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(detail, style: _kSettingDetail),
-                          if (aside != null) ...<Widget>[
-                            const SizedBox(height: 10),
-                            Text(
-                              aside,
-                              style: const TextStyle(
-                                color: Color(0x66BFD0E4),
-                                fontSize: 12,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
+        Text(summary, style: _kSettingSummary),
+        if (aside != null) ...<Widget>[
+          const SizedBox(height: 8),
+          Text(
+            aside,
+            style: const TextStyle(
+              color: Color(0x66BFD0E4),
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

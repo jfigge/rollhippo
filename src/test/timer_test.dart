@@ -89,6 +89,14 @@ Future<void> run(WidgetTester tester, double seconds) async {
   }
 }
 
+/// Throws the group on screen, which the tray no longer does for you: it
+/// opens with its dice on the floor and waits to be asked. Every case about a
+/// clock has to start one.
+Future<void> throwIt(WidgetTester tester) async {
+  await tester.tap(find.text('Throw'));
+  await tester.pump();
+}
+
 Future<void> openTray(WidgetTester tester, {int groups = 1}) async {
   await tester.binding.setSurfaceSize(kHarnessScreen);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -208,18 +216,25 @@ void main() {
   });
 
   group('the tray clock', () {
-    testWidgets('starts at 0:00 on the group you arrive on, and counts', (
+    testWidgets('says nothing at all until the first throw', (
       WidgetTester tester,
     ) async {
       withTimer(true);
       await openTray(tester);
+      await run(tester, 3);
 
-      // The group you arrive on arrives thrown — the picker's Roll is what
-      // threw it — so it is being timed from the first frame with a `dt` in
-      // it. A bare `pump()` is not one of those: it advances the clock by
-      // nothing, and the tray's ticker takes no notice of a frame that took
-      // no time.
-      await run(tester, 0.1);
+      // The tray opens waiting, so there is no roll to be timing since — and
+      // 0:00 would be a lie about a throw nobody has made.
+      expect(clockOf(tester), isNull);
+    }, variant: harness);
+
+    testWidgets('starts at 0:00 on the throw, and counts', (
+      WidgetTester tester,
+    ) async {
+      withTimer(true);
+      await openTray(tester);
+      await run(tester, 3);
+      await throwIt(tester);
       expect(clockOf(tester), '0:00');
 
       await run(tester, 2.08);
@@ -229,6 +244,7 @@ void main() {
     testWidgets('sits between Close and Throw', (WidgetTester tester) async {
       withTimer(true);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 1);
 
       final double clock = tester.getCenter(find.byKey(kElapsedTimer)).dx;
@@ -246,6 +262,7 @@ void main() {
     testWidgets('Throw puts it back to 0:00', (WidgetTester tester) async {
       withTimer(true);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 2.08);
       expect(clockOf(tester), '0:02');
 
@@ -261,6 +278,7 @@ void main() {
     ) async {
       withTimer(true);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 2.08);
       expect(clockOf(tester), '0:02');
 
@@ -279,6 +297,7 @@ void main() {
     ) async {
       withTimer(true, limit: 30);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 2.08);
 
       expect(clockOf(tester), '0:02');
@@ -301,6 +320,7 @@ void main() {
     ) async {
       withTimer(true, limit: 30);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 2);
       expect(washOf(tester), 0, reason: 'nothing has run out yet');
 
@@ -336,6 +356,7 @@ void main() {
       final RecordedHaptics taps = recordHaptics();
 
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 31);
 
       // Heavier than anything a press fires, because this is the app saying
@@ -362,6 +383,7 @@ void main() {
       final RecordedHaptics taps = recordHaptics();
 
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 31);
 
       // "Off" is a word with one meaning. The flash is still there, which is
@@ -375,6 +397,7 @@ void main() {
     ) async {
       withTimer(true, limit: 30);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 31);
       expect(inkOf(tester), kTimeUpInk);
 
@@ -393,6 +416,7 @@ void main() {
     ) async {
       withTimer(true);
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 40);
 
       expect(secondsOf(tester), greaterThanOrEqualTo(39));
@@ -412,6 +436,7 @@ void main() {
       final RecordedHaptics taps = recordHaptics();
 
       await openTray(tester);
+      await throwIt(tester);
       await run(tester, 31);
 
       expect(find.byKey(kElapsedTimer), findsNothing);
@@ -449,6 +474,7 @@ void main() {
     ) async {
       withTimer(true);
       await openTray(tester, groups: 2);
+      await throwIt(tester);
       await run(tester, 4);
       expect(clockOf(tester), isNotNull);
 
@@ -465,6 +491,7 @@ void main() {
     ) async {
       withTimer(true, limit: 30);
       await openTray(tester, groups: 2);
+      await throwIt(tester);
       await run(tester, 4);
 
       // Away to the second group, which nobody has thrown, and wait out the
@@ -486,6 +513,7 @@ void main() {
     ) async {
       withTimer(true);
       await openTray(tester, groups: 2);
+      await throwIt(tester);
       await run(tester, 4);
 
       await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));

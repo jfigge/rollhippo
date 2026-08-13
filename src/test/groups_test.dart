@@ -8,6 +8,7 @@ import 'package:rollhippo/app/tray_screen.dart';
 import 'package:rollhippo/motion/motion.dart';
 import 'package:rollhippo/physics/body.dart';
 import 'package:rollhippo/render/die_preview.dart';
+import 'package:rollhippo/render/tray_painter.dart';
 import 'package:rollhippo/tray/tray.dart';
 
 /// The dice one group's rack is showing, whichever page is on screen.
@@ -310,36 +311,78 @@ void main() {
       await run(tester, 3);
 
       expect(find.byType(PageDots), findsNothing);
+      // And it is waiting, like every other group and like the card table:
+      // nothing is thrown on the way in.
+      expect(find.text(kPrompt), findsOneWidget);
+    }, variant: harness);
+
+    testWidgets('every group is waiting, the one you arrive on included', (
+      WidgetTester tester,
+    ) async {
+      await open(tester, 2);
+      await run(tester, 4);
+
+      expect(trayDotsOf(tester).current, 0);
+      expect(
+        find.text(kPrompt),
+        findsOneWidget,
+        reason: 'the tray must not roll itself as it opens',
+      );
+
+      // Space is the harness's shake, and a shake is what an unthrown group
+      // is waiting for.
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await run(tester, 1);
+      expect(find.text(kPrompt), findsNothing);
+
+      // And the group next door is still waiting: a throw is one group's,
+      // which is the whole reason they are separate boxes. Settled first,
+      // because a box will not move while its dice are — see `_canSwipe`.
+      await run(tester, 5);
+      await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));
+      await run(tester, 1);
+
+      expect(trayDotsOf(tester).current, 1);
+      expect(
+        find.text(kPrompt),
+        findsOneWidget,
+        reason: 'the second group should be sitting there unthrown',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await run(tester, 1);
       expect(find.text(kPrompt), findsNothing);
     }, variant: harness);
 
-    testWidgets(
-      'the group you arrive on is thrown, the next one is waiting',
-      (WidgetTester tester) async {
-        await open(tester, 2);
-        await run(tester, 4);
+    testWidgets('and its dice are lying still, not falling into view', (
+      WidgetTester tester,
+    ) async {
+      await open(tester, 1);
+      // One frame. The box you arrive on is stepped to rest inside the layout
+      // pass that built it, so there is nothing left of the constructor's
+      // throw to watch — which is the difference between a tray that is
+      // waiting and a tray that is mid-roll.
+      await tester.pump(const Duration(milliseconds: 16));
 
-        expect(trayDotsOf(tester).current, 0);
-        expect(find.text(kPrompt), findsNothing);
-
-        await tester.dragFrom(const Offset(200, 500), const Offset(-300, 0));
-        await run(tester, 1);
-
-        expect(trayDotsOf(tester).current, 1);
-        expect(
-          find.text(kPrompt),
-          findsOneWidget,
-          reason: 'the second group should be sitting there unthrown',
-        );
-
-        // Space is the harness's shake, and a shake is what an unthrown group is
-        // waiting for.
-        await tester.sendKeyEvent(LogicalKeyboardKey.space);
-        await run(tester, 1);
-        expect(find.text(kPrompt), findsNothing);
-      },
-      variant: harness,
-    );
+      final DiceTray tray =
+          ((tester
+                          .widget<CustomPaint>(
+                            find
+                                .descendant(
+                                  of: find.byType(TrayScreen),
+                                  matching: find.byType(CustomPaint),
+                                )
+                                .first,
+                          )
+                          .painter!
+                      as TrayPagesPainter)
+                  .trays)
+              .first;
+      expect(tray.world.asleep, isTrue);
+      for (final RigidBody die in tray.dice) {
+        expect(die.velocity.length, lessThan(0.01));
+      }
+    }, variant: harness);
 
     testWidgets('with motion control off, the button is the whole of it', (
       WidgetTester tester,

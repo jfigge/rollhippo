@@ -244,8 +244,11 @@ void main() {
       );
 
       final DiceTray tray = shownTray(tester);
-      // Roll, settle, and let the formation finish arriving. The binding's
-      // clock is a fake one, so this is simulated time rather than a wait.
+      // The tray opens with its dice on the floor and waits to be asked, so
+      // the throw is the test's now rather than the screen's.
+      await tester.tap(find.text('Throw'));
+      // Settle, and let the formation finish arriving. The binding's clock is
+      // a fake one, so this is simulated time rather than a wait.
       for (int i = 0; i < 480; i++) {
         await tester.pump(const Duration(milliseconds: 16));
         if (tray.readout.values != null && !tray.readout.moving) break;
@@ -285,6 +288,7 @@ void main() {
       );
 
       final DiceTray tray = shownTray(tester);
+      await tester.tap(find.text('Throw'));
       for (int i = 0; i < 480; i++) {
         await tester.pump(const Duration(milliseconds: 16));
         if (tray.readout.values != null && !tray.readout.moving) break;
@@ -324,6 +328,7 @@ void main() {
       );
 
       final DiceTray tray = shownTray(tester);
+      await tester.tap(find.text('Throw'));
       for (int i = 0; i < 600; i++) {
         await tester.pump(const Duration(milliseconds: 16));
         if (tray.readout.values != null && !tray.readout.moving) break;

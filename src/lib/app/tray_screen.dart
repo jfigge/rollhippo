@@ -32,21 +32,32 @@ const double _kFlingPages = 0.9;
 /// way rather than back where it came from.
 const double _kSwipeThreshold = 0.25;
 
+/// The step [_TrayScreenState._settle] runs at, and how many of them it will
+/// run before giving up. A sixtieth is the frame the tuning was settled
+/// against, and 600 of them are ten seconds.
+const double _kSettleStep = 1 / 60;
+const int _kSettleSteps = 600;
+
 /// The tray itself: a box per group of dice, side by side.
 ///
-/// The group you pressed Roll from arrives thrown. The others are sitting
-/// there, dice on the floor, waiting to be shaken — because a group is a
-/// separate roll rather than a separate view of the same one, and throwing all
-/// three the moment you arrive would spend two of them before you had looked at
-/// the first. Once thrown, a box you are not looking at is not simulated at
-/// all, so nothing that happens to another group can bump its numbers.
+/// **Nothing is thrown on the way in.** Every group is sitting there, dice on
+/// the floor, waiting to be shaken or thrown — the one you arrived on exactly
+/// like the ones you have not swiped to yet. A roll is a thing somebody asks
+/// for, and a tray that rolled itself as it opened would spend the throw
+/// before its owner had the phone level, on a screen they had not looked at.
+/// It is also what the card table has always done: a shoe opens with a bare
+/// glass and waits for Draw, and there was never a reason for the dice to be
+/// the odd one out.
+///
+/// Once thrown, a box you are not looking at is not simulated at all, so
+/// nothing that happens to another group can bump its numbers.
 class TrayScreen extends StatefulWidget {
   const TrayScreen({super.key, required this.groups, this.initial = 0});
 
   /// One box per group, in the order they were set up. Never empty.
   final List<List<DieSpec>> groups;
 
-  /// Which box you arrive on, and the only one that arrives thrown.
+  /// Which box you arrive on. It arrives unthrown, like every other one.
   final int initial;
 
   @override
@@ -305,16 +316,54 @@ class _TrayScreenState extends State<TrayScreen>
               width: size.width / Tuning.logicalPixelsPerMetre,
               height: size.height / Tuning.logicalPixelsPerMetre,
               dice: widget.groups[i],
-              // A group nobody has thrown yet has no result to present, so the
-              // readout stays off until it does. It comes on with the throw.
-              readout: i == _at,
+              // Nobody has thrown any of these, so none of them has a result
+              // to present. Every readout comes on with its own throw.
+              readout: false,
             ),
-            thrown: i == _at,
+            thrown: false,
           ),
       ]);
+    // The box you are about to be looking at, put down before you look at it.
+    // The others settle off-screen over the next second, which is what they
+    // have always done — but this one has no next second to hide in.
+    _settle(_boxes[_at].tray);
     _page.value = _at.toDouble();
     _slide = null;
     _dragging = false;
+  }
+
+  /// Runs a box forward under a phone lying perfectly still, until its dice
+  /// have stopped.
+  ///
+  /// A [DiceTray]'s constructor throws — that is how the dice get anywhere at
+  /// all — so a tray nobody has rolled is a tray in mid-air until something
+  /// steps it. This is what turns that into a tray of dice lying on the floor,
+  /// and it runs before the first frame is painted rather than across the
+  /// first second of them, because the whole point is that opening the screen
+  /// does not look like a roll. Watching the spawn formation tumble into a
+  /// heap is exactly the thing this change was asked to remove.
+  ///
+  /// [MotionFrame.still] and not the real sensor: whatever the phone happens
+  /// to be doing while a screen opens is not a throw anybody asked for.
+  ///
+  /// Bounded, because this is inside a layout pass. The worst set the picker
+  /// can build — ten D20s, which are the slowest to stop — is asleep in 81
+  /// steps, so the 600 of [_kSettleSteps] are a backstop against a set that
+  /// somehow never settles rather than a number any real tray goes near. A box
+  /// that did reach the cap would be left to the still-motion loop in
+  /// `_onTick` like any other, and would simply finish settling on screen.
+  ///
+  /// Those 81 steps cost about 100 ms under the debug VM and a small fraction
+  /// of that in the profile and release builds this ships as, which is what
+  /// makes doing it here rather than across the first second of frames
+  /// affordable at all. It is spent inside the route transition onto this
+  /// screen. If a set is ever allowed to be much larger than ten, measure this
+  /// again before assuming it is still free.
+  static void _settle(DiceTray tray) {
+    for (int step = 0; step < _kSettleSteps; step++) {
+      if (tray.world.asleep) return;
+      tray.update(MotionFrame.still, _kSettleStep);
+    }
   }
 
   /// Hands the clock the whole second the box on screen is at.
@@ -338,10 +387,16 @@ class _TrayScreenState extends State<TrayScreen>
     // never comes through here at all. See `_onTick`.
     box.sinceThrow = 0;
     box.alerted = false;
+    if (!box.thrown) {
+      box.tray.readout.enabled = true;
+      setState(() => box.thrown = true);
+    }
+    // After the flag and not before it. [_updateClock] reads `thrown` to
+    // decide whether this box is timing anything at all, so on a group's
+    // *first* throw — which, now that nothing is thrown on the way in, is
+    // every group's first throw — asking before it is set would leave the
+    // clock blank until the next frame put it right.
     _updateClock();
-    if (box.thrown) return;
-    box.tray.readout.enabled = true;
-    setState(() => box.thrown = true);
   }
 
   /// A tap at [local] on [tray]: keep the die under it, or put the roll down.
