@@ -228,28 +228,6 @@ void main() {
       expect(find.text(kEmptyEditor), findsOneWidget);
     });
 
-    testWidgets('the panel is titled for the set, out of the sets in use', (
-      WidgetTester tester,
-    ) async {
-      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-      // One set with anything in it, so it is the only one to be on.
-      expect(find.text('Dice - Set 1/1'), findsOneWidget);
-
-      await swipeLeft(tester);
-      await tapAdd(tester, 1);
-      expect(find.text('Dice - Set 2/2'), findsOneWidget);
-
-      await swipeLeft(tester);
-      await tapAdd(tester, 2);
-      expect(find.text('Dice - Set 3/3'), findsOneWidget);
-
-      // And the first set is one of three now, without having been touched:
-      // the title is about the set you are on, not about its own dice.
-      await swipeRight(tester);
-      await swipeRight(tester);
-      expect(find.text('Dice - Set 1/3'), findsOneWidget);
-    });
-
     /// Three sets, the third holding two dice with the ring on the second of
     /// them — which is what makes it worth watching the third set move.
     Future<void> threeSets(WidgetTester tester) async {
@@ -311,7 +289,6 @@ void main() {
       // per set, so it travels with the set rather than staying on a page.
       expect(rackOf(tester, 1).length, 2);
       expect(selectedIn(tester, 1), 1);
-      expect(find.text('Dice - Set 2/2'), findsOneWidget);
     });
 
     testWidgets('and the set behind it slides in from the right', (
@@ -371,7 +348,6 @@ void main() {
       expect(dotsOf(tester).filled, <bool>[true, false]);
       expect(dotsOf(tester).current, 0);
       expect(rackOf(tester, 0).length, 2);
-      expect(find.text('Dice - Set 1/1'), findsOneWidget);
     });
 
     testWidgets('swiping onto the empty page at the end does not clear it', (

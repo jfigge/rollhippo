@@ -125,6 +125,25 @@ const Key kModeDots = ValueKey<String>('mode-dots');
 const Key kDicePage = ValueKey<String>('dice-page');
 const Key kCardPage = ValueKey<String>('card-page');
 
+/// The two halves the card page's set-up is split between: the die of the card
+/// the swatches are pointed at, and what the shoe itself is made of.
+///
+/// [kCardPanel] is the pair of them, and stays that because it is what the
+/// mode drag and the tutorial mean by "the panel". These two are for anything
+/// that has business with one half rather than the other — which is mostly a
+/// test measuring where an edge sits.
+const Key kCardDiePanel = ValueKey<String>('card-die-panel');
+const Key kCardShoePanel = ValueKey<String>('card-shoe-panel');
+
+/// The air between those two panels.
+///
+/// Ten rather than the twelve that separates the rows *inside* one of them, so
+/// the split reads as a split rather than as a page break: near enough to
+/// still be one piece of screen, and the border round each is what says which
+/// controls answer to which question. The two points are also worth having —
+/// see [_CardCard], which is where the rest of the split's cost was found.
+const double kCardPanelGap = 10;
+
 /// The cut slider in the card panel. Named because the settings sheet has a
 /// slider too, and the picker is still built underneath it.
 const Key kReshuffleSlider = ValueKey<String>('reshuffle');
@@ -545,21 +564,6 @@ class _PickerScreenState extends State<PickerScreen>
     }
     return true;
   }
-
-  /// What the die panel calls itself: which set it is about, out of how many
-  /// sets there are to be about.
-  ///
-  /// Only ever asked of a group with dice in it — an empty one has no die to
-  /// edit and the panel says so instead — so the numerator is never larger
-  /// than the denominator. Both numbers are counted the way the tray counts:
-  /// an empty group is not a set you left blank, it is one you never started,
-  /// so it is neither a box on the tray nor a number here. Hence
-  /// [rollableIndex] for the position and the filled groups for the total,
-  /// which means a set with an empty group before it is numbered as the swipe
-  /// on the tray will number it rather than by which page of the picker it
-  /// happens to sit on.
-  String get _setTitle =>
-      'Dice - Set ${rollableIndex(_groups, _group) + 1}/$_startedGroups';
 
   @override
   void initState() {
@@ -1457,7 +1461,7 @@ class _PickerScreenState extends State<PickerScreen>
       _cardRacksView(),
       _cardDots(),
       const Spacer(),
-      _swipeable(_cardPanel(), width),
+      _swipeable(_cardPanels(), width),
     ],
   );
 
@@ -1671,7 +1675,43 @@ class _PickerScreenState extends State<PickerScreen>
 
   /// What the shoe is made of: how many decks are in it, and how deep it is
   /// cut before it goes back together.
-  Widget _cardPanel() {
+  /// The card page's set-up, in two panels rather than one.
+  ///
+  /// The dice page needs no such split: everything under its rack is about the
+  /// one die the ring is round, so one card of controls is one subject. The
+  /// card page is two subjects and always was. The swatches and Remove act on
+  /// a single die of the card, exactly as the die editor does; Decks and
+  /// Reshuffle act on the whole shoe, and would go on meaning the same thing
+  /// if the card had six dice on it or one. Drawn as one panel, the only thing
+  /// saying which was which was a gap of twelve points.
+  ///
+  /// [kCardPanel] is on the pair rather than on either half, because what that
+  /// key names is the handle the two modes are dragged by — and the drag has
+  /// always been the whole of what is under the rack, the gap between the
+  /// panels included. It is also what the tutorial's first page points at, and
+  /// a hole round only the top half would be a hole round half a sentence.
+  ///
+  /// The pair hangs off the bottom of the block — see [_cardsPage] — so the
+  /// height the split costs is spent upwards, out of the slack the card page
+  /// already had above it. The shoe panel's bottom edge does not move, which
+  /// is the edge the mode dots sit under and the one thing here that must not
+  /// shift as a mode slides over it.
+  Widget _cardPanels() => Column(
+    key: kCardPanel,
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      _cardDiePanel(),
+      const SizedBox(height: kCardPanelGap),
+      _cardShoePanel(),
+    ],
+  );
+
+  /// One card of the shoe, and the die of it the swatches are pointed at.
+  ///
+  /// [_editor]'s opposite number, down to the shape: a title, what it is about
+  /// on the right of that, Remove at the end of the row, and the palette under
+  /// it.
+  Widget _cardDiePanel() {
     // A shoe nobody has started has no card to describe and no die for a
     // swatch to land on, so the panel goes quiet rather than away — the same
     // bargain [_editor] makes for an empty set of dice, and for the same
@@ -1680,26 +1720,16 @@ class _PickerScreenState extends State<PickerScreen>
     // of a swipe.
     final bool empty = _cardColours.isEmpty;
     final int size = Deck.sizeOf(_cardDice, _decks);
-    return Container(
-      // The handle the two modes are dragged by, on the page that has the
-      // most to say for itself — which is why it is the thing the tutorial's
-      // first page points at. See [kCardPanel].
-      key: kCardPanel,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141A23),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0x14FFFFFF)),
-      ),
+    return _CardCard(
+      key: kCardDiePanel,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
             children: <Widget>[
               // The title sits in the label column and the count starts where
-              // the first deck button does, so the panel reads as two columns
-              // rather than as three rows that happen to be stacked.
+              // the first deck button does, so the two panels read as one pair
+              // of columns rather than as five rows that happen to be stacked.
               SizedBox(
                 width: _kFieldLabel,
                 child: Text(
@@ -1749,105 +1779,115 @@ class _PickerScreenState extends State<PickerScreen>
             ],
           ),
           const SizedBox(height: 8),
-          // The controls fade together and stop taking taps rather than each
-          // being told separately that it is disabled — there is one reason
-          // they are all off, and it is not about any of them.
-          IgnorePointer(
-            ignoring: empty,
-            child: Opacity(
-              opacity: empty ? 0.38 : 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  // The same swatches the die editor has, in the same place under the
-                  // panel's title, doing the same thing to the die the rack above has
-                  // a ring round.
-                  //
-                  // Across the whole panel rather than in the label column the two
-                  // rows below keep to: eight of them do not fit beside a label on a
-                  // narrow phone, and a swatch row that wrapped there would make this
-                  // panel a different height on different handsets.
-                  Wrap(
-                    spacing: 5,
-                    runSpacing: 6,
-                    children: <Widget>[
-                      for (final int colour in kDicePalette)
-                        _Swatch(
-                          colour: colour,
-                          selected:
-                              !empty && colour == _cardColours[_cardSelected],
-                          onTap: () => _setCardColour(colour),
-                        ),
-                    ],
+          // The swatches alone. The panel below this one stays live on a
+          // shoe nobody has started, because neither of its controls needs a
+          // die to be about — see [_cardShoePanel].
+          _Quiet(
+            empty: empty,
+            // The same swatches the die editor has, in the same place under
+            // the panel's title, doing the same thing to the die the rack
+            // above has a ring round.
+            //
+            // Across the whole panel rather than in the label column the shoe
+            // panel's rows keep to: eight of them do not fit beside a label on
+            // a narrow phone, and a swatch row that wrapped there would make
+            // this panel a different height on different handsets.
+            child: Wrap(
+              spacing: 5,
+              runSpacing: 6,
+              children: <Widget>[
+                for (final int colour in kDicePalette)
+                  _Swatch(
+                    colour: colour,
+                    selected: !empty && colour == _cardColours[_cardSelected],
+                    onTap: () => _setCardColour(colour),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: <Widget>[
-                      const SizedBox(
-                        width: _kFieldLabel,
-                        child: _FieldLabel('Decks'),
-                      ),
-                      for (int n = 1; n <= kMaxDecks; n++)
-                        Expanded(
-                          child: _Chip(
-                            label: '$n',
-                            selected: n == _decks,
-                            onTap: () => _setDecks(n),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: <Widget>[
-                      const SizedBox(
-                        width: _kFieldLabel,
-                        child: _FieldLabel('Reshuffle'),
-                      ),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 3,
-                            overlayShape: const RoundSliderOverlayShape(
-                              overlayRadius: 14,
-                            ),
-                          ),
-                          child: Slider(
-                            key: kReshuffleSlider,
-                            value: _reshuffleAt.toDouble(),
-                            max: kMaxReshuffleAt.toDouble(),
-                            divisions: kMaxReshuffleAt,
-                            activeColor: const Color(0xFF3F6FA8),
-                            inactiveColor: const Color(0x22FFFFFF),
-                            onChanged: _setReshuffleAt,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        // Wide enough for the longest it gets, which is "<20%".
-                        width: 46,
-                        child: Text(
-                          // Below this much left, not above it: the shoe goes back
-                          // together when it is nearly out, and a bare number does not
-                          // say which way round that is.
-                          '<$_reshuffleAt%',
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          style: const TextStyle(
-                            color: Color(0xFFE8EEF6),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            fontFeatures: <FontFeature>[
-                              FontFeature.tabularFigures(),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// What the shoe is made of: how many decks go into it and where it is cut.
+  ///
+  /// Neither is about a die. Both would mean exactly what they mean now if the
+  /// card above had three dice on it or one, which is the whole reason this is
+  /// a panel of its own rather than the bottom two rows of the one above.
+  ///
+  /// It is **never** faded, where the panel above it is faded on a shoe nobody
+  /// has started, and the split is what makes that possible: the swatches go
+  /// quiet because there is no die for one to paint, and neither of these two
+  /// controls needs a die. Both are live on the empty page at the end of the
+  /// row, so a shoe can be given its decks and its cut before its first card
+  /// as readily as after — and the numbers you set are the numbers that first
+  /// die finds waiting, rather than the ones [kEmptyShoe] would have chosen
+  /// for you.
+  Widget _cardShoePanel() {
+    return _CardCard(
+      key: kCardShoePanel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const SizedBox(width: _kFieldLabel, child: _FieldLabel('Decks')),
+              for (int n = 1; n <= kMaxDecks; n++)
+                Expanded(
+                  child: _Chip(
+                    label: '$n',
+                    selected: n == _decks,
+                    onTap: () => _setDecks(n),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              const SizedBox(
+                width: _kFieldLabel,
+                child: _FieldLabel('Reshuffle'),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 14,
+                    ),
+                  ),
+                  child: Slider(
+                    key: kReshuffleSlider,
+                    value: _reshuffleAt.toDouble(),
+                    max: kMaxReshuffleAt.toDouble(),
+                    divisions: kMaxReshuffleAt,
+                    activeColor: const Color(0xFF3F6FA8),
+                    inactiveColor: const Color(0x22FFFFFF),
+                    onChanged: _setReshuffleAt,
+                  ),
+                ),
+              ),
+              SizedBox(
+                // Wide enough for the longest it gets, which is "<20%".
+                width: 46,
+                child: Text(
+                  // Below this much left, not above it: the shoe goes back
+                  // together when it is nearly out, and a bare number does
+                  // not say which way round that is.
+                  '<$_reshuffleAt%',
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Color(0xFFE8EEF6),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -2008,23 +2048,17 @@ class _PickerScreenState extends State<PickerScreen>
             children: <Widget>[
               Expanded(
                 child: Text(
-                  empty ? 'No dice yet' : _setTitle,
-                  // Short, and held to one line come what may: this title is
-                  // the one thing in the card whose length changes, and a
-                  // second line of it would push everything below the card
-                  // down the screen under a finger mid-swipe. It does not name
-                  // the kind: the lit chip below already says which one it is,
-                  // and saying it twice only made the line longer.
-                  //
-                  // It no longer names the die either. "Die 2" was the same
-                  // repetition one step further on — the rack above has a ring
-                  // round that die, which is where a selection is worth
-                  // reading — while which *set* the panel belongs to was
-                  // written down nowhere: the dots below say which page you
-                  // are on, not how many of them you have put anything in. So
-                  // the line is spent on the thing that was missing,
-                  // and the panel is titled for the set the way the card
-                  // panel is titled for the cards.
+                  empty ? 'No dice yet' : 'Dice',
+                  // One word, and it names the panel rather than anything in
+                  // it. Three things have been tried in this line and all
+                  // three were repetition: the *kind* is on the lit chip
+                  // below, the *die* has a ring round it in the rack above,
+                  // and the *set* is the lit dot between the two. A title that
+                  // says what a control beside it already says is a title that
+                  // only makes the line longer — and this one is the one thing
+                  // in the panel whose length could change, which is why it is
+                  // held to a single line: a second one would push everything
+                  // under it down the screen under a finger mid-swipe.
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -2046,43 +2080,37 @@ class _PickerScreenState extends State<PickerScreen>
             ],
           ),
           const SizedBox(height: 8),
-          // The controls themselves fade together and stop taking taps, rather
-          // than each being told separately that it is disabled — there is one
-          // reason they are all off, and it is not about any of them.
-          IgnorePointer(
-            ignoring: empty,
-            child: Opacity(
-              opacity: empty ? 0.38 : 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Wrap(
-                    spacing: 5,
-                    runSpacing: 6,
-                    children: <Widget>[
-                      for (final int colour in kDicePalette)
-                        _Swatch(
-                          colour: colour,
-                          selected: !empty && colour == spec.colour,
-                          onTap: () => _set(spec.copyWith(colour: colour)),
+          _Quiet(
+            empty: empty,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Wrap(
+                  spacing: 5,
+                  runSpacing: 6,
+                  children: <Widget>[
+                    for (final int colour in kDicePalette)
+                      _Swatch(
+                        colour: colour,
+                        selected: !empty && colour == spec.colour,
+                        onTap: () => _set(spec.copyWith(colour: colour)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: <Widget>[
+                    for (final DieKind kind in _kinds(spec))
+                      Expanded(
+                        child: _Chip(
+                          label: kind.label,
+                          selected: !empty && kind == spec.kind,
+                          onTap: () => _set(spec.copyWith(kind: kind)),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: <Widget>[
-                      for (final DieKind kind in _kinds(spec))
-                        Expanded(
-                          child: _Chip(
-                            label: kind.label,
-                            selected: !empty && kind == spec.kind,
-                            onTap: () => _set(spec.copyWith(kind: kind)),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -2154,6 +2182,58 @@ Widget tutorialBackdrop(TutorialStage stage) => switch (stage) {
 
 /// One place in the rack: a die you can select, the space the next die goes in,
 /// or a slot the set has not reached yet.
+/// The dark rounded card both halves of the card page's set-up are drawn on,
+/// and the same one [_editor] draws itself on.
+///
+/// Two of them side by side would be two chances for one to have a different
+/// border, which is the argument `menu.dart` makes about its switches — and
+/// the split turned one panel into two overnight.
+class _CardCard extends StatelessWidget {
+  const _CardCard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.symmetric(horizontal: 16),
+    // Ten and ten, where the one panel it replaces had ten and fourteen. The
+    // split costs a second panel's worth of vertical padding out of slack the
+    // card page has a fixed amount of — the block is sized by the *dice* page
+    // and the difference between the two is what the [Spacer] in [_cardsPage]
+    // is spending. Measured on the narrowest screen worth shipping to, that
+    // slack came to three points; taking eight back off the padding and two
+    // off [kCardPanelGap] is what keeps a notch of larger text from running
+    // the panels into the dots above them.
+    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+    decoration: BoxDecoration(
+      color: const Color(0xFF141A23),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: const Color(0x14FFFFFF)),
+    ),
+    child: child,
+  );
+}
+
+/// Controls that are off because there is no die for them to be about.
+///
+/// Faded and deaf together rather than each being told separately that it is
+/// disabled: there is one reason they are all off, and it is not about any of
+/// them. Two panels use it — the die editor and the card's — and they are the
+/// two whose controls paint or shape a single die. `_cardShoePanel` is the one
+/// that does not, and it is never faded at all.
+class _Quiet extends StatelessWidget {
+  const _Quiet({required this.empty, required this.child});
+
+  final bool empty;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: empty,
+    child: Opacity(opacity: empty ? 0.38 : 1, child: child),
+  );
+}
+
 class _RackSlot extends StatelessWidget {
   const _RackSlot({
     super.key,

@@ -63,7 +63,7 @@ Future<void> openCards(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(kHarnessScreen);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
-  await tester.drag(find.text('Dice - Set 1/1'), const Offset(-300, 0));
+  await tester.drag(find.text('Dice'), const Offset(-300, 0));
   await tester.pumpAndSettle();
 }
 
@@ -219,6 +219,54 @@ void main() {
         find.descendant(
           of: find.byKey(kCardPage),
           matching: find.text('Shoe 2/2 · 108 cards'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the shoe panel stays live on a shoe nobody has started', (
+      WidgetTester tester,
+    ) async {
+      await openCards(tester);
+      await swipeShoe(tester, -300);
+      expect(cardRackOf(tester, 1), isEmpty);
+
+      // Decks and Reshuffle are not about a die, so the empty page at the end
+      // of the row is no reason to switch them off.
+      expect(
+        find.descendant(
+          of: find.byKey(kCardShoePanel),
+          matching: find.byWidgetPredicate(
+            (Widget w) => w is IgnorePointer && w.ignoring,
+          ),
+        ),
+        findsNothing,
+      );
+      // The panel above it *is* off, because there is no die for a swatch to
+      // paint. That is the whole reason the two are separate panels.
+      expect(
+        find.descendant(
+          of: find.byKey(kCardDiePanel),
+          matching: find.byWidgetPredicate(
+            (Widget w) => w is IgnorePointer && w.ignoring,
+          ),
+        ),
+        findsOneWidget,
+      );
+
+      // Three decks, chosen before there is a card to shuffle...
+      await tester.tap(
+        find.descendant(of: find.byKey(kCardPage), matching: find.text('3')),
+      );
+      await tester.pump();
+      // ...and the first die finds them waiting. Three decks of one die is
+      // eighteen cards.
+      await tester.tap(addInShoe(1));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(kCardPage),
+          matching: find.text('Shoe 2/2 · 18 cards'),
         ),
         findsOneWidget,
       );

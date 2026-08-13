@@ -113,7 +113,7 @@ void main() {
       expect(rack(tester).length, kDefaultDice.length);
       expect(selectedDie(tester), 0);
       // One set with anything in it, and you are on it.
-      expect(find.text('Dice - Set 1/1'), findsOneWidget);
+      expect(find.text('Dice'), findsOneWidget);
     });
 
     testWidgets('a colour lands on the selected die and nowhere else', (

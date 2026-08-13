@@ -218,8 +218,8 @@ const List<TutorialPage> kTutorialPages = <TutorialPage>[
     body:
         'Roll Hippo is a tray of dice and a shoe of cards, and it is equally '
         'both — a card stands for one roll of the dice it replaces. Swipe the '
-        'panel under the rack left or right to change page, and the dots '
-        'below it say which one you are on.',
+        'panels under the rack left or right to change page, and the dots '
+        'below them say which one you are on.',
   ),
   TutorialPage(
     icon: Icons.casino_outlined,

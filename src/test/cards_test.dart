@@ -80,7 +80,7 @@ Finder addOf(Key page) =>
 /// The dice panel's title, which is what there is to drag it by. It names the
 /// set the panel is about — one set with dice in it, on an untouched picker —
 /// where card mode's says 'Cards'.
-final Finder dicePanel = find.text('Dice - Set 1/1');
+final Finder dicePanel = find.text('Dice');
 
 /// Drags the panel — the one thing on the picker that switches modes.
 Future<void> swipePanel(WidgetTester tester, Finder onPanel, double dx) async {
@@ -453,6 +453,39 @@ void main() {
 
       await swipePanel(tester, find.text('Cards'), 300);
       expect(dotsOf(tester, kModeDots).current, 0);
+    });
+
+    testWidgets('the shoe panel hangs off the bottom, and the die panel is '
+        'above it', (WidgetTester tester) async {
+      // The narrowest screen worth shipping to, because the slack this is
+      // about is the difference between the two modes' racks and that scales
+      // with width: a phone this wide has the least of it.
+      await tester.binding.setSurfaceSize(const Size(375, 852));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await swipePanel(tester, dicePanel, -300);
+
+      // The block is sized by the dice page and the card page is laid into it,
+      // so the last thing on the card page ends where the block does. That is
+      // the edge the mode dots sit under, and splitting the panel in two must
+      // not have moved it: the pair grew upwards, into the slack above.
+      expect(
+        tester.getBottomLeft(find.byKey(kCardShoePanel)).dy,
+        tester.getBottomLeft(find.byKey(kCardPage)).dy,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(kCardShoePanel)).dy -
+            tester.getBottomLeft(find.byKey(kCardDiePanel)).dy,
+        kCardPanelGap,
+      );
+
+      // And there is still room above the pair. Not much — the split spends
+      // most of what there was — so this is here to say so when the next row
+      // added to either panel takes the rest of it.
+      final double slack =
+          tester.getTopLeft(find.byKey(kCardDiePanel)).dy -
+          tester.getBottomLeft(find.byKey(kShoeDots)).dy;
+      expect(slack, greaterThan(8), reason: 'the panels have run out of room');
     });
 
     testWidgets('a swipe on the rack changes set, not mode', (
