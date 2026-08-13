@@ -147,6 +147,45 @@ void main() {
     await _write(tester, '$dir/picker-name.png');
   });
 
+  testWidgets('the question a set\'s last die gets', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(kHarnessScreen);
+    tester.view.physicalSize = kHarnessScreen * 2;
+    tester.view.devicePixelRatio = 2.0;
+
+    await tester.pumpWidget(
+      const RepaintBoundary(child: MaterialApp(home: PickerScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    // A second set, so the first one has something behind it — which is the
+    // only arrangement this question is ever asked in.
+    await tester.drag(find.byKey(kRack), const Offset(-300, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey<int>(1)),
+        matching: find.byKey(kAddDie),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byKey(kRack), const Offset(300, 0));
+    await tester.pumpAndSettle();
+
+    // Down to the last die, and then the press that takes the set with it.
+    final Finder remove = find.descendant(
+      of: find.byKey(kDicePage),
+      matching: find.text('Remove'),
+    );
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+
+    await _write(tester, '$dir/picker-drop.png');
+  });
+
   testWidgets('every kind at rack size', (WidgetTester tester) async {
     const double slot = 72;
     await tester.binding.setSurfaceSize(

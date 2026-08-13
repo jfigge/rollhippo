@@ -654,7 +654,7 @@ class _NameDialogState extends State<_NameDialog> {
           ),
         ),
         const SizedBox(height: 18),
-        _Actions(
+        DialogActions(
           confirm: renaming ? 'Update' : 'Create',
           onConfirm: _name.isEmpty ? null : _submit,
         ),
@@ -684,7 +684,7 @@ Future<bool> showDeleteProfileDialog(BuildContext context, String name) async {
               ),
             ),
             const SizedBox(height: 18),
-            _Actions(
+            DialogActions(
               confirm: 'Delete',
               destructive: true,
               onConfirm: () => Navigator.of(context).pop(true),
@@ -740,7 +740,7 @@ Future<ScannedChoice> showScannedProfileDialog(
               ),
             ),
             const SizedBox(height: 18),
-            _Actions(
+            DialogActions(
               middle: 'Load',
               onMiddle: () => Navigator.of(context).pop(ScannedChoice.load),
               confirm: replaces ? 'Replace' : 'Save',
@@ -751,95 +751,4 @@ Future<ScannedChoice> showScannedProfileDialog(
         ),
   );
   return choice ?? ScannedChoice.cancel;
-}
-
-/// Cancel, and the one that does the thing.
-///
-/// Cancel is a word rather than a button, because it is what happens if you
-/// tap outside the dialog anyway — it is there to be found, not to be aimed at.
-class _Actions extends StatelessWidget {
-  const _Actions({
-    required this.confirm,
-    required this.onConfirm,
-    this.middle,
-    this.onMiddle,
-    this.destructive = false,
-  });
-
-  final String confirm;
-
-  /// Null when there is nothing to confirm — an empty name.
-  final VoidCallback? onConfirm;
-
-  /// A second thing you might have meant, between Cancel and the button that
-  /// does the thing. Only the scanned-code dialogs have one: taking somebody
-  /// else's profile and *keeping* it are different answers, and a dialog
-  /// that made you choose between keeping it and losing it would get the wrong
-  /// one pressed.
-  final String? middle;
-  final VoidCallback? onMiddle;
-
-  final bool destructive;
-
-  @override
-  Widget build(BuildContext context) {
-    final String? middle = this.middle;
-    // An [OverflowBar] rather than a [Row], for the three-button case: Cancel,
-    // Load and Replace side by side is most of the width of a narrow phone
-    // already, and one notch of larger text would push the last of them off
-    // the edge. This puts them in a column when they stop fitting, which is
-    // what an alert dialog has always done.
-    return OverflowBar(
-      alignment: MainAxisAlignment.end,
-      overflowAlignment: OverflowBarAlignment.end,
-      spacing: 2,
-      overflowSpacing: 4,
-      children: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: TextButton.styleFrom(
-            foregroundColor: const Color(0xAABFD0E4),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            textStyle: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          child: const Text('Cancel'),
-        ),
-        if (middle != null)
-          TextButton(
-            onPressed: onMiddle,
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF6E9AD0),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              textStyle: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            child: Text(middle),
-          ),
-        FilledButton(
-          onPressed: onConfirm,
-          style: FilledButton.styleFrom(
-            backgroundColor:
-                destructive ? const Color(0xFFB3453F) : const Color(0xFF3F6FA8),
-            foregroundColor: const Color(0xFFF2F7FF),
-            disabledBackgroundColor: const Color(0x223F6FA8),
-            disabledForegroundColor: const Color(0x55F2F7FF),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          child: Text(confirm),
-        ),
-      ],
-    );
-  }
 }

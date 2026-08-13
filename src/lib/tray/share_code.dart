@@ -20,9 +20,11 @@ const String kShareCodePrefix = 'RH1:';
 /// The dice sets, small enough to put in a QR code.
 ///
 /// Ten dice fit in ten bytes because a die is only two choices, and both are
-/// from a fixed list: six kinds and eight colours, three bits each. A full
-/// three groups of ten is 34 bytes — 48 characters of base64 — which is a QR
-/// code you can scan across a table rather than one you have to lean into.
+/// from a fixed list: six kinds and eight colours, three bits each. A group
+/// costs one byte more than its dice and the run of them costs one, so the
+/// full `kMaxGroups` sets of ten come to 45 bytes — 60 characters of base64 —
+/// which is a QR code you can scan across a table rather than one you have to
+/// lean into.
 ///
 /// Storing the colour as an index into [kDicePalette] rather than as its ARGB
 /// is what buys most of that, and it is honest because the palette is the only
@@ -82,12 +84,18 @@ const String kProfileCodePrefix = 'RH3:';
 /// The profile code this app used to write, and still reads.
 ///
 /// Identical to [kProfileCodePrefix] but for its shoes: an `RH2:` code carries
-/// one, as the only one there was, where an `RH3:` carries up to three. It is
-/// read and never written, which costs a branch in [decodeProfile] and means a
-/// code somebody saved to a photo or printed on a card still opens. The other
-/// direction is not available and is not meant to be: an `RH2:` reader that
-/// took an `RH3:` code would silently drop two of its shoes, which is the
-/// whole reason the version is in the prefix.
+/// one, as the only one there was, where an `RH3:` carries a run of them. It
+/// is read and never written, which costs a branch in [decodeProfile] and
+/// means a code somebody saved to a photo or printed on a card still opens.
+/// The other direction is not available and is not meant to be: an `RH2:`
+/// reader that took an `RH3:` code would silently drop every shoe but the
+/// first, which is the whole reason the version is in the prefix.
+///
+/// The run is what buys the *next* change for nothing. [kMaxCardSets] went
+/// from three to four without a version after it, because a count and then
+/// that many of a thing describes any number of shoes as readily as three —
+/// an older build reads the whole code and then holds it to the three sets it
+/// has room for, which is what it does with any profile from a later build.
 const String kProfileCodeV2Prefix = 'RH2:';
 
 /// A profile read off somebody else's screen.
@@ -111,12 +119,15 @@ class ScannedProfile {
 ///
 /// A shoe is its own little run for the same reason a group of dice is: a
 /// count and then that many of a thing, so the reader never has to know how
-/// many there were going to be. Three dice, two numbers and a length is five
-/// bytes at the most, so three shoes cost fifteen where one cost five.
+/// many there were going to be — which is why [kMaxCardSets] could be raised
+/// without a fourth version of this format. Three dice, two numbers and a
+/// length is five bytes at the most, so four shoes cost twenty where one cost
+/// five.
 ///
-/// A full house — three sets of ten dice, three shoes of three cards, a
-/// twelve-character name — comes to 65 bytes, which is 88 characters of
-/// base64 and a QR code still coarse enough to read across a table.
+/// A full house — four sets of ten dice, four shoes of three cards, a
+/// twelve-character name — comes to 84 bytes, which is 112 characters of
+/// base64 and a QR code still coarse enough to read across a table. A profile
+/// anybody actually keeps is a fraction of it.
 String encodeProfile(Profile profile, {String name = ''}) {
   final List<int> bytes = <int>[profile.mode.index];
   _writeCards(bytes, profile.cards);

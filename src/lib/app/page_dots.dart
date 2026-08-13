@@ -9,9 +9,10 @@ import 'package:flutter/material.dart';
 /// disc against a hollow ring, and *colour* says which one you are looking at.
 /// Read either one without having to decode the other.
 ///
-/// The first dot is always filled, because the first group is the set and
-/// cannot be emptied. That is not enforced here; it falls out of the picker
-/// refusing to remove the last die.
+/// At least one dot is always filled, because the picker will not let the last
+/// started group be emptied. Which one it is is not fixed — the first group
+/// can be emptied like any other once there is a second — and none of that is
+/// enforced here; it falls out of the picker refusing to remove the last die.
 class PageDots extends StatelessWidget {
   const PageDots({
     super.key,

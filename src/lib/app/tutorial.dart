@@ -109,10 +109,14 @@ typedef TutorialBackdrop = Widget Function(TutorialStage stage);
 /// The set-up every backdrop is built from.
 ///
 /// Three sets with something in each, because one of the pages is about there
-/// being three and a backdrop with one filled dot would be illustrating the
-/// opposite of what the page says. Assorted kinds and colours for the same
-/// reason the page about the rack exists: a rack of five identical white D6s
-/// does not show you that a die has a kind and a colour to change.
+/// being more than one and a backdrop with a single filled dot would be
+/// illustrating the opposite of what the page says. Three rather than the four
+/// there is room for, because the rack grows a page at a time and a picker
+/// somebody has actually been using is part way up: three filled dots and a
+/// hollow one after them is what that looks like. Assorted kinds and colours
+/// for the same reason the page about the rack exists: a rack of five
+/// identical white D6s does not show you that a die has a kind and a colour to
+/// change.
 ///
 /// It is nobody's saved profile and is never written anywhere. The backdrop is
 /// a picture of the app, and a picture of the app has to be a picture of the
@@ -130,10 +134,10 @@ const Profile kTutorialCards = Profile(
   cards: _kTutorialShoes,
 );
 
-/// One shoe with a card in it, and two nobody has started — which is the shape
-/// the picker opens on, and so the shape the page about it should show. The
-/// tour is a picture of the app in use, and an app in use has not filled in
-/// everything it could.
+/// One shoe with a card in it, and the rest nobody has started — which is the
+/// shape the picker opens on, and so the shape the page about it should show.
+/// The tour is a picture of the app in use, and an app in use has not filled
+/// in everything it could.
 const List<CardSet> _kTutorialShoes = <CardSet>[
   CardSet(colours: _kTutorialCard, decks: 2, reshuffleAt: 5),
   kEmptyShoe,
@@ -260,13 +264,14 @@ const List<TutorialPage> kTutorialPages = <TutorialPage>[
   ),
   TutorialPage(
     icon: Icons.swipe_outlined,
-    title: 'Three sets at once',
+    title: 'Several sets at once',
     stage: TutorialStage.tray,
     spot: kTrayDots,
     body:
-        'In the tray, swipe sideways for another set of dice. They are three '
-        'separate rolls rather than three views of one, so each keeps the '
-        'numbers it landed on until you shake it again.',
+        'In the tray, swipe sideways for another set of dice. They are '
+        'separate rolls rather than views of one, so each keeps the numbers '
+        'it landed on until you shake it again. Back in the picker, the empty '
+        'page at the end of the rack is where the next one starts.',
   ),
   TutorialPage(
     icon: Icons.tune,

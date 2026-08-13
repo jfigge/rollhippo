@@ -16,8 +16,9 @@ wrong app.
 **A shoe of cards, one per possible roll.** `lib/cards/` builds every *ordered*
 outcome of one to three six-sided dice, one to three decks of them at once,
 shuffles it and deals without replacement, with a cut card at whatever
-percentage you set — up to three such shoes at once, each with its own dice,
-its own decks and its own cut, swiped between exactly as the trays are. Drawing a card is the same wager as throwing the dice it
+percentage you set — up to four such shoes at once, each with its own dice,
+its own decks and its own cut, swiped between exactly as the trays are, and
+arriving one at a time as you fill them. Drawing a card is the same wager as throwing the dice it
 stands for — that is what makes it a stand-in rather than a gimmick — and it
 differs in the one way a shoe always does: what has already gone tells you
 something about what is left. That difference is the point of the mode, and
@@ -53,7 +54,7 @@ Run from the repo root:
 | `make format-check` | the same files as `format`, but it reports the drift rather than fixing it |
 | `make desktop` | macOS harness. Space shakes, **R** throws, arrows tilt, **G** toggles the rotational pseudo-forces for an A/B |
 | `make gif` / `make filmstrip` | render a scripted roll into `/tmp/rollhippo/` |
-| `make picker` | render the picker — both modes, its saves, the naming dialog and the Reset-and-Share menu behind `+ New` — and every kind at rack size, into `/tmp/rollhippo/` |
+| `make picker` | render the picker — both modes, its saves, the naming dialog, the Reset-and-Share menu behind `+ New`, the question a set's last die gets — and every kind at rack size, into `/tmp/rollhippo/` |
 | `make hippo` | render the hippopotamus — every pose a roll can present it in, the rack angle, and the die it is |
 | `make poker` | render the poker die — its six faces square to the glass, and the same die tumbling and at the rack angle in every colour. The other kind whose faces cannot be checked by reading a number off them |
 | `make tutorial` | render the tutorial — every page, over the screen that page is about, with the part it names lit — on a phone and on the shortest screen worth shipping to, into `/tmp/rollhippo/` |
@@ -309,13 +310,15 @@ test exists to make the change deliberate, not to make it hard.
   it had to tell — with the outgoing card staying put, depth order left the
   incoming one hidden behind it for the whole flight and popping into view at
   the end, so the two were swapped at the instant the flying card went edge on.
-- **The card page has three shoes, and they mirror the tray's three sets.**
-  `CardSet` is a group of dice's opposite number — the colours printed on a
-  card, the decks and the cut — and a `Profile` carries three of them beside
-  its three `groups`, empties and all. Each shoe carries its *own* set-up
-  rather than sharing one, because two shoes with the same dice, decks and cut
-  are the same shoe twice: the point of three is that one can be a blackjack
-  shoe and another a single deck cut to the last card. Everything about them
+- **The card page has as many shoes as the tray has sets, and they mirror
+  each other.** `CardSet` is a group of dice's opposite number — the colours
+  printed on a card, the decks and the cut — and a `Profile` carries
+  `kMaxCardSets` of them beside its `kMaxGroups` `groups`, empties and all;
+  the two constants are the same four and `card_groups_test` is what holds them
+  to it. Each shoe carries its *own* set-up rather than sharing one, because
+  two shoes with the same dice, decks and cut are the same shoe twice: the
+  point of more than one is that one can be a blackjack shoe and another a
+  single deck cut to the last card. Everything about them
   is the dice side's shape with the words changed — `rollableCards` beside
   `rollableGroups`, `kShoeDots` beside `kGroupDots`, `CardPagesPainter` beside
   `TrayPagesPainter`, one `_Shoe` per table beside one `_Box` per group, each
@@ -344,10 +347,14 @@ test exists to make the change deliberate, not to make it hard.
   reads its saves; `profileFromJson` prefers `cards` and falls back to the old
   three, which is every save written before there were three. The QR code
   could not do that — its shoes are positional bytes — so it took a version:
-  `RH3:` is written, and `RH2:` is still *read*, arriving as one shoe with two
-  nobody started. **Never the other way round.** An `RH2:` reader handed an
-  `RH3:` code would silently drop two shoes, which is the whole reason the
-  version sits in the prefix.
+  `RH3:` is written, and `RH2:` is still *read*, arriving as one shoe with the
+  rest nobody started. **Never the other way round.** An `RH2:` reader handed
+  an `RH3:` code would silently drop every shoe but the first, which is the
+  whole reason the version sits in the prefix. What `RH3:` bought is that the
+  *next* change was free: its shoes are a count and then that many of a thing,
+  so going from three to four needed no `RH4:` — an older build reads the whole
+  code and then holds it to the three it has room for, which is what it does
+  with any profile from a later build.
 
 - **A played shoe is asked about before it is closed.** Close sits an inch
   from Draw and gets hit by the same hand doing the same thing, so
@@ -361,8 +368,86 @@ test exists to make the change deliberate, not to make it hard.
   another thing to hit by accident. The back gesture goes through the same
   door — `PopScope`, whose `canPop` is `!_dealt`, which is why `_draw` calls
   `setState` on the one card that changes that answer and on no other. With
-  three shoes `_dealt` is true if *any* of them has been played, so the first
-  card dealt anywhere on the table is the one that costs a rebuild.
+  more than one shoe `_dealt` is true if *any* of them has been played, so the
+  first card dealt anywhere on the table is the one that costs a rebuild.
+
+- **The rack grows a page at a time, and the list behind it never does.**
+  `kMaxGroups` and `kMaxCardSets` are ceilings rather than counts: what the
+  picker puts a page and a dot in front of is the sets you have *started* and
+  one empty one after them, which is `shownPages` and is the only thing either
+  page view or either row of dots is built from. So a fresh picker is two dots,
+  putting a die in the empty page fills its dot and grows a new one behind it,
+  and four is where that stops.
+
+  What does *not* change size is `_groups`, `_shoeColours` and their
+  neighbours, or what `_capture` writes: those are always the full
+  `kMaxGroups` and `kMaxCardSets`, empties and all, and so is
+  `kDefaultProfile`, which is written out to that length for the one reason
+  that a reset picker's `_capture` has to *equal* it. A list that grew and
+  shrank with the pages would move a set's dice to another index the moment an
+  earlier one was emptied, and the index is what `_selectedIn` and the page
+  views' keys are. Trailing empties in a save are not padding to be tidied
+  away; they are what makes a save comparable to a scanned code.
+
+  `shownPages` is therefore a *count* — started plus one, capped — rather than
+  a search for the last started slot, and that is only honest because a set
+  with nothing in it never sits in front of one that has dice. Which is the
+  next entry.
+
+- **Removing a set's last die removes the set, there and then.** There is no
+  lazy sweep any more and nothing to hook it to: `_removeSelected` has three
+  answers and picks between them on what else is in the row.
+
+  The **only set there is** keeps its last die — `_floor` is `_startedGroups >
+  1 ? 0 : 1`, the button is disabled, and a picker with no dice in it has
+  nothing to show you and nothing to roll. The **last set in the row** loses
+  its last die without a word: what it becomes is the empty page every rack
+  finishes with, which is where it already was, so the dot goes hollow and
+  nothing moves. **Any other set** gets `showDropSetDialog` first, because
+  taking its last die deletes it and brings the set behind it forward a page —
+  a bigger thing than the button has ever done before, and the two presses look
+  identical up to the moment the second one lands.
+
+  The question is *not* asked of the last set in the row, and that is the point
+  rather than an oversight: a question about a change nobody can see is a
+  question you learn to dismiss without reading. It is a dialog rather than the
+  `SlideToConfirm` that guards Close because they guard different things — a
+  stray thumb on Close is a gesture nobody meant, where a thumb on Remove meant
+  to remove something and needs telling that this press does more than the last
+  one did.
+
+  What happens on Remove is `_slideOutGroup` then `_dropGroup`, in that order
+  and for that reason. The page view is asked to move on one, which slides the
+  emptied set out to the left and its neighbour in from the right — the motion
+  a swipe would have made, done by the real page view rather than anything
+  hand-drawn — and only when it lands does `_dropGroup` close the row up and
+  jump the controller back a page. That jump moves nothing on screen, because
+  page `n + 1` now holds what page `n` is about to. `_selectedIn` shifts in the
+  same breath, or set three comes forward pointing at set two's ring.
+  `_dropShoe`/`_slideOutShoe` are the same pair on the card page, and the shoe
+  takes its decks and its cut with it.
+
+  **A gap therefore lasts about a quarter of a second and no longer**, which is
+  what lets `shownPages` count. `_takeGroups` and `_takeCards` close up on the
+  way in for the same reason: a save or a code from a build that allowed gaps
+  opens with its sets contiguous, because a hollow interior dot is now a state
+  nothing could ever clear. They filter before cutting to the ceiling, so a
+  profile from a build with more room keeps as many of its *sets* as fit rather
+  than as many of its first few slots.
+
+- **The set that cannot be emptied is the last one left, not the first one.**
+  `_floor` is `_startedGroups > 1 ? 0 : 1` and `_cardFloor` is the same
+  question about shoes — so a die stays only while this is the only started
+  set, and the *first* set comes apart like any other the moment there is a
+  second. What stops the picker emptying itself is the count, never the
+  position.
+
+  Three readers had that rule written into them as "the first" and all three
+  now ask the count. `_takeGroups` and `_takeCards` patch in a default only
+  when **nothing** is started. `profiles._cardsFromJson` rejects a save with no
+  started shoe rather than one whose first shoe is empty — the old test would
+  now throw away a save this build can write. And `PageDots` says only that at
+  least one dot is filled; which one is not fixed.
 
 - **The profiles wrap, and the Roll button does not move.** `ProfileRow` is a
   `Wrap` inside a `SingleChildScrollView`, under a "Profiles" heading that is

@@ -25,10 +25,21 @@ const int kMaxDice = 10;
 
 /// How many separate sets of dice you can set up.
 ///
-/// Three because a roll that needs more than three readings kept apart is a
-/// roll you are going to write down anyway, and because three dots under the
-/// rack are countable at a glance where five are a row you have to read.
-const int kMaxGroups = 3;
+/// A ceiling rather than a count, and the difference is the whole of how the
+/// rack pages work: what you are shown is the sets you have started and one
+/// empty one after them — see [shownPages] — so the row of dots is two long on
+/// a fresh picker and grows by one each time you put a die in the empty page
+/// at the end of it. Four is where that stops.
+///
+/// Four rather than three because a fourth set costs nothing now that the
+/// pages arrive as they are filled: nobody who wanted two is ever shown more
+/// than three dots, so the old argument against a longer row — that three dots
+/// are countable at a glance where five are a row you have to read — is
+/// answered by the growing rather than by the number. And four rather than
+/// more because a roll that needs five readings kept apart is a roll you are
+/// going to write down anyway. It is also the ceiling on the shoes, as
+/// [kMaxCardSets], because the two pages of the picker are the same picker.
+const int kMaxGroups = 4;
 
 /// How wide the rack is. Five slots a row, filled left to right: 1–5 along the
 /// top, 6–10 along the bottom.
@@ -88,10 +99,10 @@ const int kMaxReshuffleAt = 20;
 /// starts.
 const DieSpec kCardDie = DieSpec(kind: DieKind.d6, colour: kDiceWhite);
 
-/// The band the group dots sit in, between the rack and the editor. Card mode
-/// has no dots there — one shoe, not three sets — and no band either: what it
-/// has instead is a rack with a row spare, which is where its taller panel is
-/// hung from.
+/// The band the group dots sit in, between the rack and the editor. Both
+/// modes have one now — a shoe is set up and swiped between the way a set of
+/// dice is — and card mode pays for its taller panel out of the second rack
+/// row that three dice never reach rather than out of this.
 const double kDotsBand = 26;
 
 /// The two page controls on the picker, named so that a finger — or a test —
@@ -155,15 +166,44 @@ const List<DieSpec> kDefaultDice = <DieSpec>[
 /// The state below starts here and [_PickerScreenState._reset] comes back to
 /// it. One constant for both, so that starting again by hand and starting
 /// again by launching the app land on the same set-up.
+///
+/// Written out to its full [kMaxGroups] and [kMaxCardSets] rather than to the
+/// one set and one shoe it actually says, because that is the shape
+/// [_PickerScreenState._capture] gives back and this is the thing it is
+/// compared against: a picker that has just been reset holds exactly this, and
+/// a profile saved from it must equal it. The padding is not what you are
+/// shown — that is [shownPages]'s business, and on this profile it is one set
+/// and one empty one.
 const Profile kDefaultProfile = Profile(
   mode: ProfileMode.dice,
-  groups: <List<DieSpec>>[kDefaultDice, <DieSpec>[], <DieSpec>[]],
+  groups: <List<DieSpec>>[kDefaultDice, <DieSpec>[], <DieSpec>[], <DieSpec>[]],
   cards: <CardSet>[
     CardSet(colours: <int>[kDiceWhite, kDiceWhite], decks: 2, reshuffleAt: 5),
     kEmptyShoe,
     kEmptyShoe,
+    kEmptyShoe,
   ],
 );
+
+/// How many pages the picker offers, given how many of its slots have anything
+/// in them.
+///
+/// The rack does not show every set there is room for. It shows the ones you
+/// have started and **one empty one after them**, so a fresh picker is two
+/// pages — the set you have and the one you could have — and putting a die in
+/// that empty page grows the row of dots by one. That is the whole of the
+/// growing, and [max] is where it stops: a picker with every slot started has
+/// no empty page left to offer, and its row is [max] long.
+///
+/// It counts rather than looking for the last started slot, and that is only
+/// honest because a set with nothing in it never sits in front of one that has
+/// dice — removing the last die of a set removes the set, there and then. See
+/// `_PickerScreenState._removeSelected`. The single exception is the half
+/// second between the two, while the emptied set slides out and its neighbour
+/// slides in; the count is right through that as well, because the set that is
+/// leaving has stopped being counted and the row is already the length it will
+/// settle at.
+int shownPages(int started, int max) => (started + 1).clamp(2, max);
 
 /// The shoes worth dealing from, in the order they were set up.
 ///
@@ -189,8 +229,9 @@ int rollableCardIndex(List<CardSet> cards, int shoe) {
 ///
 /// An empty group is not a set you forgot to fill in, it is one you never
 /// started — so it is not a box on the tray either, and swiping past it there
-/// would be swiping past nothing. The first group can never be emptied, so
-/// this never comes back with nothing in it.
+/// would be swiping past nothing. The picker will not let the last started set
+/// be emptied — see `_PickerScreenState._floor` — so this never comes back
+/// with nothing in it.
 List<List<DieSpec>> rollableGroups(List<List<DieSpec>> groups) =>
     <List<DieSpec>>[
       for (final List<DieSpec> group in groups)
@@ -211,6 +252,65 @@ int rollableIndex(List<List<DieSpec>> groups, int group) {
   return index;
 }
 
+/// The key on the question a set's last die gets, so a test can find it.
+const Key kDropSetDialog = ValueKey<String>('drop-set');
+
+/// Are you sure — the question [_PickerScreenState._removeSelected] puts in
+/// front of the last die of a set that has another set behind it.
+///
+/// Asked because the button says one thing and is about to do another. Remove
+/// has taken a die off the rack every other time it was pressed; this press
+/// takes the whole set, and brings the one behind it forward a page. The two
+/// presses look identical up to the moment the second one lands, which is what
+/// a dialog is for and what nothing else on this screen could say in time.
+///
+/// It is *not* asked of the last set in the row, where the same press changes
+/// nothing but a dot: that set was already the end of the row and stays there,
+/// as the empty page every rack finishes with. A question about it would be a
+/// question about nothing, and a question you learn to dismiss without reading
+/// is worse than no question at all.
+///
+/// [cards] picks the noun. One dialog rather than two, because it is one
+/// question — and because the shoe half has a little more to lose, which is
+/// the only place the two texts differ.
+Future<bool> showDropSetDialog(
+  BuildContext context, {
+  required bool cards,
+}) async {
+  final bool? go = await showDialog<bool>(
+    context: context,
+    barrierColor: const Color(0xB3000000),
+    builder:
+        (BuildContext context) => AppDialog(
+          key: kDropSetDialog,
+          title: cards ? 'Remove this shoe?' : 'Remove this set?',
+          children: <Widget>[
+            Text(
+              cards
+                  ? 'That is the last die on this card, and a shoe with '
+                      'nothing printed on it is not a shoe. Taking it out '
+                      'takes the whole shoe — its decks and its cut with it — '
+                      'and the shoes after it move up one.'
+                  : 'That is the last die in this set, and taking it out takes '
+                      'the set with it. The sets after it move up one.',
+              style: const TextStyle(
+                color: Color(0x99BFD0E4),
+                fontSize: 14,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 18),
+            DialogActions(
+              confirm: 'Remove',
+              destructive: true,
+              onConfirm: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+  );
+  return go ?? false;
+}
+
 /// Choose what is in the tray, then throw it.
 ///
 /// The whole set is on screen at once, drawn as the dice it actually is, and
@@ -218,10 +318,11 @@ int rollableIndex(List<List<DieSpec>> groups, int group) {
 /// that die's, and change it. Picking another die drops the first — which is
 /// the same bargain a paint palette makes, and needs no explaining.
 ///
-/// Sideways are two more sets, empty until you put something in them. They are
-/// pages rather than a list because they are alternatives rather than parts of
-/// a whole: you are never choosing between all thirty dice at once, you are
-/// choosing what is in *this* box.
+/// Sideways is one more set, empty until you put something in it — and once
+/// you have, another empty one behind that, up to the four of [kMaxGroups]. They are pages
+/// rather than a list because they are alternatives rather than parts of a
+/// whole: you are never choosing between every die at once, you are choosing
+/// what is in *this* box.
 ///
 /// Under all of it is a row of profiles, which is every profile you have
 /// kept, and one of them is lit: the one you opened. Nothing here writes to it
@@ -268,18 +369,25 @@ class PickerScreen extends StatefulWidget {
 
 class _PickerScreenState extends State<PickerScreen>
     with SingleTickerProviderStateMixin {
-  /// The three sets. The first is the one the app starts with and always has at
-  /// least one die in it; the other two begin with none, and are allowed to go
-  /// back to none, because an empty group is how you say you only wanted one.
+  /// Every set there is room for, started or not. The first is the one the app
+  /// starts with and always has at least one die in it; the rest begin with
+  /// none, and are allowed to go back to none, because an empty group is how
+  /// you say you only wanted one.
+  ///
+  /// All [kMaxGroups] of them are here at all times — what varies is how many
+  /// the rack puts a page and a dot in front of, which is [_shownGroups]. A
+  /// list that grew and shrank with the pages would move a set's dice to
+  /// another index the moment an earlier one was emptied, and the index is
+  /// what [_selectedIn] and the page view's keys are about. The one thing that
+  /// *does* re-order it is [_dropGroup], which is a deliberate act at a moment
+  /// nobody is mid-gesture, and which moves [_selectedIn] with it.
   ///
   /// Filled from [PickerScreen.initial] in [initState], along with everything
   /// else below that a profile carries. The values written here are what a
   /// field initialiser has to be — something legal for the moment between the
   /// constructor and [initState] — and not what the picker opens showing.
   final List<List<DieSpec>> _groups = <List<DieSpec>>[
-    List<DieSpec>.of(kDefaultDice),
-    <DieSpec>[],
-    <DieSpec>[],
+    for (int i = 0; i < kMaxGroups; i++) <DieSpec>[],
   ];
 
   /// Which die the editor is pointed at, per group — so swiping away and back
@@ -313,26 +421,24 @@ class _PickerScreenState extends State<PickerScreen>
   /// would have to be kept in step. Only the colours vary: every one of them
   /// is a D6, since a deck of every outcome only makes sense for dice that all
   /// have the same faces.
-  /// The three shoes, exactly as [_groups] holds the three sets of dice: the
-  /// first always has a die on its card, the other two start with none and are
-  /// allowed to go back to none, because an empty shoe is how you say you only
-  /// wanted one.
+  /// Every shoe there is room for, exactly as [_groups] holds every set of
+  /// dice: one of them always has a card on it, the rest start with none and
+  /// are allowed to go back to none, because an empty shoe is how you say you
+  /// only wanted one. [_shownShoes] says how many of them are on offer.
   ///
-  /// Three parallel lists rather than three [CardSet]s, for the reason
+  /// Three parallel lists rather than a list of [CardSet]s, for the reason
   /// [_groups] is a list of mutable lists: the picker edits one field at a
   /// time under a thumb, and a value type would be rebuilt on every drag of
   /// the reshuffle slider. They are gathered into `CardSet`s by [_capture],
   /// which is the only thing that hands them to anybody else.
   final List<List<int>> _shoeColours = <List<int>>[
-    List<int>.of(kDefaultProfile.cards.first.colours),
-    <int>[],
-    <int>[],
+    for (int i = 0; i < kMaxCardSets; i++) <int>[],
   ];
   final List<int> _shoeDecks = <int>[
-    for (final CardSet shoe in kDefaultProfile.cards) shoe.decks,
+    for (int i = 0; i < kMaxCardSets; i++) kEmptyShoe.decks,
   ];
   final List<int> _shoeCut = <int>[
-    for (final CardSet shoe in kDefaultProfile.cards) shoe.reshuffleAt,
+    for (int i = 0; i < kMaxCardSets; i++) kEmptyShoe.reshuffleAt,
   ];
 
   /// Which die of each card the swatches are pointed at, exactly as
@@ -358,10 +464,15 @@ class _PickerScreenState extends State<PickerScreen>
   int get _decks => _shoeDecks[_shoe];
   int get _reshuffleAt => _shoeCut[_shoe];
 
-  /// The first shoe is *the* shoe and cannot be emptied; the others can, which
-  /// is the only way to say you have finished with one. [_floor]'s opposite
-  /// number.
-  int get _cardFloor => _shoe == 0 ? 1 : 0;
+  /// What the shoe on screen cannot go below. [_floor]'s opposite number, and
+  /// the same rule: the *last* shoe there is keeps its card, and any shoe can
+  /// be emptied as long as it is not that one.
+  int get _cardFloor => _startedShoes > 1 ? 0 : 1;
+
+  /// How many shoes the card rack offers: the ones with a card in them, and
+  /// one empty one after them. [_shownGroups]'s opposite number — see
+  /// [shownPages], which is the whole of the rule.
+  int get _shownShoes => shownPages(_startedShoes, kMaxCardSets);
 
   /// How many shoes have a card in them — which is how many tables Deal will
   /// open, and so what the panel counts this one out of.
@@ -387,9 +498,53 @@ class _PickerScreenState extends State<PickerScreen>
 
   int get _selected => _selectedIn[_group];
 
-  /// The first group is the set, and cannot be taken away entirely. The others
-  /// can: emptying group two is the only way to say you have finished with it.
-  int get _floor => _group == 0 ? 1 : 0;
+  /// What the set on screen cannot go below.
+  ///
+  /// Emptying a set is how you say you have finished with it, and there is
+  /// exactly one set you are not allowed to have finished with: the last one
+  /// left. So the floor is a die while this is the only set anybody has
+  /// started, and nothing at all once there is a second — which lets the
+  /// *first* set go the same way as any other, and it is the same set of dice
+  /// as the rest once there is more than one of them. What stops the picker
+  /// emptying itself is the count, not the position.
+  ///
+  /// The set on screen may already be empty, in which case this is beside the
+  /// point: there is no die to remove and the panel says so. See
+  /// [_removeSelected], which is behind it either way.
+  int get _floor => _startedGroups > 1 ? 0 : 1;
+
+  /// How many sets have dice in them — which is how many boxes Roll will open,
+  /// and what [_floor] is really about. [_startedShoes]'s opposite number.
+  int get _startedGroups =>
+      _groups.where((List<DieSpec> group) => group.isNotEmpty).length;
+
+  /// How many sets the rack offers: the ones with dice in them, and one empty
+  /// one after them. See [shownPages], which is the whole of the rule, and
+  /// [_shownShoes], which is the same question asked of the card page.
+  int get _shownGroups => shownPages(_startedGroups, kMaxGroups);
+
+  /// Whether the set on screen is the last one in the row — nothing started
+  /// after it.
+  ///
+  /// It is the one set that can be emptied without anything being deleted:
+  /// what it becomes is the empty page that always sits at the end, which is
+  /// where it already was. Every other set has a set behind it that would have
+  /// to move up, which is the change worth asking about first. See
+  /// [_removeSelected].
+  bool get _isLastGroup {
+    for (int group = _group + 1; group < kMaxGroups; group++) {
+      if (_groups[group].isNotEmpty) return false;
+    }
+    return true;
+  }
+
+  /// [_isLastGroup] on the card page.
+  bool get _isLastShoe {
+    for (int shoe = _shoe + 1; shoe < kMaxCardSets; shoe++) {
+      if (_shoeColours[shoe].isNotEmpty) return false;
+    }
+    return true;
+  }
 
   /// What the die panel calls itself: which set it is about, out of how many
   /// sets there are to be about.
@@ -403,11 +558,8 @@ class _PickerScreenState extends State<PickerScreen>
   /// which means a set with an empty group before it is numbered as the swipe
   /// on the tray will number it rather than by which page of the picker it
   /// happens to sit on.
-  String get _setTitle {
-    final int count =
-        _groups.where((List<DieSpec> group) => group.isNotEmpty).length;
-    return 'Dice - Set ${rollableIndex(_groups, _group) + 1}/$count';
-  }
+  String get _setTitle =>
+      'Dice - Set ${rollableIndex(_groups, _group) + 1}/$_startedGroups';
 
   @override
   void initState() {
@@ -435,6 +587,7 @@ class _PickerScreenState extends State<PickerScreen>
     profiles.removeListener(_savesChanged);
     _slide.dispose();
     _racks.dispose();
+    _shoeRacks.dispose();
     super.dispose();
   }
 
@@ -516,15 +669,24 @@ class _PickerScreenState extends State<PickerScreen>
   /// never named.
   ///
   /// The picker's own limits are applied on the way in, for the reason
-  /// [_applyScanned] gives: a profile written by some later build with
-  /// four sets, or four dice on a card, loses the excess and opens.
+  /// [_scanned] gives: a profile written by some later build with five sets,
+  /// or four dice on a card, loses the excess and opens.
   void _apply(Profile profile) {
     setState(() => _load(profile));
-    // Both of these are where a profile begins: the first set, and the
-    // mode it was saved in. Jumped to rather than animated — nothing is sliding
-    // *from* anywhere, the screen has just become a different one.
+    // All three of these are where a profile begins: the first set, the first
+    // shoe, and the mode it was saved in. Jumped to rather than animated —
+    // nothing is sliding *from* anywhere, the screen has just become a
+    // different one.
+    //
+    // Both page views, because [_load] has put `_group` and `_shoe` back to
+    // zero and a controller left where it was would disagree with them. That
+    // used to be only a lie the dots told; it is worse than that now that the
+    // pages grow, because the profile arriving may have fewer of them than the
+    // one leaving — a controller sitting on page three of a picker that now
+    // offers two is a page that is not there.
     _slide.value = _cards ? 1 : 0;
     if (_racks.hasClients) _racks.jumpToPage(0);
+    if (_shoeRacks.hasClients) _shoeRacks.jumpToPage(0);
   }
 
   /// Writes a profile into the fields, and nothing else.
@@ -544,31 +706,55 @@ class _PickerScreenState extends State<PickerScreen>
   /// Takes a set of shoes onto the card page, held to the picker's limits.
   /// [_takeGroups]'s opposite number, and the same shape of thing.
   void _takeCards(List<CardSet> from) {
+    // The started shoes, in the order they were saved in and with nothing
+    // between them, for the reason [_takeGroups] gives.
+    final List<CardSet> started = <CardSet>[
+      for (final CardSet shoe in from)
+        if (shoe.isNotEmpty) shoe,
+    ];
     for (int shoe = 0; shoe < kMaxCardSets; shoe++) {
-      final CardSet set = shoe < from.length ? from[shoe] : kEmptyShoe;
+      final CardSet set = shoe < started.length ? started[shoe] : kEmptyShoe;
       _shoeColours[shoe] = <int>[...set.colours.take(kMaxCardDice)];
       _shoeDecks[shoe] = set.decks.clamp(1, kMaxDecks);
       _shoeCut[shoe] = set.reshuffleAt.clamp(0, kMaxReshuffleAt);
       _cardSelectedIn[shoe] = 0;
     }
-    // The same floor [_cardFloor] holds everywhere else: the first shoe is
-    // *the* shoe, and a profile that says otherwise gets the one card mode
-    // starts with rather than a panel with nothing to point at.
-    if (_shoeColours[0].isEmpty) _shoeColours[0] = <int>[kCardDie.colour];
+    // The same floor [_cardFloor] holds everywhere else: *a* shoe has to have
+    // a card on it, though it need not be the first. A profile with no shoe
+    // started at all gets the one card mode starts with rather than a panel
+    // with nothing to point at.
+    if (_startedShoes == 0) _shoeColours[0] = <int>[kCardDie.colour];
   }
 
   /// Takes a set of groups into the rack, held to the picker's limits. Call
   /// from inside a [setState], or from [initState] before there is one.
   void _takeGroups(List<List<DieSpec>> from) {
+    // The started sets, in the order they were saved in and with nothing
+    // between them. An empty set is one nobody started, and this picker has no
+    // page for one that is not at the end of the row — removing a set's last
+    // die removes the set there and then, so a gap is not a state it can be
+    // put into by hand. A save with one in it came from a build that allowed
+    // it, and opens closed up.
+    //
+    // Filtered before it is cut to [kMaxGroups] rather than after, so a
+    // profile from a build with more room keeps as many of its *sets* as fit
+    // rather than as many of its first few slots.
+    final List<List<DieSpec>> started = <List<DieSpec>>[
+      for (final List<DieSpec> group in from)
+        if (group.isNotEmpty) group,
+    ];
     for (int group = 0; group < kMaxGroups; group++) {
       final List<DieSpec> dice =
-          group < from.length ? from[group] : const <DieSpec>[];
+          group < started.length ? started[group] : const <DieSpec>[];
       _groups[group] = <DieSpec>[...dice.take(kMaxDice)];
       _selectedIn[group] = 0;
     }
-    // The same floor [_floor] holds everywhere else: the first set is *the*
-    // set and the picker has nothing to show you if it is empty.
-    if (_groups[0].isEmpty) _groups[0] = List<DieSpec>.of(kDefaultDice);
+    // The same floor [_floor] holds everywhere else: *a* set has to have dice
+    // in it, though it need not be the first — a profile whose first set is
+    // empty and whose second is not is one the picker can make now, and is
+    // taken as it stands. What it cannot do is show you nothing at all, so a
+    // profile with no set started gets the one the app opens with.
+    if (_startedGroups == 0) _groups[0] = List<DieSpec>.of(kDefaultDice);
   }
 
   /// Opens a save: a tap on its profile in the row, and nothing else.
@@ -597,7 +783,7 @@ class _PickerScreenState extends State<PickerScreen>
   ///
   /// [kDefaultProfile] is the set-up the app opens at, so this is the one way
   /// back to an empty desk without closing the app: two white D6s in one set,
-  /// nothing in the other two, the shoe as it comes, and the dice page.
+  /// nothing in any of the others, the shoe as it comes, and the dice page.
   ///
   /// Nothing is lit afterwards, and the title goes back to the plain one,
   /// because what is on screen has come from no save — which is the same thing
@@ -699,9 +885,14 @@ class _PickerScreenState extends State<PickerScreen>
   /// The selected one rather than the last one, now that there is a selection
   /// to honour: taking away die two of three has to leave the other two the
   /// colours they were, not shuffle the third one's colour up into its place.
-  /// One die always stays — a shoe with no dice in it is not a shoe.
-  void _removeCardDie() {
+  ///
+  /// The last die on a card is the shoe, and the three answers to that are
+  /// [_removeSelected]'s, word for word with the nouns changed.
+  Future<void> _removeCardDie() async {
     if (_cardDice <= _cardFloor) return;
+    final bool drops = _cardDice == 1 && !_isLastShoe;
+    if (drops && !await showDropSetDialog(context, cards: true)) return;
+    if (!mounted) return;
     _edited();
     setState(() {
       _cardColours.removeAt(_cardSelected);
@@ -710,6 +901,7 @@ class _PickerScreenState extends State<PickerScreen>
         math.max(0, _cardColours.length - 1),
       );
     });
+    if (drops) await _slideOutShoe();
   }
 
   /// Points the swatches at one die of the card. Answered in the hand exactly
@@ -721,9 +913,10 @@ class _PickerScreenState extends State<PickerScreen>
 
   /// Paints the selected die of the card.
   ///
-  /// No guard, where [_set] needs one: a group of real dice can be emptied and
-  /// leave its editor talking about nothing, and card mode cannot — the last
-  /// die always stays — so there is always a die here for a swatch to land on.
+  /// The guard is [_set]'s, and for the same reason: a shoe can be emptied and
+  /// leave its panel talking about nothing. Nothing can reach this while it is
+  /// — the swatches are faded and behind an [IgnorePointer] — but a stand-in
+  /// that could be written back would be a trap.
   void _setCardColour(int colour) {
     if (_cardColours.isEmpty) return;
     _edited();
@@ -807,8 +1000,32 @@ class _PickerScreenState extends State<PickerScreen>
     });
   }
 
-  void _removeSelected() {
+  /// Takes the selected die out of the set on screen.
+  ///
+  /// The last die of a set is the set, so there are three answers rather than
+  /// one, and which you get turns entirely on what else is in the row.
+  ///
+  ///  * **The only set there is** keeps its last die. [_floor] is a die there
+  ///    and the button is disabled, so this is never reached — a picker with
+  ///    no dice in it has nothing to show you and nothing to roll.
+  ///  * **The last set in the row** loses its last die without a word. What it
+  ///    becomes is the empty page that always sits at the end, which is where
+  ///    it already was: the dot goes hollow and nothing moves.
+  ///  * **Any other set** is asked about first, because taking its last die
+  ///    deletes it and brings the set behind it forward a page. That is a
+  ///    bigger thing than the button says, and it is undone only by setting
+  ///    the set up again.
+  ///
+  /// The question is a dialog rather than the [SlideToConfirm] that guards
+  /// Close, and the difference is what each is guarding against. A stray thumb
+  /// on Close is a gesture nobody meant; a thumb on Remove meant to remove
+  /// something, and what it needs told is that this press does more than the
+  /// last one did.
+  Future<void> _removeSelected() async {
     if (_dice.length <= _floor) return;
+    final bool drops = _dice.length == 1 && !_isLastGroup;
+    if (drops && !await showDropSetDialog(context, cards: false)) return;
+    if (!mounted) return;
     _edited();
     setState(() {
       _dice.removeAt(_selected);
@@ -817,6 +1034,7 @@ class _PickerScreenState extends State<PickerScreen>
       _selectedIn[_group] =
           _dice.isEmpty ? 0 : _selected.clamp(0, _dice.length - 1);
     });
+    if (drops) await _slideOutGroup();
   }
 
   /// Points the editor at die [index] of [group], and takes the group for the
@@ -898,11 +1116,11 @@ class _PickerScreenState extends State<PickerScreen>
       case ScannedChoice.keep:
         // On screen first, and then keep *that* — not the code it came from.
         // [_apply] is where a profile is held to what this picker has room
-        // for, so a code from some later build arrives as three sets rather
-        // than four and one deck rather than nine. Keeping the code itself
+        // for, so a code from some later build arrives as four sets rather
+        // than five and one deck rather than nine. Keeping the code itself
         // would write a save holding dice this build will never show you,
         // under a summary that described them: "9 decks" on a row that opens
-        // showing three. A save has to describe what opening it does.
+        // showing four. A save has to describe what opening it does.
         //
         // It is also what makes [_capture] the only thing a save is ever made
         // of, which is what this screen says of itself everywhere else.
@@ -947,6 +1165,57 @@ class _PickerScreenState extends State<PickerScreen>
   /// the picker back. `profile_row.dart` pays for the same rule with a
   /// duplicated constant; here the cost is one function, which is cheaper.
   Future<void> _tutorial() => showTutorial(context, backdrop: tutorialBackdrop);
+
+  /// Takes the set at [group] out of the row, and closes the row up behind it.
+  ///
+  /// The end of a delete rather than the whole of one: the set is already
+  /// empty and its neighbour has already slid into view — see
+  /// [_slideOutGroup], which is the part anybody watches. All this does is
+  /// make the arrangement on screen true of the lists behind it.
+  ///
+  /// Everything a set carries moves with it. [_selectedIn] is the die each
+  /// rack has a ring round and it is indexed by set, so it shifts in the same
+  /// breath or set three comes forward a page pointing at set two's selection.
+  /// The list itself never changes length — see [_groups] — so what arrives at
+  /// the far end is a fresh empty set rather than one of the lists that has
+  /// just moved.
+  ///
+  /// The controller is jumped rather than animated because the motion has
+  /// already happened: page `group + 1` is where you are standing and holds
+  /// exactly what page `group` is about to hold, so landing on `group` changes
+  /// nothing you can see.
+  void _dropGroup(int group) {
+    setState(() {
+      for (int i = group; i < kMaxGroups - 1; i++) {
+        _groups[i] = _groups[i + 1];
+        _selectedIn[i] = _selectedIn[i + 1];
+      }
+      _groups[kMaxGroups - 1] = <DieSpec>[];
+      _selectedIn[kMaxGroups - 1] = 0;
+      if (_group > group) _group--;
+    });
+    if (_racks.hasClients) _racks.jumpToPage(_group);
+  }
+
+  /// The set on screen leaving, and the one after it arriving from the right.
+  ///
+  /// The page view does it rather than anything hand-drawn: asked to move on
+  /// one, it slides the emptied set out to the left and its neighbour in from
+  /// the right, which is the motion a swipe would have made and so the motion
+  /// this already means. When it lands, [_dropGroup] closes the row up
+  /// underneath it and the page view is put back a page without moving.
+  Future<void> _slideOutGroup() async {
+    final int gone = _group;
+    if (_racks.hasClients) {
+      await _racks.animateToPage(
+        gone + 1,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (!mounted) return;
+    _dropGroup(gone);
+  }
 
   void _goTo(int group) => _racks.animateToPage(
     group,
@@ -1126,8 +1395,8 @@ class _PickerScreenState extends State<PickerScreen>
   /// slides is a transform, which costs no layout at all.
   ///
   /// The gesture is on the panel and nowhere else. The rack has a page view of
-  /// its own for the three sets, and a sideways drag that starts there belongs
-  /// to that; one that starts on the panel belongs to this.
+  /// its own for the sets, and a sideways drag that starts there belongs to
+  /// that; one that starts on the panel belongs to this.
   Widget _block() {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -1192,9 +1461,10 @@ class _PickerScreenState extends State<PickerScreen>
     ],
   );
 
-  /// The three shoes' racks, one on screen. [_racksView]'s opposite number,
-  /// and the reason the card rack is a page rather than a row: a shoe is set
-  /// up the way a set of dice is, and swiped between the same way.
+  /// The shoes' racks, one on screen. [_racksView]'s opposite number, and the
+  /// reason the card rack is a page rather than a row: a shoe is set up the
+  /// way a set of dice is, and swiped between the same way — including the
+  /// empty one on the end, which is how another shoe is started.
   ///
   /// Its height is the one row a card rack uses, worked out from the width
   /// the same way [_rackHeight] works out two.
@@ -1208,7 +1478,7 @@ class _PickerScreenState extends State<PickerScreen>
             controller: _shoeRacks,
             onPageChanged: (int page) => setState(() => _shoe = page),
             children: <Widget>[
-              for (int shoe = 0; shoe < kMaxCardSets; shoe++) _cardRack(shoe),
+              for (int shoe = 0; shoe < _shownShoes; shoe++) _cardRack(shoe),
             ],
           ),
         );
@@ -1222,7 +1492,7 @@ class _PickerScreenState extends State<PickerScreen>
       ((width - 2 * kRackMargin) / kRackColumns - 2 * kRackGutter + kRackRowGap)
           .clamp(0.0, double.infinity);
 
-  /// Where you are among the three shoes, and which of them have a card.
+  /// Where you are among the shoes on offer, and which of them have a card.
   /// [_dots]'s opposite number, in the same place under the rack.
   Widget _cardDots() {
     return SizedBox(
@@ -1232,12 +1502,52 @@ class _PickerScreenState extends State<PickerScreen>
           key: kShoeDots,
           current: _shoe,
           filled: <bool>[
-            for (final List<int> colours in _shoeColours) colours.isNotEmpty,
+            for (int shoe = 0; shoe < _shownShoes; shoe++)
+              _shoeColours[shoe].isNotEmpty,
           ],
           onTap: _goToShoe,
         ),
       ),
     );
+  }
+
+  /// Takes the shoe at [shoe] out of the row — [_dropGroup] on this page, and
+  /// the same rule in every particular.
+  ///
+  /// What goes with the shoe is everything it was made of, its decks and its
+  /// cut included. That is the reading the mode already has of an empty shoe:
+  /// one nobody started, whose numbers are what a first die would find waiting
+  /// rather than anything anybody chose. A shoe you have finished with does
+  /// not leave three decks behind for the next one to inherit.
+  void _dropShoe(int shoe) {
+    setState(() {
+      for (int i = shoe; i < kMaxCardSets - 1; i++) {
+        _shoeColours[i] = _shoeColours[i + 1];
+        _shoeDecks[i] = _shoeDecks[i + 1];
+        _shoeCut[i] = _shoeCut[i + 1];
+        _cardSelectedIn[i] = _cardSelectedIn[i + 1];
+      }
+      _shoeColours[kMaxCardSets - 1] = <int>[];
+      _shoeDecks[kMaxCardSets - 1] = kEmptyShoe.decks;
+      _shoeCut[kMaxCardSets - 1] = kEmptyShoe.reshuffleAt;
+      _cardSelectedIn[kMaxCardSets - 1] = 0;
+      if (_shoe > shoe) _shoe--;
+    });
+    if (_shoeRacks.hasClients) _shoeRacks.jumpToPage(_shoe);
+  }
+
+  /// [_slideOutGroup] on the card page.
+  Future<void> _slideOutShoe() async {
+    final int gone = _shoe;
+    if (_shoeRacks.hasClients) {
+      await _shoeRacks.animateToPage(
+        gone + 1,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (!mounted) return;
+    _dropShoe(gone);
   }
 
   void _goToShoe(int shoe) => _shoeRacks.animateToPage(
@@ -1411,10 +1721,10 @@ class _PickerScreenState extends State<PickerScreen>
                   padding: const EdgeInsets.only(left: _kChipMargin),
                   child: Text(
                     // Which shoe, once there is more than one to be — the dots
-                    // above say which page you are on, not how many of the
-                    // three you have started. Counted the way the table counts
-                    // them, so a started shoe with an empty one before it is
-                    // numbered as the swipe there will number it.
+                    // above say which page you are on, and the last of them is
+                    // a shoe nobody has started. Counted the way the table
+                    // counts them, so a started shoe with an empty one before
+                    // it is numbered as the swipe there will number it.
                     empty
                         ? ''
                         : _startedShoes > 1
@@ -1431,7 +1741,10 @@ class _PickerScreenState extends State<PickerScreen>
                 ),
               ),
               _RemoveButton(
-                onPressed: _cardDice > _cardFloor ? _removeCardDie : null,
+                onPressed:
+                    _cardDice > _cardFloor
+                        ? () => unawaited(_removeCardDie())
+                        : null,
               ),
             ],
           ),
@@ -1541,7 +1854,8 @@ class _PickerScreenState extends State<PickerScreen>
     );
   }
 
-  /// The three racks, one swipe apart.
+  /// The racks on offer, one swipe apart — the sets you have started and the
+  /// empty one after them. See [shownPages].
   ///
   /// A [PageView] has to be told how tall it is, and the rack's height is not a
   /// number anyone chose — it falls out of five square slots across whatever
@@ -1558,7 +1872,7 @@ class _PickerScreenState extends State<PickerScreen>
             controller: _racks,
             onPageChanged: (int page) => setState(() => _group = page),
             children: <Widget>[
-              for (int group = 0; group < kMaxGroups; group++) _rack(group),
+              for (int group = 0; group < _shownGroups; group++) _rack(group),
             ],
           ),
         );
@@ -1643,7 +1957,9 @@ class _PickerScreenState extends State<PickerScreen>
     );
   }
 
-  /// Where you are among the three sets, and which of them have dice in them.
+  /// Where you are among the sets on offer, and which of them have dice in
+  /// them — so the last dot is hollow until you put a die in the page under
+  /// it, and a new hollow one appears behind it when you do.
   ///
   /// Between the rack and the editor because that is the seam: everything above
   /// it belongs to the group you are on and swipes with it, everything below is
@@ -1656,7 +1972,8 @@ class _PickerScreenState extends State<PickerScreen>
           key: kGroupDots,
           current: _group,
           filled: <bool>[
-            for (final List<DieSpec> group in _groups) group.isNotEmpty,
+            for (int group = 0; group < _shownGroups; group++)
+              _groups[group].isNotEmpty,
           ],
           onTap: _goTo,
         ),
@@ -1704,8 +2021,8 @@ class _PickerScreenState extends State<PickerScreen>
                   // round that die, which is where a selection is worth
                   // reading — while which *set* the panel belongs to was
                   // written down nowhere: the dots below say which page you
-                  // are on, not how many of the three you have put anything
-                  // in. So the line is spent on the thing that was missing,
+                  // are on, not how many of them you have put anything in. So
+                  // the line is spent on the thing that was missing,
                   // and the panel is titled for the set the way the card
                   // panel is titled for the cards.
                   maxLines: 1,
@@ -1721,7 +2038,10 @@ class _PickerScreenState extends State<PickerScreen>
                 ),
               ),
               _RemoveButton(
-                onPressed: _dice.length > _floor ? _removeSelected : null,
+                onPressed:
+                    _dice.length > _floor
+                        ? () => unawaited(_removeSelected())
+                        : null,
               ),
             ],
           ),

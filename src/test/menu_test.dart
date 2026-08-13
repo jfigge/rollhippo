@@ -725,11 +725,10 @@ void main() {
       final ScannedProfile read = decodeProfile(qr.code)!;
       expect(read.name, isEmpty);
       expect(read.profile.mode, ProfileMode.dice);
-      expectSame(read.profile.groups, <List<DieSpec>>[
-        List<DieSpec>.of(kDefaultDice),
-        <DieSpec>[],
-        <DieSpec>[],
-      ]);
+      // The sets the picker captures, which is every one it has room for —
+      // one started and the rest waiting. What you are *shown* is fewer; see
+      // [shownPages], which is about the rack rather than about a save.
+      expectSame(read.profile.groups, kDefaultProfile.groups);
       // And the whole of it, in one line, because a profile has value equality.
       // This is the constant `+ New` puts the picker back to, so it is also
       // what holds the two together: what the app opens at *is* a new profile.
@@ -834,7 +833,7 @@ void main() {
       expect(find.text('$kMaxDice / $kMaxDice'), findsOneWidget);
     });
 
-    testWidgets('cannot leave the first set empty', (
+    testWidgets('cannot leave the picker with no set at all', (
       WidgetTester tester,
     ) async {
       await pumpPicker(tester);
@@ -850,8 +849,33 @@ void main() {
       expect(
         rackOf(tester, 0),
         isNotEmpty,
-        reason: 'the picker has nothing to show you with no first set',
+        reason: 'the picker has nothing to show you with no set started',
       );
+    });
+
+    testWidgets('and a code with a gap in it opens closed up', (
+      WidgetTester tester,
+    ) async {
+      await pumpPicker(tester);
+
+      final AppMenuButton menu = tester.widget<AppMenuButton>(
+        find.byType(AppMenuButton),
+      );
+      menu.onScanned(
+        scanned(<List<DieSpec>>[
+          <DieSpec>[],
+          <DieSpec>[DieSpec(kind: DieKind.d20, colour: kDicePalette[6])],
+          <DieSpec>[],
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      // An empty set in front of a started one is not a picker this build can
+      // be put into by hand — removing a set's last die removes the set — so
+      // a code carrying one arrives with its sets closed up rather than with a
+      // hollow dot nothing could ever clear. The D20 is set one.
+      expect(rackOf(tester, 0).single.kind, DieKind.d20);
+      expect(dotsOf(tester).filled, <bool>[true, false]);
     });
   });
 }

@@ -30,6 +30,18 @@ List<DieSpec> rackOf(WidgetTester tester, int group) => <DieSpec>[
 PageDots dotsOf(WidgetTester tester) =>
     tester.widget<PageDots>(find.byKey(kGroupDots));
 
+/// The rack's own page controller, for the one test that watches a page move
+/// rather than reading where it ended up.
+PageController racksOf(WidgetTester tester) =>
+    tester
+        .widget<PageView>(
+          find.descendant(
+            of: find.byKey(kRack),
+            matching: find.byType(PageView),
+          ),
+        )
+        .controller!;
+
 /// The tray's own dots, which say which box you are looking at. The only page
 /// control on that screen, so it needs no name.
 PageDots trayDotsOf(WidgetTester tester) =>
@@ -76,6 +88,25 @@ final Finder diceRemove = find.descendant(
 Future<void> tapRemove(WidgetTester tester) async {
   await tester.tap(diceRemove);
   await tester.pump();
+}
+
+/// Remove, on a press that may put a question up and may animate a set out.
+/// Settled rather than pumped once, for both of those reasons.
+Future<void> tapRemoveAndSettle(WidgetTester tester) async {
+  await tester.tap(diceRemove);
+  await tester.pumpAndSettle();
+}
+
+/// Answers the question a set's last die gets.
+Future<void> answerDrop(WidgetTester tester, String button) async {
+  expect(find.byKey(kDropSetDialog), findsOneWidget);
+  await tester.tap(
+    find.descendant(
+      of: find.byKey(kDropSetDialog),
+      matching: find.text(button),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 /// Whether the button carrying [label] can be pressed at all.
@@ -125,15 +156,39 @@ Color? _edgeOf(Container container) {
 }
 
 void main() {
-  group('three groups', () {
-    testWidgets('start as one set of dice and two empty ones', (
+  group('the sets of dice', () {
+    testWidgets('start as one set of dice and one empty one', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
 
-      expect(dotsOf(tester).filled, <bool>[true, false, false]);
+      // Two pages, not [kMaxGroups] of them: the set you have and the one you
+      // could have. The rest arrive as you fill them — see [shownPages].
+      expect(dotsOf(tester).filled, <bool>[true, false]);
       expect(dotsOf(tester).current, 0);
       expect(rackOf(tester, 0).length, kDefaultDice.length);
+    });
+
+    testWidgets('grow a page at a time, and stop at kMaxGroups', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+
+      // One filled set and one empty page after it, every time, until the
+      // ceiling — where the empty page is the last one there is room for and
+      // filling it adds nothing.
+      for (int group = 1; group < kMaxGroups; group++) {
+        expect(dotsOf(tester).filled.length, group + 1);
+        await swipeLeft(tester);
+        expect(dotsOf(tester).current, group);
+        await tapAdd(tester, group);
+      }
+      expect(dotsOf(tester).filled.length, kMaxGroups);
+      expect(dotsOf(tester).filled, List<bool>.filled(kMaxGroups, true));
+
+      // And there is nowhere left to swipe to.
+      await swipeLeft(tester);
+      expect(dotsOf(tester).current, kMaxGroups - 1);
     });
 
     testWidgets('swiping reaches a group with nothing in it', (
@@ -167,7 +222,9 @@ void main() {
       expect(enabled(tester, diceRemove), isTrue);
       await tapRemove(tester);
       expect(rackOf(tester, 1), isEmpty);
-      expect(dotsOf(tester).filled, <bool>[true, false, false]);
+      // And the page it grew is gone with it: an emptied last set leaves the
+      // one empty page a fresh picker has.
+      expect(dotsOf(tester).filled, <bool>[true, false]);
       expect(find.text(kEmptyEditor), findsOneWidget);
     });
 
@@ -193,22 +250,147 @@ void main() {
       expect(find.text('Dice - Set 1/3'), findsOneWidget);
     });
 
-    testWidgets('a set nobody started is neither counted nor numbered', (
+    /// Three sets, the third holding two dice with the ring on the second of
+    /// them — which is what makes it worth watching the third set move.
+    Future<void> threeSets(WidgetTester tester) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await swipeLeft(tester);
+      await tapAdd(tester, 1);
+      await swipeLeft(tester);
+      await tapAdd(tester, 2);
+      await tapAdd(tester, 2);
+    }
+
+    testWidgets('the last set in the row empties without being asked about', (
+      WidgetTester tester,
+    ) async {
+      await threeSets(tester);
+
+      // Set three is where the row ends, so emptying it deletes nothing: it
+      // becomes the empty page every rack finishes with, which is where it
+      // already was.
+      await tapRemoveAndSettle(tester);
+      await tapRemoveAndSettle(tester);
+
+      expect(find.byKey(kDropSetDialog), findsNothing);
+      expect(rackOf(tester, 2), isEmpty);
+      expect(dotsOf(tester).filled, <bool>[true, true, false]);
+      expect(dotsOf(tester).current, 2);
+      expect(find.text(kEmptyEditor), findsOneWidget);
+    });
+
+    testWidgets('any other set asks before its last die goes', (
+      WidgetTester tester,
+    ) async {
+      await threeSets(tester);
+      await swipeRight(tester);
+
+      // Set two has one die and set three behind it, so this press is about
+      // to do more than take a die off a rack.
+      await tapRemoveAndSettle(tester);
+      await answerDrop(tester, 'Cancel');
+
+      expect(rackOf(tester, 1).length, 1, reason: 'cancel means nothing moved');
+      expect(dotsOf(tester).filled, <bool>[true, true, true, false]);
+      expect(dotsOf(tester).current, 1);
+    });
+
+    testWidgets('and OK deletes it, with the set behind it coming forward', (
+      WidgetTester tester,
+    ) async {
+      await threeSets(tester);
+      await swipeRight(tester);
+
+      await tapRemoveAndSettle(tester);
+      await answerDrop(tester, 'Remove');
+
+      // Set three has come forward a page and the row has closed up behind it.
+      expect(dotsOf(tester).filled, <bool>[true, true, false]);
+      expect(dotsOf(tester).current, 1);
+      // With its dice, and with the die its ring was round: the selection is
+      // per set, so it travels with the set rather than staying on a page.
+      expect(rackOf(tester, 1).length, 2);
+      expect(selectedIn(tester, 1), 1);
+      expect(find.text('Dice - Set 2/2'), findsOneWidget);
+    });
+
+    testWidgets('and the set behind it slides in from the right', (
+      WidgetTester tester,
+    ) async {
+      await threeSets(tester);
+      await swipeRight(tester);
+      await tapRemoveAndSettle(tester);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(kDropSetDialog),
+          matching: find.text('Remove'),
+        ),
+      );
+      // Watched frame by frame rather than sampled at one moment, because
+      // what has to be true is that the view *travelled*: the dialog goes, the
+      // page view sets off towards the set behind, and only then does the row
+      // close up underneath it.
+      double furthest = 1;
+      for (int frame = 0; frame < 60; frame++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        final double? page = racksOf(tester).page;
+        if (page != null && page > furthest) furthest = page;
+      }
+
+      expect(
+        furthest,
+        greaterThan(1.2),
+        reason: 'the next set never slid in; it was swapped in place',
+      );
+
+      // And it lands a page *back*, because the row closed up underneath it:
+      // page two's dice are page one's now, so the jump moves nothing.
+      await tester.pumpAndSettle();
+      expect(racksOf(tester).page, 1.0);
+      expect(rackOf(tester, 1).length, 2);
+    });
+
+    testWidgets('the first set goes the same way once there is a second', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
       await swipeLeft(tester);
-      await swipeLeft(tester);
-      await tapAdd(tester, 2);
+      await tapAdd(tester, 1);
+      await tapAdd(tester, 1);
+      await swipeRight(tester);
 
-      // Two sets have dice in them and the middle one has not been started, so
-      // this is the second of two — which is the box the tray will give it,
-      // rather than the page of the picker it happens to be drawn on.
-      expect(dotsOf(tester).filled, <bool>[true, false, true]);
-      expect(find.text('Dice - Set 2/2'), findsOneWidget);
+      // Nothing about the first set is special: with a second one started it
+      // comes apart like any other, question and all.
+      await tapRemoveAndSettle(tester);
+      expect(find.byKey(kDropSetDialog), findsNothing, reason: 'two dice left');
+      await tapRemoveAndSettle(tester);
+      await answerDrop(tester, 'Remove');
+
+      // Set two has become set one, and it is now the only one there is.
+      expect(dotsOf(tester).filled, <bool>[true, false]);
+      expect(dotsOf(tester).current, 0);
+      expect(rackOf(tester, 0).length, 2);
+      expect(find.text('Dice - Set 1/1'), findsOneWidget);
     });
 
-    testWidgets('the first group always keeps a die', (
+    testWidgets('swiping onto the empty page at the end does not clear it', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      await swipeLeft(tester);
+      // Away and back: the page you are on is empty both times, and it is the
+      // one empty page a picker is supposed to have.
+      await swipeRight(tester);
+      await swipeLeft(tester);
+
+      expect(dotsOf(tester).current, 1);
+      expect(dotsOf(tester).filled, <bool>[true, false]);
+      await tapAdd(tester, 1);
+      expect(rackOf(tester, 1).length, 1);
+    });
+
+    testWidgets('the only group there is always keeps a die', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
@@ -237,11 +419,17 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PickerScreen()));
+      // A third dot to aim at, and back to the first to aim from.
+      await swipeLeft(tester);
+      await tapAdd(tester, 1);
+      await swipeRight(tester);
 
+      // Scoped to the group's own dots: the card page's are built at the same
+      // time, one screen to the side, and the mode dots are under both.
       await tester.tap(
         find
             .descendant(
-              of: find.byType(PageDots),
+              of: find.byKey(kGroupDots),
               matching: find.byType(GestureDetector),
             )
             .at(2),
@@ -355,6 +543,16 @@ void main() {
       expect(find.text(kPrompt), findsNothing);
     }, variant: harness);
 
+    testWidgets('a box per set, up to every set the picker can hold', (
+      WidgetTester tester,
+    ) async {
+      await open(tester, kMaxGroups);
+      await run(tester, 3);
+
+      expect(trayDotsOf(tester).filled.length, kMaxGroups);
+      expect(trayDotsOf(tester).current, 0);
+    }, variant: harness);
+
     testWidgets('and its dice are lying still, not falling into view', (
       WidgetTester tester,
     ) async {
@@ -436,6 +634,33 @@ void main() {
         reason: 'a roll in flight swiped away',
       );
     }, variant: harness);
+  });
+
+  group('how many pages there are', () {
+    // The rule itself, without a widget in front of it: what you are shown is
+    // the slots you have started and one empty one after them. The ceiling is
+    // passed in rather than read, so these say `kMaxGroups` where the picker
+    // would — a rule that only held at one particular ceiling would be a rule
+    // nobody could move.
+    test('is one more than the number started', () {
+      expect(shownPages(1, kMaxGroups), 2);
+      expect(shownPages(2, kMaxGroups), 3);
+      expect(shownPages(3, kMaxGroups), 4);
+    });
+
+    test('stops at the ceiling, empty page and all', () {
+      // Every slot started: there is no room left for an empty page, so the
+      // row is the ceiling itself and there is nowhere for another set to go.
+      expect(shownPages(kMaxGroups, kMaxGroups), kMaxGroups);
+      expect(shownPages(kMaxGroups + 1, kMaxGroups), kMaxGroups);
+    });
+
+    test('is at least the one you have and one you could have', () {
+      // Nothing started at all is not a state the picker can be in — the last
+      // set there is keeps its last die — but the floor is what makes that
+      // true rather than something every caller has to know.
+      expect(shownPages(0, kMaxGroups), 2);
+    });
   });
 
   group('what gets thrown', () {

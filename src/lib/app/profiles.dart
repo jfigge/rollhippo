@@ -93,9 +93,11 @@ List<CardSet>? _cardsFromJson(Map<String, Object?> source) {
       if (shoe == null) return null;
       cards.add(shoe);
     }
-    // The first shoe is the one the picker will not let you empty, so a file
-    // claiming otherwise is one this build cannot put on screen.
-    if (cards.isEmpty || cards.first.isEmpty) return null;
+    // The picker will not let the last shoe there is be emptied, so a file
+    // with no started shoe in it at all is one this build cannot put on
+    // screen. Which shoe it is does not matter: an empty first with a started
+    // second is a save this build can write.
+    if (!cards.any((CardSet shoe) => shoe.isNotEmpty)) return null;
     return cards;
   }
   final CardSet? only = _cardFromJson(source);

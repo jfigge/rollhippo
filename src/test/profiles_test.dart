@@ -234,8 +234,9 @@ void main() {
           ..remove(key);
         expect(profileFromJson(broken), isNull, reason: 'without $key');
       }
-      // And a shoe list this build could not put on screen: the first shoe is
-      // the one the picker will not let you empty.
+      // And a shoe list this build could not put on screen: the picker will
+      // not let the last shoe there is be emptied, so a file with no started
+      // shoe in it at all is not a profile.
       expect(
         profileFromJson(
           Map<String, Object?>.of(good)
@@ -244,8 +245,29 @@ void main() {
             ],
         ),
         isNull,
-        reason: 'a first shoe with no card',
+        reason: 'no shoe with a card on it',
       );
+      // Which shoe it is does not matter. An empty first with a started second
+      // is a picker this build can be put into by hand, so it is one a save is
+      // entitled to hold.
+      final Profile? gap = profileFromJson(
+        Map<String, Object?>.of(good)
+          ..['cards'] = <Object?>[
+            <String, Object?>{'colours': <int>[], 'decks': 1, 'cut': 0},
+            <String, Object?>{
+              'colours': <int>[kDiceWhite],
+              'decks': 2,
+              'cut': 5,
+            },
+          ],
+      );
+      expect(
+        gap,
+        isNotNull,
+        reason: 'an empty first shoe behind a started one',
+      );
+      expect(gap!.cards.first.isEmpty, isTrue);
+      expect(gap.cards[1].decks, 2);
       // A code that is not one of ours is not a profile either.
       expect(
         profileFromJson(Map<String, Object?>.of(good)..['dice'] = 'hello'),

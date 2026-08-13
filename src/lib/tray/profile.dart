@@ -10,24 +10,29 @@ enum ProfileMode { dice, cards }
 
 /// How many shoes a table can hold.
 ///
-/// Three, and the same three as `kMaxGroups`: the card table is the tray's
-/// other page, and a picker whose two halves disagreed about how many sets you
-/// may have would be two apps. Named here rather than beside that one because
+/// Four, and the same four as `kMaxGroups`: the card table is the tray's other
+/// page, and a picker whose two halves disagreed about how many sets you may
+/// have would be two apps. Named here rather than beside that one because
 /// this is where a shoe is defined and because [encodeProfile] — which is
 /// below the widgets and cannot see the picker — has to know it to read an
 /// older code that carries only one.
-const int kMaxCardSets = 3;
+///
+/// It is a ceiling rather than a count. The picker never shows four at once
+/// unless you have filled them: it shows the shoes you have started and one
+/// empty one after them, so the number of pages grows as you fill them and
+/// this is only where that growing stops.
+const int kMaxCardSets = 4;
 
 /// One shoe, as the picker sets it up: what is printed on a card, how many
 /// decks are shuffled together, and how deep it is cut.
 ///
 /// The card side's answer to a group of dice, and deliberately the same shape
-/// of thing. A tray holds up to three sets of dice and you swipe between them;
-/// a table holds up to three shoes and you swipe between those. Which means a
-/// shoe carries its own set-up rather than sharing one — two shoes with the
-/// same dice, the same decks and the same cut are the same shoe twice, and the
-/// point of having three is that one can be a blackjack shoe and another a
-/// single deck you cut to the last card.
+/// of thing. A tray holds several sets of dice and you swipe between them; a
+/// table holds as many shoes and you swipe between those. Which means a shoe
+/// carries its own set-up rather than sharing one — two shoes with the same
+/// dice, the same decks and the same cut are the same shoe twice, and the
+/// point of having more than one is that one can be a blackjack shoe and
+/// another a single deck you cut to the last card.
 ///
 /// [colours] *is* the dice: a card with two dice printed on it is a card with
 /// two colours on it, and there is no separate count that could disagree. An
@@ -49,7 +54,7 @@ class CardSet {
   int get dice => colours.length;
 
   /// True of a shoe nobody has started. Not one you emptied by accident:
-  /// the picker will not let the first shoe get here.
+  /// the picker will not let the last shoe there is get here.
   bool get isEmpty => colours.isEmpty;
 
   bool get isNotEmpty => colours.isNotEmpty;
@@ -78,8 +83,8 @@ class CardSet {
   int get hashCode => Object.hash(decks, reshuffleAt, Object.hashAll(colours));
 }
 
-/// A shoe nobody has started, which is what the second and third are until
-/// somebody puts a die on one.
+/// A shoe nobody has started, which is what the one waiting past the last
+/// started shoe is until somebody puts a die on it.
 ///
 /// Its numbers are the ones a first die would find waiting rather than
 /// anything anybody chose — a shoe with no cards in it has no decks to speak
@@ -109,15 +114,16 @@ class Profile {
   /// it was saved, and so the mode opening it puts you back on.
   final ProfileMode mode;
 
-  /// The three sets of dice, empties and all. An empty group is a set you never
-  /// started rather than one you forgot to fill in, and it is worth keeping:
-  /// opening a save should give you back the two sets you had, not three.
+  /// The sets of dice, empties and all — `kMaxGroups` of them, since that is
+  /// what the picker captures. An empty group is a set you never started
+  /// rather than one you forgot to fill in, and it is worth keeping: opening a
+  /// save should give you back the two sets you had, not four.
   final List<List<DieSpec>> groups;
 
-  /// The three shoes, empties and all, for the same reason [groups] keeps its
+  /// The shoes, empties and all, for the same reason [groups] keeps its
   /// empties: a shoe with no dice on its card is one you never started, and
-  /// opening a save should give you back the two you had rather than three.
-  /// The first is never empty.
+  /// opening a save should give you back the two you had rather than four.
+  /// At least one of them has a card on it, though it need not be the first.
   final List<CardSet> cards;
 
   /// What this profile comes to, in the fewest words that are still true.
