@@ -128,12 +128,36 @@
     /* Inline prose links, the way the herd draws them everywhere else it has
        one (see .dl-note a in site.css): the accent, no rule under it until
        the pointer is on it. The browser default — bright blue, underlined —
-       is the one thing on this page that would not look like the rest. */
-    .rh-soon-note a {
+       is the one thing on this page that would not look like the rest.
+
+       The feedback section's body copy is the page's other run of prose with
+       links in it, so it joins this rule rather than getting a copy of it that
+       can drift. It is scoped to .section-body and not to the whole section on
+       purpose: site.css draws a link inside a .callout in the callout's yellow,
+       and a second selector reaching in there would out-specify it. */
+    .rh-soon-note a,
+    .rh-feedback .section-body a {
       color: var(--brand);
       text-decoration: none;
     }
-    .rh-soon-note a:hover { text-decoration: underline; }
+    .rh-soon-note a:hover,
+    .rh-feedback .section-body a:hover { text-decoration: underline; }
+
+    /* A gap between two paragraphs of body copy.
+
+       The herd's reset zeroes every margin and .section-body puts none back,
+       so a second <p> starts one line under the first with nothing between
+       them. It has never shown up on the herd because no other page there
+       stacks two — every one of the six siblings says its piece in a single
+       .section-body and moves on to a grid. This page has two such runs, so
+       the rule is here rather than in site.css, which belongs to hippoherd
+       and is shared with those six.
+
+       On the adjacent sibling rather than on .section-body itself: the first
+       paragraph of a section sits under .section-title, which already carries
+       its own 14px, and a margin on every one of them would open that up to
+       32 and leave the heading floating. */
+    .section-body + .section-body { margin-top: 18px; }
 
     /* ── The gallery ───────────────────────────────────────────────────────
        A row of phones that scrolls sideways rather than a grid that wraps.
@@ -210,6 +234,7 @@
       </div>
     </details>
     <a class="nav-link" href="docs/">Guide</a>
+    <a class="nav-link" href="#feedback">Feedback</a>
     <a class="nav-link" href="https://github.com/jfigge/rollhippo" rel="noopener noreferrer">GitHub</a>
     <a class="btn btn-primary" href="#get">Get the app</a>
   </div>
@@ -407,6 +432,59 @@
            alt="The Share sheet, showing a QR code that encodes the whole set-up.">
       <figcaption><b>Hand it over</b>The whole set-up as one square. Scan it from another phone.</figcaption>
     </figure>
+  </div>
+</section>
+
+<!-- Feedback. Deliberately one section with no form in it, for the reason the
+     rest of the page keeps advertising: a form needs a server to post to, the
+     app never opens a socket and this page is static files on GitHub Pages.
+     The CSP above says form-action 'none', which is that same fact written
+     where a browser can enforce it. So the section's whole job is to hand the
+     visitor the tracker, and to say what a report has to carry given that the
+     app itself reports nothing. -->
+<section class="section section-alt rh-feedback" id="feedback">
+  <div class="section-inner">
+    <p class="section-tag">Feedback</p>
+    <h2 class="section-title">Ask for the thing that isn&rsquo;t there</h2>
+    <p class="section-body">
+      Roll Hippo is built around games somebody actually plays, which is
+      exactly why the gaps in it are invisible from the inside. If the die your
+      game wants isn&rsquo;t in the rack, if your table cuts a shoe somewhere
+      the slider won&rsquo;t reach, or if a screen reads wrong on the phone you
+      actually own, nothing here finds that out on its own. Say what the game
+      is and what it needed, and it turns into something that can be built.
+    </p>
+    <p class="section-body">
+      All of it goes to one place — the
+      <a href="https://github.com/jfigge/rollhippo/issues" rel="noopener noreferrer">issue
+      tracker on GitHub</a>, beside the source. It is public on purpose:
+      somebody may have asked for your feature already and can say so, and if
+      the answer turns out to be no, the reason stays attached to the question
+      instead of ending up in one person&rsquo;s mailbox. A free GitHub account
+      is the whole of what it costs.
+    </p>
+
+    <div class="callout">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <p><strong>A bug report has to carry what the app cannot send.</strong>
+      There is no crash reporting in Roll Hippo and no telemetry of any kind,
+      so a wrong result or a stuck screen leaves no trace anywhere but the
+      phone it happened on — until somebody writes it down, nobody knows it
+      happened. The phone, its OS version and what was on screen are usually
+      enough; if a particular set of dice is involved, the QR code from the
+      app&rsquo;s Share sheet carries the entire set-up in one picture.</p>
+    </div>
+
+    <div class="link-row">
+      <a class="link-card" href="https://github.com/jfigge/rollhippo/issues/new" rel="noopener noreferrer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.1 14c.2-1 .6-1.7 1.4-2.5A4.7 4.7 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.8.8 1.2 1.5 1.4 2.5"/></svg>
+        <span>Suggest a feature<small>A blank box, and your own words</small></span>
+      </a>
+      <a class="link-card" href="https://github.com/jfigge/rollhippo/issues" rel="noopener noreferrer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>What has already been asked<small>Every open issue, and what came of the closed ones</small></span>
+      </a>
+    </div>
   </div>
 </section>
 
