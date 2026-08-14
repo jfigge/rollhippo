@@ -262,8 +262,7 @@ _Cards? _readCardsV2(Uint8List bytes, int at) {
   }
   return _Cards(<CardSet>[
     CardSet(colours: colours, decks: decks, reshuffleAt: reshuffleAt),
-    for (int i = 1; i < kMaxCardSets; i++)
-      const CardSet(colours: <int>[], decks: 1, reshuffleAt: 0),
+    for (int i = 1; i < kMaxCardSets; i++) kEmptyShoe,
   ], at);
 }
 

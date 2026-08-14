@@ -86,12 +86,19 @@ class CardSet {
 /// A shoe nobody has started, which is what the one waiting past the last
 /// started shoe is until somebody puts a die on it.
 ///
-/// Its numbers are the ones a first die would find waiting rather than
-/// anything anybody chose — a shoe with no cards in it has no decks to speak
-/// of. Down here rather than beside the picker's other defaults because
+/// Its numbers are the ones a first die finds waiting, and they are the same
+/// two the app's own opening shoe is set up with — see `kDefaultProfile`. A
+/// blank shoe used to start at one deck cut to nothing, on the argument that a
+/// shoe with no cards in it has no decks to speak of; what that missed is that
+/// these numbers are not a description of an empty shoe but the starting point
+/// of the next one. Somebody adding a second shoe is adding *another* of what
+/// they already have, and finding it set up unlike the first is two rows to
+/// put back before the shoe is what they meant.
+///
+/// Down here rather than beside the picker's other defaults because
 /// `tutorial.dart` needs one too and must not import the picker: the picker
 /// opens the tutorial, so that edge already runs the other way.
-const CardSet kEmptyShoe = CardSet(colours: <int>[], decks: 1, reshuffleAt: 0);
+const CardSet kEmptyShoe = CardSet(colours: <int>[], decks: 2, reshuffleAt: 5);
 
 /// Everything the picker is set to, in both of its modes at once.
 ///

@@ -455,8 +455,8 @@ void main() {
       expect(dotsOf(tester, kModeDots).current, 0);
     });
 
-    testWidgets('the shoe panel hangs off the bottom, and the die panel is '
-        'above it', (WidgetTester tester) async {
+    testWidgets('the panel hangs off the bottom, with its two halves in one '
+        'box', (WidgetTester tester) async {
       // The narrowest screen worth shipping to, because the slack this is
       // about is the difference between the two modes' racks and that scales
       // with width: a phone this wide has the least of it.
@@ -467,25 +467,46 @@ void main() {
 
       // The block is sized by the dice page and the card page is laid into it,
       // so the last thing on the card page ends where the block does. That is
-      // the edge the mode dots sit under, and splitting the panel in two must
-      // not have moved it: the pair grew upwards, into the slack above.
+      // the edge the mode dots sit under, and neither splitting the panel in
+      // two nor merging the two back into one box may move it: what each of
+      // those changed, it changed upwards.
       expect(
-        tester.getBottomLeft(find.byKey(kCardShoePanel)).dy,
+        tester.getBottomLeft(find.byKey(kCardPanel)).dy,
         tester.getBottomLeft(find.byKey(kCardPage)).dy,
       );
+
+      // One box, so nothing lies between the lower half and the bottom of it
+      // but the box's own padding and the border that padding is inside. Two
+      // boxes would put a second border and the air around it here, which is
+      // what this measurement is really asking about.
+      expect(
+        tester.getBottomLeft(find.byKey(kCardPanel)).dy -
+            tester.getBottomLeft(find.byKey(kCardShoePanel)).dy,
+        kCardPanelPad + kCardPanelRule,
+      );
+
+      // And between the halves, the rule and the air either side of it.
       expect(
         tester.getTopLeft(find.byKey(kCardShoePanel)).dy -
             tester.getBottomLeft(find.byKey(kCardDiePanel)).dy,
-        kCardPanelGap,
+        2 * kCardPanelGap + kCardPanelRule,
       );
 
-      // And there is still room above the pair. Not much — the split spends
-      // most of what there was — so this is here to say so when the next row
-      // added to either panel takes the rest of it.
+      // The sides the box gave up so that the rule could reach its edges were
+      // handed to the halves and not dropped: the two titles still start in
+      // the same column, which is what says no control moved sideways.
+      expect(
+        tester.getTopLeft(find.text('Cards')).dx,
+        tester.getTopLeft(find.text('Decks')).dx,
+      );
+
+      // And there is room above the panel. The split spent nearly all of what
+      // there was and the merge handed some of it back; this is here to say so
+      // when the next row added to either half takes the rest.
       final double slack =
-          tester.getTopLeft(find.byKey(kCardDiePanel)).dy -
+          tester.getTopLeft(find.byKey(kCardPanel)).dy -
           tester.getBottomLeft(find.byKey(kShoeDots)).dy;
-      expect(slack, greaterThan(8), reason: 'the panels have run out of room');
+      expect(slack, greaterThan(8), reason: 'the panel has run out of room');
     });
 
     testWidgets('a swipe on the rack changes set, not mode', (

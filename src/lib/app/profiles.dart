@@ -104,8 +104,10 @@ List<CardSet>? _cardsFromJson(Map<String, Object?> source) {
   if (only == null || only.isEmpty) return null;
   return <CardSet>[
     only,
-    for (int i = 1; i < kMaxCardSets; i++)
-      const CardSet(colours: <int>[], decks: 1, reshuffleAt: 0),
+    // [kEmptyShoe] rather than a blank one written out here: what the save has
+    // no room for arrives exactly as it would on a phone where nobody had
+    // started it, and that is one fact with one home.
+    for (int i = 1; i < kMaxCardSets; i++) kEmptyShoe,
   ];
 }
 

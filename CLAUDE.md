@@ -435,15 +435,24 @@ test exists to make the change deliberate, not to make it hard.
   profile from a build with more room keeps as many of its *sets* as fit rather
   than as many of its first few slots.
 
-- **Card mode's set-up is two panels, and the split is about subject rather
-  than about room.** Everything under the *dice* rack is about the one die the
-  ring is round, so one card of controls is one subject. The card page is two:
-  the swatches and Remove act on a single die of the card exactly as the die
-  editor does, while Decks and Reshuffle act on the whole shoe and would mean
-  the same thing if the card had three dice on it or one. `_cardDiePanel` and
-  `_cardShoePanel` are those two, `_cardPanels` is the pair, and `_CardCard` is
-  the rounded box both are drawn on so there is one border rather than two that
-  can drift apart.
+- **Card mode's set-up is two halves of one panel, and the split is about
+  subject rather than about room.** Everything under the *dice* rack is about
+  the one die the ring is round, so one card of controls is one subject. The
+  card page is two: the swatches and Remove act on a single die of the card
+  exactly as the die editor does, while Decks and Reshuffle act on the whole
+  shoe and would mean the same thing if the card had three dice on it or one.
+  `_cardDiePanel` and `_cardShoePanel` are those two, `_cardPanels` is the pair,
+  and `_CardCard` is the one rounded box they are both drawn in.
+
+  **Two subjects, one box, a rule between them.** They were two boxes and are
+  not any more: two subjects are one panel with a line across it as readily as
+  they are two panels side by side, and what a second border, two roundings and
+  the air between them were saying, `kCardPanelRule` says in a point. The rule
+  is the same ink as the border — `_kCardEdge`, named so the two cannot drift —
+  and it reaches both edges of the box, which is the whole reason `_CardCard`'s
+  padding is vertical only and `kCardPanelSide` sits on each half instead. A
+  rule inset by fourteen at each end reads as a divider *within* a list; one
+  that touches both edges reads as the two things it divides.
 
   The split earns its keep twice over, because the two panels are switched off
   by different things — or rather, only one of them is switched off at all. On
@@ -454,23 +463,33 @@ test exists to make the change deliberate, not to make it hard.
   set are the numbers that first die finds waiting rather than `kEmptyShoe`'s.
   As one panel that was not expressible: the fade was one flag over the lot.
 
-  `kCardPanel` stays on the **pair**, because what that key names is the handle
-  the two modes are dragged by and the drag has always been everything under
-  the rack, the gap included — and because the tutorial's first page points at
-  it, where a hole round only the top half would be a hole round half a
-  sentence.
+  `kCardPanel` stays on the **pair** — which is now the box round both of them
+  — because what that key names is the handle the two modes are dragged by, and
+  the drag has always been everything under the rack, the rule between the
+  halves included. It is also what the tutorial's first page points at, where a
+  hole round only the top half would be a hole round half a sentence.
 
-  **The cost is vertical and there is not much left.** The block is sized by
-  the dice page and the card page is laid into it, so what pays for a second
-  panel's padding is the `Spacer` in `_cardsPage` — the difference between a
-  two-row rack and a one-row one. That difference scales with *width*, so the
-  narrowest phone has the least of it: measured at 375 points it came to three
-  after the split, which is why `_CardCard` is padded ten and ten where the one
-  panel it replaced was ten and fourteen, and why `kCardPanelGap` is ten rather
-  than the twelve between rows. That buys it back to thirteen. `cards_test`
-  measures all three things — the shoe panel's bottom against the block's, the
-  gap, and the slack — so the next row added to either panel says so out loud
-  instead of drawing a yellow bar on somebody's phone.
+  **The cost is vertical, and the merge is what bought some of it back.** The
+  block is sized by the dice page and the card page is laid into it, so what
+  pays for the card panel is the `Spacer` in `_cardsPage` — the difference
+  between a two-row rack and a one-row one. That difference scales with
+  *width*, so the narrowest phone has the least of it: measured at 375 points
+  the split left three, which is why `_CardCard` is padded ten and ten where
+  the one panel before it was ten and fourteen, and why `kCardPanelGap` is ten
+  rather than the twelve between rows. Those two brought it to thirteen; losing
+  the inner border and the air either side of it — thirty-two points of
+  separation down to twenty-one — brings it to twenty-four.
+
+  **All of that is spent upwards, and the bottom edge is why.** The panel hangs
+  off the bottom of the block, so a shorter panel is a taller slack above it
+  and never a lower edge: the box's bottom stays where the mode dots expect it
+  and Decks and Reshuffle do not move a point, because `kCardPanelPad` stayed
+  ten at the bottom through the merge. What moved is the top of the box and the
+  half above the rule, downwards, by the eleven points the second box was
+  costing. `cards_test` measures all of it — the box's bottom against the
+  block's, the padding under the lower half, the rule and its air, the two
+  titles' shared column, and the slack — so the next row added to either half
+  says so out loud instead of drawing a yellow bar on somebody's phone.
 
 - **The set that cannot be emptied is the last one left, not the first one.**
   `_floor` is `_startedGroups > 1 ? 0 : 1` and `_cardFloor` is the same

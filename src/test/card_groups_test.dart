@@ -272,6 +272,33 @@ void main() {
       );
     });
 
+    testWidgets('a shoe nobody has started opens set up like the one you '
+        'have', (WidgetTester tester) async {
+      await openCards(tester);
+      await swipeShoe(tester, -300);
+      expect(cardRackOf(tester, 1), isEmpty);
+
+      // The cut a first die will find waiting, and it is the one the shoe you
+      // already have is cut at rather than a blank shoe's idea of nothing.
+      expect(
+        find.descendant(of: find.byKey(kCardPage), matching: find.text('<5%')),
+        findsOneWidget,
+      );
+
+      // And the decks, which only a card can count: one die across two decks
+      // is twelve.
+      await tester.tap(addInShoe(1));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(kCardPage),
+          matching: find.text('Shoe 2/2 · 12 cards'),
+        ),
+        findsOneWidget,
+        reason: 'a new shoe starts on two decks, as the first one does',
+      );
+    });
+
     testWidgets('each shoe keeps its own decks and its own cut', (
       WidgetTester tester,
     ) async {

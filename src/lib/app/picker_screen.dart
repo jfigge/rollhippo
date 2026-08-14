@@ -128,21 +128,52 @@ const Key kCardPage = ValueKey<String>('card-page');
 /// The two halves the card page's set-up is split between: the die of the card
 /// the swatches are pointed at, and what the shoe itself is made of.
 ///
-/// [kCardPanel] is the pair of them, and stays that because it is what the
-/// mode drag and the tutorial mean by "the panel". These two are for anything
-/// that has business with one half rather than the other — which is mostly a
-/// test measuring where an edge sits.
+/// [kCardPanel] is the box the two of them are drawn in, and stays that
+/// because it is what the mode drag and the tutorial mean by "the panel".
+/// These two are for anything that has business with one half rather than the
+/// other — which is mostly a test measuring where an edge sits. They are
+/// sections of one card now rather than two cards, so what they key is the
+/// half's contents: its own edge is the rule, not a border of its own.
 const Key kCardDiePanel = ValueKey<String>('card-die-panel');
 const Key kCardShoePanel = ValueKey<String>('card-shoe-panel');
 
-/// The air between those two panels.
+/// The air above and below the rule that separates those two halves.
 ///
-/// Ten rather than the twelve that separates the rows *inside* one of them, so
-/// the split reads as a split rather than as a page break: near enough to
-/// still be one piece of screen, and the border round each is what says which
-/// controls answer to which question. The two points are also worth having —
-/// see [_CardCard], which is where the rest of the split's cost was found.
+/// Ten either side of it, still shorter than the twelve between the rows
+/// *inside* a half, because the rule is now doing the work the spacing used to
+/// do on its own: near enough to read as one piece of screen, divided clearly
+/// enough to read as two questions. Twenty-one points in all, where two
+/// bordered boxes with air between them took thirty-two.
+///
+/// That difference is spent upwards and not downwards. The pair hangs off the
+/// bottom of the block — see [_cardsPage] — so a shorter panel is a taller
+/// slack above it rather than a lower edge, and the lower half does not move
+/// at all: Decks and Reshuffle sit exactly as far off the bottom of the box as
+/// they did when the box was theirs alone.
 const double kCardPanelGap = 10;
+
+/// The rule between the halves, and the border it is drawn inside.
+///
+/// One point, and the same one, because they are the same ink: [_kCardEdge] is
+/// what said "two panels" round two boxes and is what says "two halves" across
+/// one. A division heavier inside than out would read as a seam.
+const double kCardPanelRule = 1;
+
+/// The air each half keeps at its sides.
+///
+/// On the halves rather than on the box, which is the whole of what the merge
+/// needed: a rule inset by fourteen points at each end reads as a divider
+/// *within* a list, where one that reaches both edges reads as the two things
+/// it divides. Fourteen either way, so no control moved sideways.
+const double kCardPanelSide = 14;
+
+/// The air the box keeps above its first row and below its last.
+///
+/// Ten and ten. It stayed ten at the bottom through the merge on purpose:
+/// that is the distance between the cut slider and the edge the mode dots sit
+/// under, and the whole point of doing this without moving the bottom edge is
+/// that nothing down there shifts.
+const double kCardPanelPad = 10;
 
 /// The cut slider in the card panel. Named because the settings sheet has a
 /// slider too, and the picker is still built underneath it.
@@ -197,6 +228,10 @@ const Profile kDefaultProfile = Profile(
   mode: ProfileMode.dice,
   groups: <List<DieSpec>>[kDefaultDice, <DieSpec>[], <DieSpec>[], <DieSpec>[]],
   cards: <CardSet>[
+    // Two decks and a cut at five, which are [kEmptyShoe]'s numbers written
+    // out again: a const expression cannot read a field off one, and the two
+    // being the same is the point — the shoe you open on and the shoe you add
+    // are set up alike, so a second one is another of what you have.
     CardSet(colours: <int>[kDiceWhite, kDiceWhite], decks: 2, reshuffleAt: 5),
     kEmptyShoe,
     kEmptyShoe,
@@ -1687,23 +1722,43 @@ class _PickerScreenState extends State<PickerScreen>
   ///
   /// [kCardPanel] is on the pair rather than on either half, because what that
   /// key names is the handle the two modes are dragged by — and the drag has
-  /// always been the whole of what is under the rack, the gap between the
-  /// panels included. It is also what the tutorial's first page points at, and
+  /// always been the whole of what is under the rack, the rule between the
+  /// halves included. It is also what the tutorial's first page points at, and
   /// a hole round only the top half would be a hole round half a sentence.
   ///
+  /// What the split does *not* have to be is two boxes. Two subjects are one
+  /// panel with a line across it as readily as they are two panels, and the
+  /// line says it in a point where a second border, two roundings and the air
+  /// between them said it in thirty-two — while the pair goes on being one
+  /// thing to the drag, to the tutorial and to the eye that finds it under the
+  /// rack. So the box is one, drawn by [_CardCard], and the rule inside it is
+  /// what the two borders that met in the middle were for.
+  ///
   /// The pair hangs off the bottom of the block — see [_cardsPage] — so the
-  /// height the split costs is spent upwards, out of the slack the card page
-  /// already had above it. The shoe panel's bottom edge does not move, which
-  /// is the edge the mode dots sit under and the one thing here that must not
-  /// shift as a mode slides over it.
-  Widget _cardPanels() => Column(
+  /// height the merge gives back is given back *upwards*, into the slack the
+  /// card page has above it. The box's bottom edge does not move, which is the
+  /// edge the mode dots sit under and the one thing here that must not shift
+  /// as a mode slides over it.
+  Widget _cardPanels() => _CardCard(
     key: kCardPanel,
-    mainAxisSize: MainAxisSize.min,
-    children: <Widget>[
-      _cardDiePanel(),
-      const SizedBox(height: kCardPanelGap),
-      _cardShoePanel(),
-    ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      // Tight to the box rather than to the widest row inside it, which is
+      // what gives the rule two edges to reach. Every row in both halves is
+      // full width already, so this changes nothing but the rule.
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _cardDiePanel(),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: kCardPanelGap),
+          child: SizedBox(
+            height: kCardPanelRule,
+            child: ColoredBox(color: _kCardEdge),
+          ),
+        ),
+        _cardShoePanel(),
+      ],
+    ),
   );
 
   /// One card of the shoe, and the die of it the swatches are pointed at.
@@ -1720,8 +1775,11 @@ class _PickerScreenState extends State<PickerScreen>
     // of a swipe.
     final bool empty = _cardColours.isEmpty;
     final int size = Deck.sizeOf(_cardDice, _decks);
-    return _CardCard(
+    return Padding(
       key: kCardDiePanel,
+      // The side padding the box used to carry, now on each half, so that the
+      // rule between them can run edge to edge — see [_CardCard].
+      padding: const EdgeInsets.symmetric(horizontal: kCardPanelSide),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1825,8 +1883,9 @@ class _PickerScreenState extends State<PickerScreen>
   /// die finds waiting, rather than the ones [kEmptyShoe] would have chosen
   /// for you.
   Widget _cardShoePanel() {
-    return _CardCard(
+    return Padding(
       key: kCardShoePanel,
+      padding: const EdgeInsets.symmetric(horizontal: kCardPanelSide),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -2182,12 +2241,27 @@ Widget tutorialBackdrop(TutorialStage stage) => switch (stage) {
 
 /// One place in the rack: a die you can select, the space the next die goes in,
 /// or a slot the set has not reached yet.
-/// The dark rounded card both halves of the card page's set-up are drawn on,
-/// and the same one [_editor] draws itself on.
+/// The ink the box is edged in, and the rule inside it is drawn in.
 ///
-/// Two of them side by side would be two chances for one to have a different
-/// border, which is the argument `menu.dart` makes about its switches — and
-/// the split turned one panel into two overnight.
+/// Named because two things have to agree about it: an edge and a division
+/// that were the same line until the halves were merged, and a rule a shade
+/// off the border it meets at both ends would read as a mistake rather than as
+/// a decision.
+const Color _kCardEdge = Color(0x14FFFFFF);
+
+/// The dark rounded card the card page's set-up is drawn on — both halves of
+/// it, one under the other with a rule between them — and the same box
+/// [_editor] draws itself on in the other mode.
+///
+/// It went back to being one box when the halves were merged. The pair was
+/// never two subjects' worth of *chrome*: two borders round two roundings is
+/// two chances for one of them to drift from the other, which is the argument
+/// `menu.dart` makes about its switches, and the split had turned one panel
+/// into two overnight.
+///
+/// Its padding is vertical only. The sides belong to each half instead — see
+/// [kCardPanelSide] — because that is what lets the rule between them reach
+/// both edges of the box.
 class _CardCard extends StatelessWidget {
   const _CardCard({super.key, required this.child});
 
@@ -2196,19 +2270,11 @@ class _CardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.symmetric(horizontal: 16),
-    // Ten and ten, where the one panel it replaces had ten and fourteen. The
-    // split costs a second panel's worth of vertical padding out of slack the
-    // card page has a fixed amount of — the block is sized by the *dice* page
-    // and the difference between the two is what the [Spacer] in [_cardsPage]
-    // is spending. Measured on the narrowest screen worth shipping to, that
-    // slack came to three points; taking eight back off the padding and two
-    // off [kCardPanelGap] is what keeps a notch of larger text from running
-    // the panels into the dots above them.
-    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+    padding: const EdgeInsets.symmetric(vertical: kCardPanelPad),
     decoration: BoxDecoration(
       color: const Color(0xFF141A23),
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0x14FFFFFF)),
+      border: Border.all(color: _kCardEdge, width: kCardPanelRule),
     ),
     child: child,
   );
