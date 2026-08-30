@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import 'entropy.dart';
+
 /// One instant of how the phone is moving, in device axes: x right, y towards
 /// the top of the screen, z out through the glass.
 class MotionFrame {
@@ -96,6 +98,84 @@ const double _kGravityTau = 0.1026;
 const double _kTwistTau = 0.0467;
 const double _kDragTau = 0.0326;
 
+/// How often the sensors are asked for a reading.
+///
+/// 200 Hz. A hand shake has real content up to about 15 Hz, and the impacts it
+/// causes are shorter than that again; sampling at frame rate aliases the shake
+/// into something slower and mushier than it was, which is a large part of what
+/// makes a naive shake-to-roll feel wrong.
+///
+/// One constant rather than one per subscriber, because `sensors_plus` gives
+/// every listener of a stream the rate the *first* of them asked for and warns
+/// about the rest. [tapMotionForEntropy] and [SensorMotionSource] can overlap
+/// — a launch sip is still running when the tray is opened — so the two ask
+/// for the same thing.
+const Duration kSensorPeriod = Duration(milliseconds: 5);
+
+/// Takes one sip of the accelerometer, stirs it into [entropy], and lets the
+/// sensor go again.
+///
+/// Called once, from `main`, for the same reason the tutorial flag is read
+/// there: a launch is the one thing `main` knows about that nothing else does.
+/// A shoe is usually shuffled within seconds of one — the picker, a tap on
+/// Deal, a first layout — and a pool stirred at launch is a pool that has
+/// something in it by the time the first shuffle asks.
+///
+/// **A sip and not a stream.** [samples] readings is all it takes: once the
+/// pool has real sensor noise in it, it has it for the rest of the launch, and
+/// every draw stirs the clock in on top. Holding the accelerometer open for
+/// the life of the app to keep re-seasoning a seed nobody can guess anyway
+/// would be a battery cost for nothing. [deadline] is the other end of the
+/// same promise, for hardware that ignores the sampling period and dribbles.
+///
+/// It is deliberately **not** behind `Settings.motion`. That setting is about
+/// motion *control* — whether the way you move the phone moves what is in the
+/// tray — and what happens here moves nothing, is over in a second, and is
+/// never read back as anything but a number to start a shuffle from. A player
+/// who has switched the tilting off has not asked for a worse shuffle.
+void tapMotionForEntropy({
+  int samples = 256,
+  Duration deadline = const Duration(seconds: 4),
+}) {
+  StreamSubscription<AccelerometerEvent>? tap;
+  Timer? clock;
+  int taken = 0;
+
+  void enough() {
+    clock?.cancel();
+    clock = null;
+    final StreamSubscription<AccelerometerEvent>? open = tap;
+    tap = null;
+    if (open != null) unawaited(open.cancel());
+  }
+
+  // The deadline first, so that it is armed before anything the subscription
+  // could do can reach [enough] — a tap that let go of the sensor and then had
+  // a timer assigned over the top of it would be holding a timer nobody
+  // cancels.
+  clock = Timer(deadline, enough);
+  tap = accelerometerEventStream(samplingPeriod: kSensorPeriod).listen(
+    (AccelerometerEvent e) {
+      // The three axes as the bits they are, and the moment they arrived. The
+      // second one matters most on a phone lying still: a converter that
+      // quantises to the same handful of values says the same thing every
+      // time, where the instant it managed to say it does not.
+      entropy
+        ..stir(e.x)
+        ..stir(e.y)
+        ..stir(e.z)
+        ..stirClock();
+      if (++taken >= samples) enough();
+    },
+    // A phone with no accelerometer at all — see [SensorMotionSource], which
+    // has met one. There is nothing to gather and nothing to say about it: the
+    // pool falls back to the clock, which is what it does on the desktop
+    // harness and in every test.
+    onError: (Object error, StackTrace stack) => enough(),
+    cancelOnError: true,
+  );
+}
+
 abstract class MotionSource {
   /// The motion since the previous call, averaged over that interval.
   MotionFrame sample(double dt);
@@ -162,16 +242,23 @@ MotionSource motionSourceFor({required bool device, required bool motion}) {
 /// they get is the app that hardware can run.
 class SensorMotionSource implements MotionSource {
   SensorMotionSource() {
-    // 200 Hz requested. A hand shake has real content up to about 15 Hz, and
-    // the impacts it causes are shorter than that again; sampling at frame rate
-    // aliases the shake into something slower and mushier than it was, which is
-    // a large part of what makes a naive shake-to-roll feel wrong.
-    const Duration period = Duration(milliseconds: 5);
+    // 200 Hz requested — see [kSensorPeriod], which is where that number is
+    // argued and which the launch entropy sip shares.
+    const Duration period = kSensorPeriod;
     _accelerometer = accelerometerEventStream(samplingPeriod: period).listen((
       AccelerometerEvent e,
     ) {
       _sum.setValues(_sum.x + e.x, _sum.y + e.y, _sum.z + e.z);
       _count++;
+      // Free while we are here, and the best noise this app ever sees: a hand
+      // shaking a tray is the phone at its least predictable. The launch sip
+      // is what guarantees the pool has something in it — see
+      // [tapMotionForEntropy] — and this is the seasoning on top, for a shoe
+      // opened after a session with the dice.
+      entropy
+        ..stir(e.x)
+        ..stir(e.y)
+        ..stir(e.z);
     }, onError: _ignoreMissingSensor);
     _gyroscope = gyroscopeEventStream(samplingPeriod: period).listen((
       GyroscopeEvent e,

@@ -6,9 +6,18 @@ import 'package:flutter/services.dart';
 import 'app/picker_screen.dart';
 import 'app/profiles.dart';
 import 'app/settings.dart';
+import 'motion/motion.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // First, because it is the only thing here that wants wall-clock time rather
+  // than a platform answer: a second of accelerometer, stirred into the pool a
+  // shuffle takes its seed from and then let go of again. Started before
+  // everything below so it gathers while the two loads are waiting, and it
+  // returns at once — a shoe built before it has finished simply seeds from
+  // what is in the pool by then, which is one of the reasons the clock is in
+  // there as well. See [tapMotionForEntropy].
+  tapMotionForEntropy();
   // Neither of these is waited for. They are requests to the platform about
   // how the window behaves, not work the first frame depends on — and the
   // orientation lock in particular is already in force before any of this

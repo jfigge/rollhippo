@@ -91,6 +91,8 @@ src/lib/tray/      tray (walls + DiceTray) · tuning (Tuning) · dice (DieKind �
                    share_code (both payloads)
 src/lib/motion/    MotionSource — the sensors, a synthetic phone for the harness, and a still one
                    (StillMotionSource) for when motion control is switched off
+                   entropy (EntropyPool — where a shuffle's seed comes from, and the
+                   one file here that imports no plugin, so the shoe can read it)
 src/lib/cards/     Deck (every outcome, shuffled) · PlayingCard · CardTable · Deal
 src/lib/render/    TrayCamera · TrayPainter · TrayPagesPainter · DiePreview
                    CardPainter · CardPagesPainter
@@ -265,6 +267,28 @@ test exists to make the change deliberate, not to make it hard.
   differs from rolling in the one way a shoe always does — it is drawn without
   replacement — which is what `reshuffleAt`, `Deck.cut` and `Deck.spent` are
   about.
+- **The shuffle's seed is stirred rather than chosen.** A `Deck` given no
+  `Random` builds one on `entropy.seed()` — `lib/motion/entropy.dart`, a
+  64-bit pool mixed with splitmix64's finaliser — instead of leaving
+  `math.Random()` to pick a seed out of the millisecond the object happened to
+  be made in. What goes into the pool is the phone's own noise: `main` calls
+  `tapMotionForEntropy`, which takes about a second of accelerometer at
+  launch, stirs each reading in *as the bits it is* along with the microsecond
+  it arrived at, and then lets the sensor go again — a sip, not a stream —
+  and `SensorMotionSource` seasons it further whenever the tray is open.
+  Four things worth knowing. The clock goes in on **every** draw, which is
+  what a pool nobody managed to stir falls back on and what the harness and
+  every test run on. The **draw count** goes in with it, because the four
+  shoes a picker builds are built inside one microsecond and the clock cannot
+  tell them apart. The sip is deliberately **not** behind `Settings.motion` —
+  that setting is about motion *control*, and a second of readings that moves
+  nothing and is never read back as anything but a seed is not control; a
+  player who switched the tilting off did not ask for a worse shuffle. And
+  **a deck handed a `Random` never goes near the pool**, which is the whole of
+  what keeps the tools and the tests repeatable. It is not a cryptographic
+  generator and does not claim to be one: `Random.secure()` is the answer if a
+  shuffle ever has to be unguessable by construction rather than merely
+  unwritten-down-in-advance.
 - **The card pile is life-sized until it cannot be.** Three dice across three
   decks is 648 cards, and at real 0.32 mm stock that pile is deeper than the
   tray — it would come out through the glass. `_maxPileDepth` in

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../motion/entropy.dart';
 import '../tray/dice.dart';
 import '../tray/tuning.dart';
 
@@ -38,7 +39,7 @@ class Deck {
     required this.decks,
     required this.reshuffleAt,
     math.Random? random,
-  }) : _random = random ?? math.Random() {
+  }) : _random = random ?? math.Random(entropy.seed()) {
     shuffle();
   }
 
@@ -52,6 +53,20 @@ class Deck {
   /// dealt from, 0 to 20. At zero it runs to the last card.
   final int reshuffleAt;
 
+  /// What the shuffle draws its indices from.
+  ///
+  /// Given one, this deck deals the same shoe every time it is built — which
+  /// is what the tests and the tools want, and the only reason the parameter
+  /// exists. Given nothing, it seeds its own from [entropy]: the clock, and
+  /// whatever the phone's own sensors have been stirring into the pool since
+  /// launch.
+  ///
+  /// Seeded rather than left to `math.Random()`, because a shoe is a claim
+  /// that nobody knows what is left in it and a default seed is a fact about
+  /// the millisecond an object was made. See [EntropyPool], which is where the
+  /// argument and the limits of it are written down. It is drawn once, here,
+  /// and [shuffle] goes on using the same stream afterwards — a reshuffle is
+  /// the next hand of the same deal, not a new pool.
   final math.Random _random;
 
   /// Face down, top of the pile last — [List.removeLast] is the cheap end.
